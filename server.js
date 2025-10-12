@@ -17,6 +17,19 @@ const app = express();
 // Render / reverse proxy
 app.set("trust proxy", 1);
 
+// Access log – wszystko, co wchodzi/wychodzi
+app.use((req, res, next) => {
+  const start = Date.now();
+  const ua = req.get("user-agent") || "";
+  const ip = req.ip;
+  console.log(`[REQ] ${req.method} ${req.originalUrl} | ip=${ip} ua="${ua}"`);
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    console.log(`[RES] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${ms}ms)`);
+  });
+  next();
+});
+
 // ---- Config / env ----
 const PORT_HTTP = Number(process.env.PORT) || 3000;
 const PUB = path.join(__dirname, "public");
@@ -128,8 +141,23 @@ function rememberId(id) {
   }
 }
 
+
+app.get("/webhook", (req, res) => {
+  console.log("[WEBHOOK][GET] ping", {
+    ip: req.ip,
+    ua: req.get("user-agent") || null,
+    q: req.query
+  });
+  res.status(200).send("webhook-get-ok");
+});
+
+app.head("/webhook", (req, res) => {
+  console.log("[WEBHOOK][HEAD] ping", { ip: req.ip, ua: req.get("user-agent") || null });
+  res.status(200).end();
+});
+
 // RAW body before json()
-app.post("/webhook", express.raw({ type: "*/*" }), async (req, res) => {
+app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
   const startedAt = Date.now();
   try {
     const msgId   = req.get("Kick-Event-Message-Id");
