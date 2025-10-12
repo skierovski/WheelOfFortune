@@ -391,49 +391,29 @@ async function getBroadcasterId() {
  * Próbuje zasubskrybować channel.subscription.gifts dla zalogowanego streamera.
  * Wywoływane TYLKO na /setup (żeby nie walić subskrypcjami przy każdym odświeżeniu overlayu).
  */
-async function subscribeToEvents(callbackUrl) {
-  try {
-    const token = await ensureAccessToken();
-    const broadcasterId = await getBroadcasterId();
+async function subscribeToEvents(token, broadcasterId, callbackUrl) {
+  const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      broadcaster_user_id: Number(broadcasterId),
+      events: [
+        { name: "channel.subscription.gifts", version: 1 }
+      ],
+      method: "webhook",
+      callback: callbackUrl
+    })
+  });
 
-    const body = {
-      type: "channel.subscription.gifts",
-      condition: { broadcaster_user_id: String(broadcasterId) },
-      transport: {
-        method: "webhook",
-        callback: callbackUrl
-        // Sekret nie jest tu wymagany – Kick podpisuje RSA-SHA256 publicznym kluczem
-      }
-    };
-
-    console.log("[SUBSCRIBE] Trying to subscribe:", {
-      type: body.type,
-      broadcaster_user_id: body.condition.broadcaster_user_id,
-      callback: body.transport.callback
-    });
-
-    const resp = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-
-    const txt = await resp.text().catch(() => "");
-    if (!resp.ok) {
-      console.warn(`[SUBSCRIBE] failed: ${resp.status} ${txt}`);
-      return { ok: false, status: resp.status, body: txt };
-    }
-
-    console.log("[SUBSCRIBE] success:", txt || "(no-body)");
-    return { ok: true, status: resp.status, body: txt };
-  } catch (e) {
-    console.warn("[SUBSCRIBE] error:", e.message);
-    return { ok: false, error: e.message };
-  }
+  const text = await response.text();
+  console.log("[SUBSCRIBE] status:", response.status, text);
+  if (!response.ok) throw new Error(`Failed to subscribe: ${response.status} ${text}`);
+  return JSON.parse(text);
 }
+
 
 /* =======================================================================================
    DEBUG / TESTY
