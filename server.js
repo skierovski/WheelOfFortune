@@ -137,9 +137,9 @@ twIDAQAB
 -----END PUBLIC KEY-----
 `.trim();
 
-// Prosta ochrona przed powtórkami (idempotency): pamiętaj ostatnie N ID
+// Dedup: pamiętaj ostatnie ID (idempotency)
 const SEEN_IDS = new Set();
-const MAX_SEEN = 200;
+const MAX_SEEN = 500;
 function rememberId(id) {
   SEEN_IDS.add(id);
   if (SEEN_IDS.size > MAX_SEEN) {
@@ -148,70 +148,119 @@ function rememberId(id) {
   }
 }
 
+// ======== WEBHOOK (RAW BODY!) z pełnym logowaniem i walidacją RSA ========
 app.post("/webhook", express.raw({ type: "*/*" }), async (req, res) => {
+  const startedAt = Date.now();
   try {
-    // === 1) Zbierz nagłówki wymagane przez Kick ===
-    const msgId = req.get("Kick-Event-Message-Id");
-    const ts    = req.get("Kick-Event-Message-Timestamp");
-    const sigB64= req.get("Kick-Event-Signature");
-    const eventType = req.get("Kick-Event-Type"); // informacyjnie
+    // 0) Zbierz nagłówki
+    const msgId   = req.get("Kick-Event-Message-Id");
+    const ts      = req.get("Kick-Event-Message-Timestamp");
+    const sigB64  = req.get("Kick-Event-Signature");
+    const eType   = req.get("Kick-Event-Type");
+
+    console.log("[WEBHOOK] ⇢ Incoming");
+    console.log("[WEBHOOK] Headers:", {
+      "Kick-Event-Message-Id": msgId || null,
+      "Kick-Event-Message-Timestamp": ts || null,
+      "Kick-Event-Type": eType || null,
+      "Kick-Event-Signature": sigB64 ? `(len=${sigB64.length})` : null,
+      "Content-Type": req.get("content-type") || null,
+      "User-Agent": req.get("user-agent") || null,
+      ip: req.ip,
+    });
 
     if (!msgId || !ts || !sigB64) {
+      console.warn("[WEBHOOK] Missing required signature headers");
       return res.status(400).send("Missing signature headers");
     }
 
-    // Odrzucaj duplikaty (idempotency key)
+    // Dedup
     if (SEEN_IDS.has(msgId)) {
+      console.log("[WEBHOOK] Duplicate message id -> 200 ok-duplicate");
       return res.status(200).send("ok-duplicate");
     }
 
-    // Opcjonalnie: sprawdź świeżość timestampu (np. ±5 minut)
-    const now = Date.now();
-    const sentAt = Date.parse(ts); // RFC3339
+    // 1) Sprawdź świeżość timestampu
+    const sentAt = Date.parse(ts); // powinien być RFC3339
     const MAX_SKEW_MS = 5 * 60 * 1000;
-    if (!Number.isFinite(sentAt) || Math.abs(now - sentAt) > MAX_SKEW_MS) {
-      return res.status(400).send("Stale or invalid timestamp");
+    if (!Number.isFinite(sentAt)) {
+      console.warn("[WEBHOOK] Invalid timestamp");
+      return res.status(400).send("Invalid timestamp");
+    }
+    const skew = Math.abs(Date.now() - sentAt);
+    console.log("[WEBHOOK] Timestamp skew(ms):", skew);
+    if (skew > MAX_SKEW_MS) {
+      console.warn("[WEBHOOK] Stale timestamp (>5min)");
+      return res.status(400).send("Stale timestamp");
     }
 
-    // === 2) Zbuduj „signed input”: id.timestamp.rawBody ===
-    const rawBody = req.body instanceof Buffer ? req.body : Buffer.from(req.body || "");
-    const signed  = Buffer.from(`${msgId}.${ts}.${rawBody.toString("utf8")}`, "utf8");
+    // 2) Złóż signed input: id + "." + ts + "." + rawBody
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "");
+    const baseStr = `${msgId}.${ts}.${rawBody.toString("utf8")}`;
+    console.log("[WEBHOOK] Body bytes:", rawBody.length, " | Signed string length:", baseStr.length);
 
-    // === 3) Weryfikacja podpisu RSA-SHA256 z publicznym kluczem Kicka ===
+    // 3) Weryfikuj RSA-SHA256 (PKCS#1 v1.5) publicznym kluczem Kicka
     const verifier = crypto.createVerify("RSA-SHA256");
-    verifier.update(signed);
+    verifier.update(baseStr, "utf8");
     verifier.end();
+    const verified = verifier.verify(KICK_PUBLIC_KEY_PEM, sigB64, "base64");
+    console.log("[WEBHOOK] Signature verified:", verified);
 
-    const ok = verifier.verify(KICK_PUBLIC_KEY_PEM, sigB64, "base64");
-    if (!ok) return res.status(401).send("Invalid signature");
+    if (!verified) {
+      console.error("[WEBHOOK] ❌ Invalid signature");
+      return res.status(401).send("Invalid signature");
+    }
 
-    // Pamiętaj ID po udanej weryfikacji
+    // 4) Po udanej weryfikacji: pamiętaj ID i parsuj JSON
     rememberId(msgId);
 
-    // === 4) Dopiero teraz parsuj JSON ===
     let payload = {};
     try {
       payload = JSON.parse(rawBody.toString("utf8"));
-    } catch {
+    } catch (e) {
+      console.error("[WEBHOOK] JSON parse error:", e);
       return res.status(400).send("Invalid JSON");
     }
 
-    console.log("Webhook OK:", eventType || payload?.type || payload?.event);
+    const type = eType || payload?.type || payload?.event || "unknown";
+    console.log("[WEBHOOK] ✅ OK type:", type);
 
-    // === 5) Twoja logika ===
-    const typ = eventType || payload?.type || payload?.event;
-    if (typ === "channel.subscription.gifts") {
-      const { gifter = {}, giftees = [] } = payload || {};
-      const count = Array.isArray(giftees) ? giftees.length : Number(payload?.count || 0);
-      console.log(`🎁 ${gifter.username || "Anon"} gifted ${count} subs`);
-      const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
-      if (spins > 0) broadcast({ action: "spin", times: spins });
+    // 5) Specjalnie: challenge verification (pierwsze wywołanie po konfiguracji)
+    if (type === "webhook_callback_verification" && payload?.challenge) {
+      console.log("[WEBHOOK] Responding with challenge");
+      return res.json({ challenge: payload.challenge });
     }
 
-    res.status(200).send("ok");
+    // 6) Twoje eventy
+    if (type === "channel.subscription.gifts") {
+      const { gifter = {}, giftees = [] } = payload || {};
+      const count = Array.isArray(giftees) ? giftees.length : Number(payload?.count || 0);
+
+      console.log("[WEBHOOK] 🎁 Gifts summary:", {
+        gifter: gifter?.username || "Anon",
+        count,
+      });
+
+      const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
+      if (spins > 0) {
+        console.log("[WEBHOOK] → Broadcasting spins:", spins);
+        broadcast({ action: "spin", times: spins });
+      } else {
+        console.log("[WEBHOOK] No spins (count < 5)");
+      }
+    } else {
+      // Log dla innych typów — zobaczysz co realnie przychodzi
+      const short = JSON.stringify(payload).slice(0, 500);
+      console.log("[WEBHOOK] Unhandled event:", type, "| payload:", short + (short.length === 500 ? "… (truncated)" : ""));
+    }
+
+    const took = Date.now() - startedAt;
+    console.log(`[WEBHOOK] Done in ${took}ms`);
+    return res.status(200).send("ok");
   } catch (e) {
-    console.error("Webhook error:", e);
-    res.status(400).send("Bad webhook");
+    const took = Date.now() - startedAt;
+    console.error(`[WEBHOOK] Handler error (in ${took}ms):`, e);
+    return res.status(400).send("Bad webhook");
   }
 });
 
