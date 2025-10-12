@@ -442,14 +442,30 @@ async function postChatMessage(content) {
 app.get("/setup", async (req, res) => {
   const hasTokens = !!loadTokens()?.access_token;
   const base = getBaseUrl(req);
+
   let subLine = '<span class="warn">pomińnięto (brak tokenu)</span>';
 
   if (hasTokens) {
-    // próbujemy zarejestrować subskrypcję na ten exact callback
-    const cb = `${base}/webhook`;
-    const sub = await subscribeToEvents(cb);
-    if (sub.ok) subLine = '<span class="ok">ok</span>';
-    else subLine = `<span class="warn">błąd (${sub.status || sub.error || "?"})</span>`;
+    try {
+      const token = await ensureAccessToken();        // 1) token
+      const broadcasterId = await getBroadcasterId(); // 2) id streamera
+      const cb = `${base}/webhook`;
+
+      console.log("[SUBSCRIBE] Trying to subscribe:", {
+        broadcaster_user_id: String(broadcasterId),
+        events: [{ name: "channel.subscription.gifts", version: 1 }],
+        method: "webhook",
+        callback: cb
+      });
+
+      const resp = await subscribeToEvents(token, broadcasterId, cb); // 3) właściwe wywołanie
+      // jeśli API nie zwraca {ok:true}, po prostu pokaż status „ok”
+      subLine = '<span class="ok">ok</span>';
+      console.log("[SUBSCRIBE] success:", resp);
+    } catch (e) {
+      console.warn("[SUBSCRIBE] failed:", e?.message);
+      subLine = `<span class="warn">błąd: ${String(e?.message || e)}</span>`;
+    }
   }
 
   res.type("html").send(`
@@ -459,14 +475,7 @@ app.get("/setup", async (req, res) => {
       body { font-family: system-ui; margin: 40px; }
       .ok { color: #16a34a; }
       .warn { color: #b45309; }
-      a.btn {
-        display:inline-block;
-        padding:10px 14px;
-        border:1px solid #333;
-        border-radius:8px;
-        text-decoration:none;
-        margin-top:6px;
-      }
+      a.btn { display:inline-block; padding:10px 14px; border:1px solid #333; border-radius:8px; text-decoration:none; margin-top:6px; }
       code { background:#f6f8fa; padding:2px 6px; border-radius:6px; }
     </style>
     </head><body>
@@ -485,6 +494,7 @@ app.get("/setup", async (req, res) => {
     </body></html>
   `);
 });
+
 
 app.get("/debug/oauth/ping", async (_req, res) => {
   try {
