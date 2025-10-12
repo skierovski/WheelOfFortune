@@ -309,7 +309,7 @@ app.get("/auth/login", async (req, res) => {
   try {
     const desiredScopes = [
       "user:read", "channel:read", "channel:write",
-      "chat:write", "events:read", "events:write",
+      "chat:write", "events:subscribe",
     ];
     const redirectUri = process.env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
     const authClient = new KickAuthClient({
