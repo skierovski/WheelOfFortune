@@ -6,21 +6,15 @@
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
-    .overlay {
-      position: fixed; left:50%; top:50%;
-      transform: translate(-50%, -40%) scale(0.94);
-      opacity: 0; transition: opacity .95s ease, transform .95s ease;
-      pointer-events:none; width:700px; height:700px; display:flex; align-items:center; justify-content:center; z-index:10;
-    }
+    .overlay { position: fixed; left:50%; top:50%; transform: translate(-50%, -40%) scale(0.94);
+      opacity: 0; transition: opacity .95s ease, transform .95s ease; pointer-events:none; width:700px; height:700px;
+      display:flex; align-items:center; justify-content:center; z-index:10; }
     .overlay.show { opacity:1; transform: translate(-50%, -50%) scale(1); pointer-events:auto; }
     canvas { width:1000px; height:1000px; display:block; }
 
-    .editor {
-      position:fixed; right:16px; top:16px; width:380px; max-height:90vh; overflow:auto;
-      background:rgba(20,20,20,.95); color:#fff; font-family:system-ui,sans-serif;
-      border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45);
-      border:1px solid rgba(255,255,255,.08); z-index:9999; display:none;
-    }
+    .editor { position:fixed; right:16px; top:16px; width:400px; max-height:92vh; overflow:auto; background:rgba(20,20,20,.95); color:#fff;
+      font-family:system-ui,sans-serif; border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.08);
+      z-index:9999; display:none; }
     .editor.show { display:block; }
     .editor h2{ margin:0 0 10px 0; font-size:18px; }
     .row{ display:flex; gap:8px; margin-bottom:8px; }
@@ -31,34 +25,16 @@
     .item{ display:grid; grid-template-columns:1fr 80px auto auto auto auto; gap:6px; align-items:center; background:#151515; border:1px solid #2a2a2a; border-radius:8px; padding:8px; }
     .item span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .muted{ color:#9aa0a6; font-size:12px; }
-    .editor .bar{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
     .pill{ display:inline-block; padding:4px 8px; border-radius:999px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:12px; }
-    .result-banner {
-  position: absolute;
-  left: 50%;
-  top: 8%;
-  transform: translate(-50%, -20%) scale(0.95);
-  opacity: 0;
-  padding: 14px 22px;
-  border-radius: 14px;
-  background: rgba(17, 17, 17, 0.80);
-  color: #fff;
-  font-family: system-ui, sans-serif;
-  font-weight: 800;
-  letter-spacing: .3px;
-  line-height: 1;
-  font-size: 48px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08);
-  backdrop-filter: blur(6px);
-  pointer-events: none;
-  z-index: 20;
-  transition: opacity .35s ease, transform .35s ease;
-}
-.result-banner.show {
-  opacity: 1;
-  transform: translate(-50%, 0) scale(1);
-}
 
+    .result-banner { position: absolute; left: 50%; top: 8%; transform: translate(-50%, -20%) scale(0.95); opacity: 0; padding: 14px 22px;
+      border-radius: 14px; background: rgba(17, 17, 17, 0.80); color: #fff; font-family: system-ui, sans-serif; font-weight: 800; letter-spacing: .3px;
+      line-height: 1; font-size: 48px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08); backdrop-filter: blur(6px);
+      pointer-events: none; z-index: 20; transition: opacity .35s ease, transform .35s ease; }
+    .result-banner.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+
+    .admin { display:flex; gap:6px; align-items:center; margin:6px 0 10px; }
+    .admin input { flex:1; padding:6px 8px; border-radius:8px; border:1px solid #333; background:#141414; color:#fff; }
   </style>
 </head>
 <body>
@@ -69,8 +45,15 @@
 
   <div id="editor" class="editor" aria-hidden="true">
     <h2>🎛️ Wheel editor <span class="pill">open via ?edit=1</span></h2>
-    <div class="muted">Configure prizes and their weights (percent). Viewers do not see this panel.</div>
-    <div class="row" style="margin-top:10px;">
+    <div class="muted">Server-backed config. Viewers do not see this panel.</div>
+
+    <div class="admin">
+      <input id="adminKey" type="text" placeholder="X-Admin-Key (only for editor owner)">
+      <button id="saveKeyBtn" class="btn">Save Key</button>
+      <button id="loadCfgBtn" class="btn">Load</button>
+    </div>
+
+    <div class="row" style="margin-top:6px;">
       <input id="newLabel" type="text" placeholder="New prize…">
       <input id="newWeight" type="number" min="0" step="0.1" value="10" title="Percent">
       <button id="addBtn">Add</button>
@@ -79,7 +62,7 @@
     <div class="list" id="list"></div>
     <div class="bar">
       <button class="btn" id="normalizeBtn">Normalize to 100%</button>
-      <button class="btn" id="saveBtn">Save</button>
+      <button class="btn" id="saveBtn">Save (server)</button>
       <button class="btn" id="resetBtn">Reset</button>
       <button class="btn" id="hideBtn">Close</button>
       <button class="btn" id="exportBtn">Export</button>
@@ -89,7 +72,27 @@
   </div>
 
   <script>
-    // ====== Data / persistence ======
+    // ====== Server config helpers ======
+    async function fetchServerConfig() {
+      try {
+        const r = await fetch("/config", { cache: "no-store" });
+        if (!r.ok) return null;
+        const j = await r.json();
+        if (j?.ok && Array.isArray(j.items)) return j.items;
+      } catch {}
+      return null;
+    }
+    async function saveToServer(items) {
+      const key = localStorage.getItem("ADMIN_KEY") || "";
+      const r = await fetch("/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Key": key },
+        body: JSON.stringify({ items })
+      });
+      return r.ok;
+    }
+
+    // ====== Data / persistence (local cache only) ======
     const STORAGE_KEY_V2 = "wheel.prizes.v2";
     const DEFAULT_ITEMS = [
       { label:"VIP na 24h", weight:10 }, { label:"Śpiewasz 30s", weight:10 },
@@ -101,42 +104,35 @@
     ];
 
     function genId(){ return 'itm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
-    function sanitizeItem(it){ const label=String(it.label??"").trim(); let weight=Number(it.weight); if(!Number.isFinite(weight)||weight<0) weight=0; const id=String(it.id||""); return { id:id||genId(), label, weight }; }
-    function loadItems(){
+    function sanitizeItem(it){ const label=String(it.label??"").trim(); let weight=Number(it.weight);
+      if(!Number.isFinite(weight)||weight<0) weight=0; const id=String(it.id||""); return { id:id||genId(), label, weight }; }
+    function loadItemsLocal(){
       try{
         const raw=localStorage.getItem(STORAGE_KEY_V2);
         if(raw){ const arr=JSON.parse(raw); if(Array.isArray(arr)&&arr.length) return arr.map(sanitizeItem); }
-        const legacy=localStorage.getItem("wheel.prizes.v1");
-        if(legacy){ const arr=JSON.parse(legacy); if(Array.isArray(arr)&&arr.length) return arr.map(x=>sanitizeItem({label:String(x), weight:10})); }
       }catch{}
       return DEFAULT_ITEMS.map(sanitizeItem);
     }
-    function saveItems(items){ localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(items.map(sanitizeItem))); }
+    function saveItemsLocal(items){ localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(items.map(sanitizeItem))); }
 
-    let ITEMS = loadItems();
-    let CONFIG_VERSION = 1;
+    let ITEMS = []; let CONFIG_VERSION = 1;
 
-    // ====== Parameters ======
+    // ====== Drawing etc. (bez zmian wizualnych) ======
     const COLORS = ["#FF4D4F","#40A9FF","#73D13D","#FAAD14","#9254DE","#13C2C2","#EB2F96","#A0D911","#FFD666","#5CDBD3","#FF7A45","#597EF7"];
     const FULL_ROUNDS_MIN = 5, FULL_ROUNDS_MAX = 7;
     const BAG_SIZE = 50;
     const NO_REPEAT_BACK_TO_BACK = true;
     const AT_LEAST_ONE_THRESHOLD = 1;
 
-    // ====== State ======
     let spinBag = [], bagPos = 0, spinBagVersion = 0, lastPickedId = null, lastIndex = -1;
-
     const canvas = document.getElementById("wheel");
     const ctx = canvas.getContext("2d");
     const dpr = Math.max(1, Math.floor(window.devicePixelRatio||1));
     (function setupCanvas(){ const cssW=1000, cssH=1000; canvas.width=cssW*dpr; canvas.height=cssH*dpr; canvas.style.width=cssW+"px"; canvas.style.height=cssH+"px"; ctx.setTransform(dpr,0,0,dpr,0,0); })();
     const W=1000,H=1000,CX=W/2,CY=H/2,R=Math.min(W,H)*0.45;
     let rotation = 0;
-
-    // snapshot lock during spin (visual consistency)
     let ACTIVE_SNAPSHOT = null;
 
-    // ====== Utils ======
     function modTau(x){ const TAU = 2*Math.PI; return ((x % TAU) + TAU) % TAU; }
     function getNormalizedWeightsFrom(items){
       const w = items.map(it=>Math.max(0, Number(it.weight)||0));
@@ -146,8 +142,7 @@
     }
     function buildSectors(items){
       const pct = getNormalizedWeightsFrom(items);
-      const sectors = [];
-      let acc=0;
+      const sectors = []; let acc=0;
       for(let i=0;i<items.length;i++){
         const startPct=acc, endPct=acc+pct[i]; acc=endPct;
         const start=(startPct/100)*2*Math.PI, end=(endPct/100)*2*Math.PI;
@@ -162,121 +157,72 @@
       const POINTER_ANGLE = -Math.PI/2;
       const rel = modTau(POINTER_ANGLE - modTau(angle));
       for (let i = 0; i < sectors.length; i++){
-        const a = modTau(sectors[i].start);
-        const b = modTau(sectors[i].end);
-        if (a <= b) { if (rel >= a && rel < b) return i; }
-        else { if (rel >= a || rel < b) return i; }
+        const a = modTau(sectors[i].start), b = modTau(sectors[i].end);
+        if (a <= b) { if (rel >= a && rel < b) return i; } else { if (rel >= a || rel < b) return i; }
       }
       return 0;
     }
 
-
     function ellipsizeToWidth(ctx, text, maxWidth) {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  const ell = "…";
-  let s = text;
-  while (s.length > 1 && ctx.measureText(s + ell).width > maxWidth) {
-    s = s.slice(0, -1);
-  }
-  return s + ell;
-}
+      if (ctx.measureText(text).width <= maxWidth) return text;
+      const ell = "…"; let s = text;
+      while (s.length > 1 && ctx.measureText(s + ell).width > maxWidth) s = s.slice(0, -1);
+      return s + ell;
+    }
+    function fitTextInArc(ctx, text, radius, arcAngle, maxPx, minPx) {
+      let lo = minPx, hi = maxPx, best = minPx; const pad = 0.9;
+      const maxArcLength = arcAngle * radius * pad;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        ctx.font = `700 ${mid}px system-ui, sans-serif`;
+        const w = ctx.measureText(text).width;
+        if (w <= maxArcLength) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+      }
+      ctx.font = `700 ${best}px system-ui, sans-serif`;
+      return best;
+    }
 
+    function drawWheel(angle = 0) {
+      const items = ACTIVE_SNAPSHOT || ITEMS;
+      const sectors = buildSectors(items);
 
-function fitTextInArc(ctx, text, radius, arcAngle, maxPx, minPx) {
-  // binary search on font size for speed/stability
-  let lo = minPx, hi = maxPx, best = minPx;
-  const pad = 0.9; // leave a bit of margin
-  const maxArcLength = arcAngle * radius * pad;
+      ctx.clearRect(0,0,W,H);
 
-  while (lo <= hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    ctx.font = `700 ${mid}px system-ui, sans-serif`;
-    const w = ctx.measureText(text).width;
-    if (w <= maxArcLength) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
-  }
-  ctx.font = `700 ${best}px system-ui, sans-serif`;
-  return best;
-}
+      // wood ring
+      ctx.beginPath(); ctx.arc(CX, CY, R + 44, 0, 2*Math.PI);
+      ctx.fillStyle = "#deb887"; ctx.fill(); ctx.lineWidth = 10; ctx.strokeStyle = "#8b5a2b"; ctx.stroke();
 
-    // ====== Drawing (sectors proportional to weights) + frame + stand + header ======
-function drawWheel(angle = 0) {
-  const items = ACTIVE_SNAPSHOT || ITEMS;
-  const sectors = buildSectors(items);
+      // sectors
+      for (let i=0;i<sectors.length;i++){
+        const s = sectors[i]; const start = angle + s.start; const end = angle + s.end;
+        ctx.beginPath(); ctx.moveTo(CX,CY); ctx.arc(CX,CY,R,start,end); ctx.closePath();
+        const grad = ctx.createRadialGradient(CX, CY, R*0.08, CX, CY, R);
+        grad.addColorStop(0, COLORS[i % COLORS.length]); grad.addColorStop(1, COLORS[(i+1) % COLORS.length]);
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 2; ctx.stroke();
+      }
 
-  ctx.clearRect(0,0,W,H);
+      // center hub
+      const hubR = Math.max(22, R*0.42);
+      ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, 2*Math.PI);
+      const hubGrad = ctx.createRadialGradient(CX, CY, 4, CX, CY, hubR);
+      hubGrad.addColorStop(0, "#f1c27d"); hubGrad.addColorStop(1, "#8b5a2b");
+      ctx.fillStyle = hubGrad; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#5e3d1e"; ctx.stroke();
 
-  // wood ring behind
-  ctx.beginPath();
-  ctx.arc(CX, CY, R + 44, 0, 2*Math.PI);
-  ctx.fillStyle = "#deb887";
-  ctx.fill();
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = "#8b5a2b";
-  ctx.stroke();
+      // pointer
+      ctx.fillStyle = "#000";
+      ctx.beginPath(); ctx.moveTo(CX, CY - R - 16); ctx.lineTo(CX - 18, CY - R + 14); ctx.lineTo(CX + 18, CY - R + 14);
+      ctx.closePath(); ctx.fill();
 
-  // colored sectors
-  for (let i=0;i<sectors.length;i++){
-    const s = sectors[i];
-    const start = angle + s.start;
-    const end   = angle + s.end;
+      // rim
+      ctx.beginPath(); ctx.arc(CX, CY, R+6, 0, 2*Math.PI);
+      ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 4; ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(CX,CY);
-    ctx.arc(CX,CY,R,start,end);
-    ctx.closePath();
+      // stand
+      ctx.fillStyle = "#8B5A2B"; ctx.fillRect(CX - 55, CY + R + 12, 110, 115);
+      ctx.fillStyle = "#6f451d"; ctx.fillRect(CX - 130, CY + R + 120, 260, 28);
+    }
 
-    const grad = ctx.createRadialGradient(CX, CY, R*0.08, CX, CY, R);
-    grad.addColorStop(0, COLORS[i % COLORS.length]);
-    grad.addColorStop(1, COLORS[(i+1) % COLORS.length]);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(255,255,255,.6)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-
-  // wooden center (covers colorful middle)
-  const hubR = Math.max(22, R*0.42);
-  ctx.beginPath();
-  ctx.arc(CX, CY, hubR, 0, 2*Math.PI);
-  const hubGrad = ctx.createRadialGradient(CX, CY, 4, CX, CY, hubR);
-  hubGrad.addColorStop(0, "#f1c27d");
-  hubGrad.addColorStop(1, "#8b5a2b");
-  ctx.fillStyle = hubGrad;
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "#5e3d1e";
-  ctx.stroke();
-
-  // top pointer
-  ctx.fillStyle = "#000";
-  ctx.beginPath();
-  ctx.moveTo(CX, CY - R - 16);
-  ctx.lineTo(CX - 18, CY - R + 14);
-  ctx.lineTo(CX + 18, CY - R + 14);
-  ctx.closePath();
-  ctx.fill();
-
-  // outer rim
-  ctx.beginPath();
-  ctx.arc(CX, CY, R+6, 0, 2*Math.PI);
-  ctx.strokeStyle = "rgba(255,255,255,.35)";
-  ctx.lineWidth = 4;
-  ctx.stroke();
-
-  // stand
-  ctx.fillStyle = "#8B5A2B";
-  ctx.fillRect(CX - 55, CY + R + 12, 110, 115);
-  ctx.fillStyle = "#6f451d";
-  ctx.fillRect(CX - 130, CY + R + 120, 260, 28);
-}
-
-
-
-    drawWheel(0);
-
-    // ====== Bag (50) ======
     function getNormalizedWeights(){ return getNormalizedWeightsFrom(ITEMS); }
 
     function buildSpinBag(){
@@ -305,7 +251,6 @@ function drawWheel(angle = 0) {
       for (let i=0;i<n;i++){ const id=ITEMS[i].id ?? (ITEMS[i].id=genId()); for(let c=0;c<counts[i];c++) bag.push(id); }
       shuffleInPlace(bag);
       spinBag=bag; bagPos=0; spinBagVersion=CONFIG_VERSION;
-
       const dbg = counts.map((c,i)=>`${ITEMS[i]?.label||i}:${c}`).join(" | ");
       console.log(`🧰 Bag built (${BAG_SIZE}):`, dbg);
     }
@@ -321,30 +266,23 @@ function drawWheel(angle = 0) {
       return pickedId;
     }
 
-    // ====== Spin animation ======
     function easeOutQuint(t){ return 1 - Math.pow(1 - t, 5); }
 
     async function spinToId(pickedId){
       ACTIVE_SNAPSHOT = cloneItems(ITEMS);
-      const SNAP    = ACTIVE_SNAPSHOT;
-      const sectors = buildSectors(SNAP);
-
+      const SNAP = ACTIVE_SNAPSHOT; const sectors = buildSectors(SNAP);
       let pickedIdx = sectors.findIndex(s => s.id === pickedId);
       if (pickedIdx === -1) pickedIdx = 0;
       const picked = sectors[pickedIdx];
 
-      const POINTER_ANGLE = -Math.PI/2;
-      const TAU = 2*Math.PI;
-
-      const startAngle = modTau(rotation);
-      let baseTarget   = POINTER_ANGLE - picked.center;
+      const POINTER_ANGLE = -Math.PI/2; const TAU = 2*Math.PI;
+      const startAngle = modTau(rotation); let baseTarget = POINTER_ANGLE - picked.center;
 
       while (baseTarget <= startAngle) baseTarget += TAU;
-      const roundsInt = Math.max(Math.ceil(FULL_ROUNDS_MIN), Math.min(Math.floor(FULL_ROUNDS_MAX), Math.floor(FULL_ROUNDS_MIN + Math.random()*(FULL_ROUNDS_MAX - FULL_ROUNDS_MIN + 1))));
-      const targetAngle = baseTarget + roundsInt * TAU;
+      const roundsInt = Math.floor(FULL_ROUNDS_MIN + Math.random()*(FULL_ROUNDS_MAX - FULL_ROUNDS_MIN + 1));
+      const targetAngle = baseTarget + Math.max(FULL_ROUNDS_MIN, roundsInt) * TAU;
 
-      const totalDuration = 5200;
-      const t0 = performance.now();
+      const totalDuration = 5200; const t0 = performance.now();
 
       return new Promise(resolve=>{
         function frame(t){
@@ -352,16 +290,13 @@ function drawWheel(angle = 0) {
           const eased = easeOutQuint(p);
           rotation = startAngle + (targetAngle - startAngle) * eased;
           drawWheel(rotation);
-          if (p < 1) {
-            requestAnimationFrame(frame);
-          } else {
+          if (p < 1) requestAnimationFrame(frame);
+          else {
             rotation = targetAngle;
             drawWheel(rotation);
-
             const winIdx = sectorUnderPointer(rotation, sectors);
             const winSec = sectors[winIdx];
             console.log(`🎯 WIN(byBag): ${picked.label} | WIN(byGeom): ${winSec.label} | same=${picked.id===winSec.id}`);
-
             lastIndex = pickedIdx;
             setTimeout(()=>{ ACTIVE_SNAPSHOT = null; }, 0);
             resolve({ index: pickedIdx, snap: SNAP, label: picked.label });
@@ -371,38 +306,29 @@ function drawWheel(angle = 0) {
       });
     }
 
-    // ====== Overlay + queue ======
     const overlay = document.getElementById("overlay");
-    const queue = [];
-    let spinning=false;
-    let hideTimer=null;
-
+    const queue = []; let spinning=false; let hideTimer=null;
     function showOverlay(){ clearTimeout(hideTimer); overlay.classList.add("show"); }
     function hideOverlay(afterMs = 1600) {
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(()=>{
-    overlay.classList.remove("show");
-    hideResult(); // also hide banner
-  }, afterMs);
-}
-
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(()=>{ overlay.classList.remove("show"); hideResult(); }, afterMs);
+    }
 
     const resultBanner = document.getElementById("resultBanner");
-let resultTimer = null;
-
-function showResult(label, ms = 1800) {
-  if (!resultBanner) return;
-  clearTimeout(resultTimer);
-  resultBanner.textContent = label || "";
-  resultBanner.classList.add("show");
-  resultBanner.setAttribute("aria-hidden", "false");
-  resultTimer = setTimeout(hideResult, ms);
-}
-function hideResult() {
-  if (!resultBanner) return;
-  resultBanner.classList.remove("show");
-  resultBanner.setAttribute("aria-hidden", "true");
-}
+    let resultTimer = null;
+    function showResult(label, ms = 1800) {
+      if (!resultBanner) return;
+      clearTimeout(resultTimer);
+      resultBanner.textContent = label || "";
+      resultBanner.classList.add("show");
+      resultBanner.setAttribute("aria-hidden", "false");
+      resultTimer = setTimeout(hideResult, ms);
+    }
+    function hideResult() {
+      if (!resultBanner) return;
+      resultBanner.classList.remove("show");
+      resultBanner.setAttribute("aria-hidden", "true");
+    }
 
     function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
@@ -411,58 +337,47 @@ function hideResult() {
       spinning=true;
       if (queue.length){ showOverlay(); await wait(400); }
       while (queue.length) {
-  const pickedId = nextFromBag();
-  const result = await spinToId(pickedId);
-  console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label}`);
+        const pickedId = nextFromBag();
+        const result = await spinToId(pickedId);
+        console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label}`);
+        showResult(result.label, 1800);
 
-  showResult(result.label, 1800);   // <— show banner for ~1.8s
+        fetch('/chat/announce', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: result.label })
+        }).catch(()=>{});
 
-  fetch('/chat/announce', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ label: result.label })
-}).catch(()=>{ /* mute */ });
-
-  queue.shift();
-  await wait(2000);                 // small pause before next spin
-}
+        queue.shift();
+        await wait(2000);
+      }
       spinning=false;
       hideOverlay(1000);
     }
 
-    // ====== WebSocket / test click ======
+    // ====== WebSocket (z obsługą config push) ======
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
-    const WS = new WebSocket(WS_URL);
-
-    WS.onopen = () => console.log("✅ WS connected", WS_URL);
-    WS.onerror = (e) => console.error("WS error", e);
-    WS.onmessage = (evt) => {
+    const ws = new WebSocket(WS_URL);
+    ws.onopen = () => console.log("✅ WS connected", WS_URL);
+    ws.onerror = (e) => console.error("WS error", e);
+    ws.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
-        if (data.action === "spin" && Number.isFinite(data.times)) {
-          for (let i = 0; i < data.times; i++) queue.push(1);
-          showOverlay(); runQueue();
+        if (data.type === "config" && Array.isArray(data.items)) {
+          ITEMS = data.items.map(sanitizeItem);
+          CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+          console.log("🔄 Config updated from server");
           return;
         }
-        if (data.type === "GIFT_EVENT") {
-          let count = 0;
-          if (Array.isArray(data.giftees)) count = data.giftees.length;
-          else if (typeof data.giftees === "string" && data.giftees.length) count = data.giftees.split(",").filter(Boolean).length;
-          const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
-          if (spins > 0) {
-            for (let i = 0; i < spins; i++) queue.push(1);
-            console.log(`➕ Added ${spins} spin(s). Queue: ${queue.length}`);
-            if (!spinning) { showOverlay(); runQueue(); }
-          }
-          return;
+        if (data.action === "spin" && Number.isFinite(data.times)) {
+          for (let i = 0; i < data.times; i++) queue.push(1);
+          showOverlay(); runQueue(); return;
         }
       } catch (e) { console.error("Bad WS message", e); }
     };
 
     canvas.addEventListener("click", () => { queue.push(1); showOverlay(); runQueue(); });
 
-
-    // ====== Editor (open via ?edit=1) ======
+    // ====== Editor ======
     const editor=document.getElementById("editor");
     const listEl=document.getElementById("list");
     const newLabel=document.getElementById("newLabel");
@@ -476,6 +391,20 @@ function hideResult() {
     const importBtn=document.getElementById("importBtn");
     const importArea=document.getElementById("importArea");
     const sumInfo=document.getElementById("sumInfo");
+    const adminKeyInput=document.getElementById("adminKey");
+    const saveKeyBtn=document.getElementById("saveKeyBtn");
+    const loadCfgBtn=document.getElementById("loadCfgBtn");
+
+    saveKeyBtn.onclick = ()=>{ localStorage.setItem("ADMIN_KEY", adminKeyInput.value.trim()); alert("Admin key saved locally."); };
+    loadCfgBtn.onclick = async ()=> {
+      const s = await fetchServerConfig();
+      if (s && s.length) {
+        ITEMS = s.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+        alert("Loaded from server.");
+      } else {
+        alert("No server config (using local/default).");
+      }
+    };
 
     function totalWeight(){ return ITEMS.reduce((s,x)=> s + Math.max(0, Number(x.weight)||0), 0); }
     function sumWeights(){ return totalWeight(); }
@@ -487,37 +416,42 @@ function hideResult() {
         const name=document.createElement("span"); name.textContent=it.label;
         const weight=document.createElement("input"); weight.type="number"; weight.min="0"; weight.step="0.1"; weight.value=Number(it.weight).toFixed(2); weight.title="Percent (weight)";
         weight.onchange=()=>{ let v=Number(weight.value); if(!Number.isFinite(v)||v<0) v=0; ITEMS[i].weight=v; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
-        const up=document.createElement("button"); up.textContent="↑"; up.title="Up";
-        up.onclick=()=>{ if(i>0){ [ITEMS[i-1],ITEMS[i]]=[ITEMS[i],ITEMS[i-1]]; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
-        const down=document.createElement("button"); down.textContent="↓"; down.title="Down";
-        down.onclick=()=>{ if(i<ITEMS.length-1){ [ITEMS[i+1],ITEMS[i]]=[ITEMS[i],ITEMS[i+1]]; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
-        const edit=document.createElement("button"); edit.textContent="✎"; edit.title="Edit";
-        edit.onclick=()=>{ const v=prompt("Rename prize:", ITEMS[i].label); if(v!==null){ const s=v.trim(); if(s){ ITEMS[i].label=s; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } } };
-        const del=document.createElement("button"); del.textContent="✕"; del.title="Delete";
-        del.onclick=()=>{ ITEMS.splice(i,1); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
-
+        const up=document.createElement("button"); up.textContent="↑"; up.onclick=()=>{ if(i>0){ [ITEMS[i-1],ITEMS[i]]=[ITEMS[i],ITEMS[i-1]]; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
+        const down=document.createElement("button"); down.textContent="↓"; down.onclick=()=>{ if(i<ITEMS.length-1){ [ITEMS[i+1],ITEMS[i]]=[ITEMS[i],ITEMS[i+1]]; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
+        const edit=document.createElement("button"); edit.textContent="✎"; edit.onclick=()=>{ const v=prompt("Rename prize:", ITEMS[i].label); if(v!==null){ const s=v.trim(); if(s){ ITEMS[i].label=s; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } } };
+        const del=document.createElement("button"); del.textContent="✕"; del.onclick=()=>{ ITEMS.splice(i,1); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
         row.appendChild(name); row.appendChild(weight); row.appendChild(up); row.appendChild(down); row.appendChild(edit); row.appendChild(del);
         listEl.appendChild(row);
       });
     }
 
     addBtn.onclick=()=>{ const label=(newLabel.value||"").trim(); let w=Number(newWeight.value); if(!label) return; if(!Number.isFinite(w)||w<0) w=0; ITEMS.push({id:genId(), label, weight:w}); CONFIG_VERSION++; newLabel.value=""; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
-    saveBtn.onclick=()=>{ saveItems(ITEMS); alert("Saved."); CONFIG_VERSION++; buildSpinBag(); };
-    resetBtn.onclick=()=>{ if(confirm("Restore defaults?")){ ITEMS=DEFAULT_ITEMS.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); saveItems(ITEMS); buildSpinBag(); } };
-    hideBtn.onclick=()=> toggleEditor(false);
+
+    saveBtn.onclick=async ()=>{ const ok = await saveToServer(ITEMS);
+      if (ok){ saveItemsLocal(ITEMS); alert("Saved to server."); } else { alert("Server save failed (check X-Admin-Key)."); } CONFIG_VERSION++; buildSpinBag(); };
+
+    resetBtn.onclick=()=>{ if(confirm("Restore defaults?")){ ITEMS=DEFAULT_ITEMS.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); saveItemsLocal(ITEMS); buildSpinBag(); } };
+    hideBtn.onclick=()=> editor.classList.toggle("show", false);
     normalizeBtn.onclick=()=>{ const sum=sumWeights(); if(sum<=0){ const eq=ITEMS.length?(100/ITEMS.length):0; ITEMS=ITEMS.map(it=>({...it, weight:eq})); } else { ITEMS=ITEMS.map(it=>({...it, weight:(it.weight/sum)*100 })); } CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
     exportBtn.onclick=()=>{ importArea.value=JSON.stringify(ITEMS,null,2); importArea.focus(); importArea.select(); };
     importBtn.onclick=()=>{ try{ const arr=JSON.parse(importArea.value); if(Array.isArray(arr)){ ITEMS=arr.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } else alert("Invalid JSON format."); }catch{ alert("Invalid JSON."); } };
 
     function toggleEditor(show){ editor.classList.toggle("show", !!show); editor.setAttribute("aria-hidden", show?"false":"true"); }
 
-    (function initEditorFromURL(){
+    (async function boot(){
       const p = new URLSearchParams(location.search);
       if (p.get("edit") === "1") toggleEditor(true);
-    })();
 
-    renderList();
-    buildSpinBag();
+      // 1st try server config; fallback local/default
+      const fromServer = await fetchServerConfig();
+      if (fromServer && fromServer.length) ITEMS = fromServer.map(sanitizeItem);
+      else ITEMS = loadItemsLocal();
+
+      // preload admin key field (local, only on your machine)
+      adminKeyInput.value = localStorage.getItem("ADMIN_KEY") || "";
+
+      CONFIG_VERSION++; renderList(); buildSpinBag(); drawWheel(0);
+    })();
   </script>
 </body>
 </html>

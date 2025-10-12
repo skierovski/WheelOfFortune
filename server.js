@@ -20,6 +20,9 @@ app.set("trust proxy", 1);
 // ---- Config / env ----
 const PORT_HTTP = Number(process.env.PORT) || 3000;
 const PUB = path.join(__dirname, "public");
+const TOK_PATH = process.env.TOK_PATH || path.join(process.cwd(), "tokens.json");
+const CFG_PATH = process.env.CFG_PATH || "/data/wheel.json";
+const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ustaw w Renderze!
 const WEBHOOK_SECRET = process.env.KICK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "dev_webhook_secret";
 
 // Helper: bazowy URL (http/https + host)
@@ -29,15 +32,14 @@ function getBaseUrl(req) {
   return `${proto}://${host}`;
 }
 
-// Lżejszy CSP żeby WS mógł się łączyć z lokalnymi/remote hostami
+// CSP
 app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
     [
       "default-src 'self' data: blob:",
-      // pozwól na WS/HTTP/HTTPS globalnie (w tym Render)
       "connect-src 'self' https: wss: http: ws:",
-      `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:"
@@ -50,23 +52,14 @@ app.use((req, res, next) => {
    TOKEN STORE + AUTO REFRESH
    ======================================================================================= */
 
-const TOK_PATH = process.env.TOK_PATH || path.join(process.cwd(), "tokens.json");
-
 function mask(v) {
   if (!v || typeof v !== 'string') return v;
   if (v.length <= 8) return v;
   return v.slice(0, 4) + "..." + v.slice(-4);
 }
-
 function loadTokens() {
-  try {
-    const raw = fs.readFileSync(TOK_PATH, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(fs.readFileSync(TOK_PATH, "utf8")); } catch { return null; }
 }
-
 function saveTokens(t) {
   try {
     fs.writeFileSync(TOK_PATH, JSON.stringify(t, null, 2));
@@ -76,39 +69,29 @@ function saveTokens(t) {
       expires_at: t.expires_at,
       scope: t.scope,
     });
-  } catch (e) {
-    console.error("[tokens] save failed:", e);
-  }
+  } catch (e) { console.error("[tokens] save failed:", e); }
 }
-
 function withExpiresAt(tokens) {
   if (!tokens) return null;
-  const skewMs = 60_000 * 5; // 5 min bufora
-  const now = Date.now();
+  const skewMs = 60_000 * 5;
   if (!tokens.expires_at && Number.isFinite(tokens.expires_in)) {
-    tokens.expires_at = now + (Number(tokens.expires_in) * 1000) - skewMs;
+    tokens.expires_at = Date.now() + (Number(tokens.expires_in) * 1000) - skewMs;
   }
   return tokens;
 }
 
-// Uwaga: instancja bazowa (fallback). W /auth/login i /auth/callback tworzymy klienta z dynamicznym redirectUri.
 const kickAuthBase = new KickAuthClient({
   clientId:     process.env.KICK_CLIENT_ID     || "YOUR_CLIENT_ID",
   clientSecret: process.env.KICK_CLIENT_SECRET || "YOUR_CLIENT_SECRET",
   redirectUri:  process.env.KICK_REDIRECT_URI  || `http://localhost:${PORT_HTTP}/auth/callback`,
 });
 
-// Zapewnia ważny access_token (autorefresh jeśli wygasł)
 async function ensureAccessToken() {
   let tokens = withExpiresAt(loadTokens());
   if (!tokens?.access_token) throw new Error("No tokens stored. Log in via /auth/login");
-
-  const now = Date.now();
-  const needRefresh = !tokens.expires_at || now >= tokens.expires_at;
-
+  const needRefresh = !tokens.expires_at || Date.now() >= tokens.expires_at;
   if (!needRefresh) return tokens.access_token;
 
-  // Spróbuj użyć refresh z biblioteki
   if (typeof kickAuthBase.refreshAccessToken === "function") {
     console.log("[tokens] refreshing via KickAuthClient.refreshAccessToken()");
     const refreshed = await kickAuthBase.refreshAccessToken(tokens.refresh_token);
@@ -116,15 +99,13 @@ async function ensureAccessToken() {
     saveTokens(merged);
     return merged.access_token;
   }
-
   throw new Error("refreshAccessToken() not available on KickAuthClient");
 }
 
 /* =======================================================================================
-   WEBHOOK z walidacją HMAC (Kick-Signature: hex sha256)
-   UWAGA: surowe body MUSI być przed bodyParser.json()
+   WEBHOOK RSA VERIFY + FULL LOG + CHALLENGE
    ======================================================================================= */
-   
+
 const KICK_PUBLIC_KEY_PEM = `
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq/+l1WnlRrGSolDMA+A8
@@ -137,7 +118,6 @@ twIDAQAB
 -----END PUBLIC KEY-----
 `.trim();
 
-// Dedup: pamiętaj ostatnie ID (idempotency)
 const SEEN_IDS = new Set();
 const MAX_SEEN = 500;
 function rememberId(id) {
@@ -148,11 +128,10 @@ function rememberId(id) {
   }
 }
 
-// ======== WEBHOOK (RAW BODY!) z pełnym logowaniem i walidacją RSA ========
+// RAW body before json()
 app.post("/webhook", express.raw({ type: "*/*" }), async (req, res) => {
   const startedAt = Date.now();
   try {
-    // 0) Zbierz nagłówki
     const msgId   = req.get("Kick-Event-Message-Id");
     const ts      = req.get("Kick-Event-Message-Timestamp");
     const sigB64  = req.get("Kick-Event-Signature");
@@ -173,74 +152,49 @@ app.post("/webhook", express.raw({ type: "*/*" }), async (req, res) => {
       console.warn("[WEBHOOK] Missing required signature headers");
       return res.status(400).send("Missing signature headers");
     }
-
-    // Dedup
     if (SEEN_IDS.has(msgId)) {
       console.log("[WEBHOOK] Duplicate message id -> 200 ok-duplicate");
       return res.status(200).send("ok-duplicate");
     }
 
-    // 1) Sprawdź świeżość timestampu
-    const sentAt = Date.parse(ts); // powinien być RFC3339
+    const sentAt = Date.parse(ts);
     const MAX_SKEW_MS = 5 * 60 * 1000;
-    if (!Number.isFinite(sentAt)) {
-      console.warn("[WEBHOOK] Invalid timestamp");
-      return res.status(400).send("Invalid timestamp");
-    }
+    if (!Number.isFinite(sentAt)) return res.status(400).send("Invalid timestamp");
     const skew = Math.abs(Date.now() - sentAt);
     console.log("[WEBHOOK] Timestamp skew(ms):", skew);
-    if (skew > MAX_SKEW_MS) {
-      console.warn("[WEBHOOK] Stale timestamp (>5min)");
-      return res.status(400).send("Stale timestamp");
-    }
+    if (skew > MAX_SKEW_MS) return res.status(400).send("Stale timestamp");
 
-    // 2) Złóż signed input: id + "." + ts + "." + rawBody
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "");
     const baseStr = `${msgId}.${ts}.${rawBody.toString("utf8")}`;
     console.log("[WEBHOOK] Body bytes:", rawBody.length, " | Signed string length:", baseStr.length);
 
-    // 3) Weryfikuj RSA-SHA256 (PKCS#1 v1.5) publicznym kluczem Kicka
     const verifier = crypto.createVerify("RSA-SHA256");
     verifier.update(baseStr, "utf8");
     verifier.end();
     const verified = verifier.verify(KICK_PUBLIC_KEY_PEM, sigB64, "base64");
     console.log("[WEBHOOK] Signature verified:", verified);
+    if (!verified) return res.status(401).send("Invalid signature");
 
-    if (!verified) {
-      console.error("[WEBHOOK] ❌ Invalid signature");
-      return res.status(401).send("Invalid signature");
-    }
-
-    // 4) Po udanej weryfikacji: pamiętaj ID i parsuj JSON
     rememberId(msgId);
 
     let payload = {};
-    try {
-      payload = JSON.parse(rawBody.toString("utf8"));
-    } catch (e) {
-      console.error("[WEBHOOK] JSON parse error:", e);
-      return res.status(400).send("Invalid JSON");
-    }
+    try { payload = JSON.parse(rawBody.toString("utf8")); }
+    catch { return res.status(400).send("Invalid JSON"); }
 
     const type = eType || payload?.type || payload?.event || "unknown";
     console.log("[WEBHOOK] ✅ OK type:", type);
 
-    // 5) Specjalnie: challenge verification (pierwsze wywołanie po konfiguracji)
+    // Challenge
     if (type === "webhook_callback_verification" && payload?.challenge) {
       console.log("[WEBHOOK] Responding with challenge");
       return res.json({ challenge: payload.challenge });
     }
 
-    // 6) Twoje eventy
+    // Gifts -> spins
     if (type === "channel.subscription.gifts") {
       const { gifter = {}, giftees = [] } = payload || {};
       const count = Array.isArray(giftees) ? giftees.length : Number(payload?.count || 0);
-
-      console.log("[WEBHOOK] 🎁 Gifts summary:", {
-        gifter: gifter?.username || "Anon",
-        count,
-      });
-
+      console.log("[WEBHOOK] 🎁 Gifts summary:", { gifter: gifter?.username || "Anon", count });
       const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
       if (spins > 0) {
         console.log("[WEBHOOK] → Broadcasting spins:", spins);
@@ -249,69 +203,87 @@ app.post("/webhook", express.raw({ type: "*/*" }), async (req, res) => {
         console.log("[WEBHOOK] No spins (count < 5)");
       }
     } else {
-      // Log dla innych typów — zobaczysz co realnie przychodzi
       const short = JSON.stringify(payload).slice(0, 500);
       console.log("[WEBHOOK] Unhandled event:", type, "| payload:", short + (short.length === 500 ? "… (truncated)" : ""));
     }
 
-    const took = Date.now() - startedAt;
-    console.log(`[WEBHOOK] Done in ${took}ms`);
+    console.log(`[WEBHOOK] Done in ${Date.now() - startedAt}ms`);
     return res.status(200).send("ok");
   } catch (e) {
-    const took = Date.now() - startedAt;
-    console.error(`[WEBHOOK] Handler error (in ${took}ms):`, e);
+    console.error(`[WEBHOOK] Handler error:`, e);
     return res.status(400).send("Bad webhook");
   }
 });
 
+/* =======================================================================================
+   CONFIG (wspólne dla OBS/przeglądarki)  /data/wheel.json
+   ======================================================================================= */
+function loadConfigItems() {
+  try {
+    const raw = fs.readFileSync(CFG_PATH, "utf8");
+    const obj = JSON.parse(raw);
+    if (Array.isArray(obj?.items)) return obj.items;
+  } catch {}
+  return null;
+}
+function saveConfigItems(items) {
+  const obj = { items };
+  fs.writeFileSync(CFG_PATH, JSON.stringify(obj, null, 2));
+  console.log(`[config] saved ${items.length} items -> ${CFG_PATH}`);
+}
+
+app.get("/config", (_req, res) => {
+  res.json({ ok: true, items: loadConfigItems() });
+});
+
+app.post("/config", express.json(), (req, res) => {
+  if (!ADMIN_KEY || req.get("X-Admin-Key") !== ADMIN_KEY) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+  const items = Array.isArray(req.body?.items) ? req.body.items : null;
+  if (!items) return res.status(400).json({ ok: false, error: "Missing items[]" });
+  saveConfigItems(items);
+  broadcast({ type: "config", items });
+  res.json({ ok: true });
+});
 
 // ===== Reszta middleware =====
 app.use(bodyParser.json());
 app.use(express.static(PUB));
 
-// Po każdej wygranej front woła nas i my wysyłamy wiadomość na czat.
+// Ogłoszenie na czat po spinie (non-blocking)
 app.post("/chat/announce", async (req, res) => {
   try {
     const label = String(req.body?.label ?? "").trim();
     if (!label) return res.status(400).json({ ok:false, error:"Missing label" });
-
     const msg = `🎯 Koło fortuny: ${label}`;
     await postChatMessage(msg);
-
     res.json({ ok:true });
   } catch (e) {
     console.error("chat/announce error:", e);
-    // nie blokuj gry
     res.status(200).json({ ok:false, warn: e.message });
   }
 });
 
-// Index
+// Index / Health
 app.get("/", (req, res) => {
   const file = path.join(PUB, "index.html");
   if (!fs.existsSync(file)) return res.status(404).send("index.html not found");
   res.sendFile(file);
 });
-
-// Health
 app.get("/health", (_, res) => res.send("OK"));
 
 /* =======================================================================================
-   OAuth: login/callback (+ zapis tokenów) z DYNAMICZNYM redirectUri
+   OAuth: login/callback (dynamiczne redirectUri)
    ======================================================================================= */
 const oauthStore = new Map();
 
 app.get("/auth/login", async (req, res) => {
   try {
     const desiredScopes = [
-      "user:read",
-      "channel:read",
-      "channel:write",
-      "chat:write",
-      "events:read",
-      "events:write",
+      "user:read", "channel:read", "channel:write",
+      "chat:write", "events:read", "events:write",
     ];
-
     const redirectUri = process.env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
     const authClient = new KickAuthClient({
       clientId:     process.env.KICK_CLIENT_ID     || "YOUR_CLIENT_ID",
@@ -319,23 +291,13 @@ app.get("/auth/login", async (req, res) => {
       redirectUri,
     });
 
-    let { url, state, codeVerifier } = await authClient.getAuthorizationUrl({
-      scopes: desiredScopes,
-    });
-
-    // Zapamiętaj zarówno codeVerifier jak i redirectUri użyte w tej sesji
+    let { url, state, codeVerifier } = await authClient.getAuthorizationUrl({ scopes: desiredScopes });
     oauthStore.set(state, { codeVerifier, redirectUri });
 
-    // Wymuś prompt=consent i scope dokładnie jak chcemy (space-separated)
     const scopeParam = encodeURIComponent(desiredScopes.join(" "));
-    if (url.includes("scope=")) {
-      url = url.replace(/([?&])scope=[^&]*/i, `$1scope=${scopeParam}`);
-    } else {
-      url += (url.includes("?") ? "&" : "?") + `scope=${scopeParam}`;
-    }
-    if (!/([?&])prompt=/.test(url)) {
-      url += "&prompt=consent";
-    }
+    if (url.includes("scope=")) url = url.replace(/([?&])scope=[^&]*/i, `$1scope=${scopeParam}`);
+    else url += (url.includes("?") ? "&" : "?") + `scope=${scopeParam}`;
+    if (!/([?&])prompt=/.test(url)) url += "&prompt=consent";
 
     console.log("[AUTH URL]", url);
     res.redirect(url);
@@ -354,7 +316,6 @@ app.get("/auth/callback", async (req, res) => {
     if (!stored?.codeVerifier || !stored?.redirectUri) return res.status(400).send("Invalid state");
     oauthStore.delete(state);
 
-    // Stwórz klienta z TYM SAMYM redirectUri co w /auth/login
     const authClient = new KickAuthClient({
       clientId:     process.env.KICK_CLIENT_ID     || "YOUR_CLIENT_ID",
       clientSecret: process.env.KICK_CLIENT_SECRET || "YOUR_CLIENT_SECRET",
@@ -362,7 +323,6 @@ app.get("/auth/callback", async (req, res) => {
     });
 
     const tokens = await authClient.getAccessToken(String(code), stored.codeVerifier);
-
     const saved = withExpiresAt(tokens);
     saveTokens(saved);
 
@@ -381,84 +341,44 @@ app.get("/auth/callback", async (req, res) => {
 });
 
 /* =======================================================================================
-   DEBUG / NARZĘDZIA
+   DEBUG
    ======================================================================================= */
-
-// Prosty test WS: /test/3 -> 3 spiny
 app.get("/test/:n", (req, res) => {
   const n = parseInt(req.params.n, 10) || 0;
   broadcast({ action: "spin", times: n });
   res.send(`sent ${n}`);
 });
 
-// Kick Chat helpers
-
-// cache na broadcaster_user_id (id zalogowanego użytkownika, którego token mamy)
 let CACHED_BROADCASTER_ID = null;
-
 async function getBroadcasterId() {
   if (CACHED_BROADCASTER_ID) return CACHED_BROADCASTER_ID;
-
   const token = await ensureAccessToken();
-
-  // self user z publicznego API
   const r = await fetch("https://api.kick.com/public/v1/users", {
     headers: { Authorization: `Bearer ${token}` }
   });
-
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    throw new Error(`users (self) failed: ${r.status} ${t}`);
-  }
-
+  if (!r.ok) throw new Error(`users (self) failed: ${r.status} ${await r.text().catch(()=> "")}`);
   const data = await r.json();
-  // { data: [ { user_id, ... } ] }
   const id = data?.data?.[0]?.user_id;
-  if (!Number.isFinite(Number(id))) {
-    throw new Error("Cannot determine broadcaster_user_id from /public/v1/users");
-  }
-
+  if (!Number.isFinite(Number(id))) throw new Error("Cannot determine broadcaster_user_id from /public/v1/users");
   CACHED_BROADCASTER_ID = Number(id);
   return CACHED_BROADCASTER_ID;
 }
 
-/**
- * Wyślij wiadomość na czat Kick (typ 'user' używając tokenu streamera).
- * Wymagane scope: chat:write
- * POST /public/v1/chat
- */
 async function postChatMessage(content) {
-  if (!content || !content.trim()) return;
-
+  if (!content?.trim()) return;
   try {
     const token = await ensureAccessToken();
     const broadcasterId = await getBroadcasterId();
-
-    const payload = {
-      broadcaster_user_id: broadcasterId,
-      content: content.slice(0, 500),
-      type: "user"
-    };
-
     const r = await fetch("https://api.kick.com/public/v1/chat", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ broadcaster_user_id: broadcasterId, content: content.slice(0,500), type: "user" })
     });
-
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      console.warn(`chat send failed: ${r.status} ${txt}`);
-    }
-  } catch (e) {
-    console.warn("[chat] error:", e.message);
-  }
+    if (!r.ok) console.warn(`chat send failed: ${r.status} ${await r.text().catch(()=> "")}`);
+  } catch (e) { console.warn("[chat] error:", e.message); }
 }
 
-// SETUP – prosta strona
+// SETUP page
 app.get("/setup", (req, res) => {
   const hasTokens = !!loadTokens()?.access_token;
   const base = getBaseUrl(req);
@@ -474,14 +394,13 @@ app.get("/setup", (req, res) => {
       <h2>OBS</h2>
       <ol>
         <li>W OBS dodaj <b>Browser Source</b> z URL: <code>${base}/?overlay=1</code></li>
-        <li>Ustaw szer./wys. według canvasu (np. 1920×1080). Tło strony jest przezroczyste.</li>
+        <li>Tło strony jest przezroczyste.</li>
       </ol>
       <p>Test koła: <a class="btn" href="/test/1">▶️ /test/1</a></p>
     </body></html>
   `);
 });
 
-// Ping do API z aktualnym tokenem (auto-refresh)
 app.get("/debug/oauth/ping", async (_req, res) => {
   try {
     const token = await ensureAccessToken();
@@ -496,61 +415,36 @@ app.get("/debug/oauth/ping", async (_req, res) => {
   }
 });
 
-// Wymuś odświeżenie „na żądanie”
 app.post("/debug/oauth/refresh", async (_req, res) => {
   try {
     const tokens = loadTokens();
-    if (!tokens?.refresh_token) {
-      return res.status(400).json({ ok: false, error: "No refresh_token stored" });
-    }
-    if (typeof kickAuthBase.refreshAccessToken !== "function") {
-      return res.status(400).json({ ok: false, error: "refreshAccessToken() not available" });
-    }
+    if (!tokens?.refresh_token) return res.status(400).json({ ok: false, error: "No refresh_token stored" });
+    if (typeof kickAuthBase.refreshAccessToken !== "function") return res.status(400).json({ ok: false, error: "refreshAccessToken() not available" });
     const refreshed = await kickAuthBase.refreshAccessToken(tokens.refresh_token);
     const merged = withExpiresAt({ ...tokens, ...refreshed });
     saveTokens(merged);
-    res.json({
-      ok: true,
-      access_token: mask(merged.access_token),
-      refresh_token: mask(merged.refresh_token),
-      expires_at: merged.expires_at
-    });
+    res.json({ ok: true, access_token: mask(merged.access_token), refresh_token: mask(merged.refresh_token), expires_at: merged.expires_at });
   } catch (e) {
     console.error("Manual refresh error:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// Podgląd statusu tokenów (zamaskowany)
 app.get("/debug/token", (_req, res) => {
   const t = loadTokens();
   if (!t) return res.json({ ok: true, tokens: null });
-  res.json({
-    ok: true,
-    tokens: {
-      access_token: mask(t.access_token),
-      refresh_token: mask(t.refresh_token),
-      expires_in: t.expires_in,
-      expires_at: t.expires_at,
-      scope: t.scope
-    }
-  });
+  res.json({ ok: true, tokens: { access_token: mask(t.access_token), refresh_token: mask(t.refresh_token), expires_in: t.expires_in, expires_at: t.expires_at, scope: t.scope }});
 });
 
 /* =======================================================================================
-   HTTP + WS na tym samym porcie i ścieżce /ws
+   HTTP + WS
    ======================================================================================= */
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-  if (req.url !== "/ws") {
-    socket.destroy();
-    return;
-  }
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    wss.emit("connection", ws, req);
-  });
+  if (req.url !== "/ws") { socket.destroy(); return; }
+  wss.handleUpgrade(req, socket, head, (ws) => { wss.emit("connection", ws, req); });
 });
 
 wss.on("connection", (ws, req) => {
@@ -558,15 +452,12 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => console.log("WS closed"));
   ws.on("error", (e) => console.error("WS client error:", e));
 });
-
 wss.on("error", (err) => console.error("WS server error:", err));
 
-const broadcast = (obj) => {
+function broadcast(obj) {
   const msg = JSON.stringify(obj);
-  for (const client of wss.clients) {
-    if (client.readyState === 1) client.send(msg);
-  }
-};
+  for (const client of wss.clients) if (client.readyState === 1) client.send(msg);
+}
 
 server.listen(PORT_HTTP, () => {
   console.log(`HTTP on http://localhost:${PORT_HTTP}`);
@@ -576,6 +467,7 @@ server.listen(PORT_HTTP, () => {
     KICK_CLIENT_ID: process.env.KICK_CLIENT_ID,
     KICK_REDIRECT_URI: process.env.KICK_REDIRECT_URI || "<dynamic>",
     WEBHOOK_SECRET: mask(WEBHOOK_SECRET),
-    TOK_PATH
+    TOK_PATH, CFG_PATH,
+    ADMIN_KEY: ADMIN_KEY ? "(set)" : "(missing)"
   });
 });
