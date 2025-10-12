@@ -12,10 +12,11 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@botk4cp3r/kick.js": "^1.0.1",
     "body-parser": "^2.2.0",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "kick-auth": "^1.0.5",
     "ws": "^8.18.3"
-  },
-  "devDependencies": {}
+  }
 }

@@ -417,6 +417,12 @@ function hideResult() {
 
   showResult(result.label, 1800);   // <— show banner for ~1.8s
 
+  fetch('/chat/announce', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ label: result.label })
+}).catch(()=>{ /* mute */ });
+
   queue.shift();
   await wait(2000);                 // small pause before next spin
 }
@@ -425,34 +431,36 @@ function hideResult() {
     }
 
     // ====== WebSocket / test click ======
-    const WS_PROTO = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${WS_PROTO}://${location.host}/ws`);
-    ws.onopen = ()=>console.log("✅ WS connected");
-    ws.onerror = e => console.error("WS error", e);
-    ws.onmessage = evt=>{
-      try{
+    const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
+    const WS = new WebSocket(WS_URL);
+
+    WS.onopen = () => console.log("✅ WS connected", WS_URL);
+    WS.onerror = (e) => console.error("WS error", e);
+    WS.onmessage = (evt) => {
+      try {
         const data = JSON.parse(evt.data);
-        if (data.action==="spin" && Number.isFinite(data.times)){
-          for(let i=0;i<data.times;i++) queue.push(1);
+        if (data.action === "spin" && Number.isFinite(data.times)) {
+          for (let i = 0; i < data.times; i++) queue.push(1);
           showOverlay(); runQueue();
           return;
         }
-        if (data.type==="GIFT_EVENT"){
-          let count=0;
-          if (Array.isArray(data.giftees)) count=data.giftees.length;
-          else if (typeof data.giftees==="string" && data.giftees.length) count=data.giftees.split(",").filter(Boolean).length;
-          const spins = Math.floor(count/5) || (count>=5?1:0);
-          if (spins>0){
-            for(let i=0;i<spins;i++) queue.push(1);
+        if (data.type === "GIFT_EVENT") {
+          let count = 0;
+          if (Array.isArray(data.giftees)) count = data.giftees.length;
+          else if (typeof data.giftees === "string" && data.giftees.length) count = data.giftees.split(",").filter(Boolean).length;
+          const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
+          if (spins > 0) {
+            for (let i = 0; i < spins; i++) queue.push(1);
             console.log(`➕ Added ${spins} spin(s). Queue: ${queue.length}`);
             if (!spinning) { showOverlay(); runQueue(); }
           }
           return;
         }
-      } catch(e){ console.error("Bad WS message", e); }
+      } catch (e) { console.error("Bad WS message", e); }
     };
 
-    canvas.addEventListener("click", ()=>{ queue.push(1); showOverlay(); runQueue(); });
+    canvas.addEventListener("click", () => { queue.push(1); showOverlay(); runQueue(); });
+
 
     // ====== Editor (open via ?edit=1) ======
     const editor=document.getElementById("editor");
