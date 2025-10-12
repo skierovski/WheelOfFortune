@@ -104,8 +104,13 @@
     ];
 
     function genId(){ return 'itm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
-    function sanitizeItem(it){ const label=String(it.label??"").trim(); let weight=Number(it.weight);
-      if(!Number.isFinite(weight)||weight<0) weight=0; const id=String(it.id||""); return { id:id||genId(), label, weight }; }
+    function sanitizeItem(it){
+      const label = String(it?.label ?? "").trim();
+      let weight = Number(it?.weight);
+      if (!Number.isFinite(weight) || weight < 0) weight = 0;
+      const id = String(it?.id || "");
+      return { id: id || genId(), label, weight };
+    }
     function loadItemsLocal(){
       try{
         const raw=localStorage.getItem(STORAGE_KEY_V2);
@@ -117,7 +122,7 @@
 
     let ITEMS = []; let CONFIG_VERSION = 1;
 
-    // ====== Drawing etc. (bez zmian wizualnych) ======
+    // ====== Drawing etc. ======
     const COLORS = ["#FF4D4F","#40A9FF","#73D13D","#FAAD14","#9254DE","#13C2C2","#EB2F96","#A0D911","#FFD666","#5CDBD3","#FF7A45","#597EF7"];
     const FULL_ROUNDS_MIN = 5, FULL_ROUNDS_MAX = 7;
     const BAG_SIZE = 50;
@@ -163,71 +168,175 @@
       return 0;
     }
 
-    function ellipsizeToWidth(ctx, text, maxWidth) {
+    // helpers do tekstu po łuku
+    function fitFontForArc(ctx, text, radius, arcAngle, maxPx = 42, minPx = 10) {
+      const maxLen = radius * arcAngle * 0.9;
+      let lo = minPx, hi = maxPx, best = minPx;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        ctx.font = `700 ${mid}px system-ui, sans-serif`;
+        const w = ctx.measureText(text).width;
+        if (w <= maxLen) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+      }
+      ctx.font = `700 ${best}px system-ui, sans-serif`;
+      return best;
+    }
+    function ellipsize(ctx, text, maxWidth) {
       if (ctx.measureText(text).width <= maxWidth) return text;
       const ell = "…"; let s = text;
       while (s.length > 1 && ctx.measureText(s + ell).width > maxWidth) s = s.slice(0, -1);
       return s + ell;
     }
-    function fitTextInArc(ctx, text, radius, arcAngle, maxPx, minPx) {
-      let lo = minPx, hi = maxPx, best = minPx; const pad = 0.9;
-      const maxArcLength = arcAngle * radius * pad;
-      while (lo <= hi) {
-        const mid = Math.floor((lo + hi) / 2);
-        ctx.font = `700 ${mid}px system-ui, sans-serif`;
-        const w = ctx.measureText(text).width;
-        if (w <= maxArcLength) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
-      }
-      ctx.font = `700 ${best}px system-ui, sans-serif`;
-      return best;
-    }
 
     function drawWheel(angle = 0) {
       const items = ACTIVE_SNAPSHOT || ITEMS;
-      const sectors = buildSectors(items);
+      ctx.clearRect(0, 0, W, H);
 
-      ctx.clearRect(0,0,W,H);
+      // tło pierścienia
+      ctx.beginPath();
+      ctx.arc(CX, CY, R + 44, 0, 2 * Math.PI);
+      ctx.fillStyle = "#deb887";
+      ctx.fill();
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = "#8b5a2b";
+      ctx.stroke();
 
-      // wood ring
-      ctx.beginPath(); ctx.arc(CX, CY, R + 44, 0, 2*Math.PI);
-      ctx.fillStyle = "#deb887"; ctx.fill(); ctx.lineWidth = 10; ctx.strokeStyle = "#8b5a2b"; ctx.stroke();
+      // jeżeli brak pozycji — narysuj tylko środek i wskaźnik
+      if (!items || items.length === 0) {
+        // środek
+        const hubR0 = Math.max(22, R * 0.42);
+        ctx.beginPath();
+        ctx.arc(CX, CY, hubR0, 0, 2 * Math.PI);
+        const hubGrad0 = ctx.createRadialGradient(CX, CY, 4, CX, CY, hubR0);
+        hubGrad0.addColorStop(0, "#f1c27d");
+        hubGrad0.addColorStop(1, "#8b5a2b");
+        ctx.fillStyle = hubGrad0;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#5e3d1e";
+        ctx.stroke();
 
-      // sectors
-      for (let i=0;i<sectors.length;i++){
-        const s = sectors[i]; const start = angle + s.start; const end = angle + s.end;
-        ctx.beginPath(); ctx.moveTo(CX,CY); ctx.arc(CX,CY,R,start,end); ctx.closePath();
-        const grad = ctx.createRadialGradient(CX, CY, R*0.08, CX, CY, R);
-        grad.addColorStop(0, COLORS[i % COLORS.length]); grad.addColorStop(1, COLORS[(i+1) % COLORS.length]);
-        ctx.fillStyle = grad; ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 2; ctx.stroke();
+        // wskaźnik
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.moveTo(CX, CY - R - 16);
+        ctx.lineTo(CX - 18, CY - R + 14);
+        ctx.lineTo(CX + 18, CY - R + 14);
+        ctx.closePath();
+        ctx.fill();
+
+        // obwód
+        ctx.beginPath();
+        ctx.arc(CX, CY, R + 6, 0, 2 * Math.PI);
+        ctx.strokeStyle = "rgba(255,255,255,.35)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        return;
       }
 
-      // center hub
-      const hubR = Math.max(22, R*0.42);
-      ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, 2*Math.PI);
+      const sectors = buildSectors(items);
+
+      // sektory
+      for (let i = 0; i < sectors.length; i++) {
+        const s = sectors[i];
+        const start = angle + s.start;
+        const end   = angle + s.end;
+        const arcAngle = end - start;
+
+        ctx.beginPath();
+        ctx.moveTo(CX, CY);
+        ctx.arc(CX, CY, R, start, end);
+        ctx.closePath();
+
+        const grad = ctx.createRadialGradient(CX, CY, R * 0.08, CX, CY, R);
+        grad.addColorStop(0, COLORS[i % COLORS.length]);
+        grad.addColorStop(1, COLORS[(i + 1) % COLORS.length]);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255,255,255,.6)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // napis
+        const mid = start + arcAngle / 2;
+        const rText = R * 0.72;
+        const rawLabel = String(s.label || "");
+        const fontPx = fitFontForArc(ctx, rawLabel, rText, arcAngle, 42, 10);
+        ctx.font = `700 ${fontPx}px system-ui, sans-serif`;
+        const maxLen = rText * arcAngle * 0.9;
+        const label = ellipsize(ctx, rawLabel, maxLen);
+
+        const tx = CX + Math.cos(mid) * rText;
+        const ty = CY + Math.sin(mid) * rText;
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(mid + Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.12));
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.fillStyle = "#fff";
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = fontPx * 0.35;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.strokeText(label, 0, 0);
+        ctx.fillText(label, 0, 0);
+        ctx.restore();
+      }
+
+      // środek
+      const hubR = Math.max(22, R * 0.42);
+      ctx.beginPath();
+      ctx.arc(CX, CY, hubR, 0, 2 * Math.PI);
       const hubGrad = ctx.createRadialGradient(CX, CY, 4, CX, CY, hubR);
-      hubGrad.addColorStop(0, "#f1c27d"); hubGrad.addColorStop(1, "#8b5a2b");
-      ctx.fillStyle = hubGrad; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#5e3d1e"; ctx.stroke();
+      hubGrad.addColorStop(0, "#f1c27d");
+      hubGrad.addColorStop(1, "#8b5a2b");
+      ctx.fillStyle = hubGrad;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#5e3d1e";
+      ctx.stroke();
 
-      // pointer
+      // wskaźnik
       ctx.fillStyle = "#000";
-      ctx.beginPath(); ctx.moveTo(CX, CY - R - 16); ctx.lineTo(CX - 18, CY - R + 14); ctx.lineTo(CX + 18, CY - R + 14);
-      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(CX, CY - R - 16);
+      ctx.lineTo(CX - 18, CY - R + 14);
+      ctx.lineTo(CX + 18, CY - R + 14);
+      ctx.closePath();
+      ctx.fill();
 
-      // rim
-      ctx.beginPath(); ctx.arc(CX, CY, R+6, 0, 2*Math.PI);
-      ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 4; ctx.stroke();
+      // obwód
+      ctx.beginPath();
+      ctx.arc(CX, CY, R + 6, 0, 2 * Math.PI);
+      ctx.strokeStyle = "rgba(255,255,255,.35)";
+      ctx.lineWidth = 4;
+      ctx.stroke();
 
-      // stand
-      ctx.fillStyle = "#8B5A2B"; ctx.fillRect(CX - 55, CY + R + 12, 110, 115);
-      ctx.fillStyle = "#6f451d"; ctx.fillRect(CX - 130, CY + R + 120, 260, 28);
+      // stojak
+      ctx.fillStyle = "#8B5A2B";
+      ctx.fillRect(CX - 55, CY + R + 12, 110, 115);
+      ctx.fillStyle = "#6f451d";
+      ctx.fillRect(CX - 130, CY + R + 120, 260, 28);
     }
 
     function getNormalizedWeights(){ return getNormalizedWeightsFrom(ITEMS); }
 
     function buildSpinBag(){
-      const n=Math.max(ITEMS.length,1);
-      const norm=getNormalizedWeights();
+      const L = ITEMS.length;
+      if (L === 0) {
+        // nic nie losujemy gdy brak pozycji
+        spinBag = [];
+        bagPos = 0;
+        spinBagVersion = CONFIG_VERSION;
+        console.log("🧰 Bag skipped (no items).");
+        return;
+      }
+
+      const n = L;
+      const norm = getNormalizedWeights();
       const desired = norm.map(p=>p*BAG_SIZE/100);
 
       let counts=new Array(n).fill(0), assigned=0, residuals=new Array(n).fill(0);
@@ -248,7 +357,10 @@
       }
 
       const bag=[];
-      for (let i=0;i<n;i++){ const id=ITEMS[i].id ?? (ITEMS[i].id=genId()); for(let c=0;c<counts[i];c++) bag.push(id); }
+      for (let i=0;i<n;i++){
+        const id = ITEMS[i].id ?? (ITEMS[i].id = genId());
+        for(let c=0;c<counts[i];c++) bag.push(id);
+      }
       shuffleInPlace(bag);
       spinBag=bag; bagPos=0; spinBagVersion=CONFIG_VERSION;
       const dbg = counts.map((c,i)=>`${ITEMS[i]?.label||i}:${c}`).join(" | ");
@@ -257,6 +369,7 @@
 
     function nextFromBag(){
       if(!spinBag || bagPos>=spinBag.length || spinBagVersion!==CONFIG_VERSION) buildSpinBag();
+      if (spinBag.length === 0) { console.warn("Spin requested but no items."); return null; }
       let pickedId = spinBag[bagPos++];
       if (NO_REPEAT_BACK_TO_BACK && lastPickedId===pickedId && spinBag.length>1){
         if (bagPos<spinBag.length && spinBag[bagPos]!==lastPickedId){ const alt=spinBag[bagPos]; spinBag[bagPos]=pickedId; pickedId=alt; }
@@ -269,6 +382,7 @@
     function easeOutQuint(t){ return 1 - Math.pow(1 - t, 5); }
 
     async function spinToId(pickedId){
+      if (!pickedId) return { index:-1, snap:null, label:"" };
       ACTIVE_SNAPSHOT = cloneItems(ITEMS);
       const SNAP = ACTIVE_SNAPSHOT; const sectors = buildSectors(SNAP);
       let pickedIdx = sectors.findIndex(s => s.id === pickedId);
@@ -339,14 +453,14 @@
       while (queue.length) {
         const pickedId = nextFromBag();
         const result = await spinToId(pickedId);
-        console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label}`);
-        showResult(result.label, 1800);
-
-        fetch('/chat/announce', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: result.label })
-        }).catch(()=>{});
-
+        if (result.label) {
+          console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label}`);
+          showResult(result.label, 1800);
+          fetch('/chat/announce', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label: result.label })
+          }).catch(()=>{});
+        }
         queue.shift();
         await wait(2000);
       }
@@ -410,31 +524,76 @@
     function sumWeights(){ return totalWeight(); }
 
     function renderList(){
-      listEl.innerHTML=""; sumInfo.textContent=`Sum of weights: ${sumWeights().toFixed(2)}%`;
+      listEl.innerHTML="";
+      sumInfo.textContent=`Sum of weights: ${sumWeights().toFixed(2)}%`;
       ITEMS.forEach((it,i)=>{
         const row=document.createElement("div"); row.className="item";
         const name=document.createElement("span"); name.textContent=it.label;
-        const weight=document.createElement("input"); weight.type="number"; weight.min="0"; weight.step="0.1"; weight.value=Number(it.weight).toFixed(2); weight.title="Percent (weight)";
-        weight.onchange=()=>{ let v=Number(weight.value); if(!Number.isFinite(v)||v<0) v=0; ITEMS[i].weight=v; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
-        const up=document.createElement("button"); up.textContent="↑"; up.onclick=()=>{ if(i>0){ [ITEMS[i-1],ITEMS[i]]=[ITEMS[i],ITEMS[i-1]]; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
-        const down=document.createElement("button"); down.textContent="↓"; down.onclick=()=>{ if(i<ITEMS.length-1){ [ITEMS[i+1],ITEMS[i]]=[ITEMS[i],ITEMS[i+1]]; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
-        const edit=document.createElement("button"); edit.textContent="✎"; edit.onclick=()=>{ const v=prompt("Rename prize:", ITEMS[i].label); if(v!==null){ const s=v.trim(); if(s){ ITEMS[i].label=s; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } } };
-        const del=document.createElement("button"); del.textContent="✕"; del.onclick=()=>{ ITEMS.splice(i,1); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
+        const weight=document.createElement("input"); weight.type="number"; weight.min="0"; weight.step="0.1";
+        weight.value=Number(it.weight).toFixed(2); weight.title="Percent (weight)";
+        weight.onchange=()=>{ let v=Number(weight.value); if(!Number.isFinite(v)||v<0) v=0;
+          ITEMS[i].weight=v; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
+
+        const up=document.createElement("button"); up.textContent="↑";
+        up.onclick=()=>{ if(i>0){ [ITEMS[i-1],ITEMS[i]]=[ITEMS[i],ITEMS[i-1]]; CONFIG_VERSION++; renderList();
+          if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
+
+        const down=document.createElement("button"); down.textContent="↓";
+        down.onclick=()=>{ if(i<ITEMS.length-1){ [ITEMS[i+1],ITEMS[i]]=[ITEMS[i],ITEMS[i+1]]; CONFIG_VERSION++; renderList();
+          if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
+
+        const edit=document.createElement("button"); edit.textContent="✎";
+        edit.onclick=()=>{ const v=prompt("Rename prize:", ITEMS[i].label);
+          if(v!==null){ const s=v.trim(); if(s){ ITEMS[i].label=s; CONFIG_VERSION++; renderList();
+            if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } } };
+
+        const del=document.createElement("button"); del.textContent="✕";
+        del.onclick=()=>{
+          if (ITEMS.length <= 1) { alert("At least one prize must remain."); return; }
+          ITEMS.splice(i,1); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+        };
+
         row.appendChild(name); row.appendChild(weight); row.appendChild(up); row.appendChild(down); row.appendChild(edit); row.appendChild(del);
         listEl.appendChild(row);
       });
     }
 
-    addBtn.onclick=()=>{ const label=(newLabel.value||"").trim(); let w=Number(newWeight.value); if(!label) return; if(!Number.isFinite(w)||w<0) w=0; ITEMS.push({id:genId(), label, weight:w}); CONFIG_VERSION++; newLabel.value=""; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
+    addBtn.onclick=()=>{ const label=(newLabel.value||"").trim(); let w=Number(newWeight.value);
+      if(!label) return; if(!Number.isFinite(w)||w<0) w=0;
+      ITEMS.push({id:genId(), label, weight:w}); CONFIG_VERSION++; newLabel.value="";
+      renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
 
-    saveBtn.onclick=async ()=>{ const ok = await saveToServer(ITEMS);
-      if (ok){ saveItemsLocal(ITEMS); alert("Saved to server."); } else { alert("Server save failed (check X-Admin-Key)."); } CONFIG_VERSION++; buildSpinBag(); };
+    saveBtn.onclick=async ()=>{
+      const ok = await saveToServer(ITEMS);
+      if (ok){ saveItemsLocal(ITEMS); alert("Saved to server."); }
+      else { alert("Server save failed (check X-Admin-Key)."); }
+      CONFIG_VERSION++; buildSpinBag();
+    };
 
-    resetBtn.onclick=()=>{ if(confirm("Restore defaults?")){ ITEMS=DEFAULT_ITEMS.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); saveItemsLocal(ITEMS); buildSpinBag(); } };
+    resetBtn.onclick=()=>{ if(confirm("Restore defaults?")){
+      ITEMS=DEFAULT_ITEMS.map(sanitizeItem); CONFIG_VERSION++; renderList();
+      if(!ACTIVE_SNAPSHOT) drawWheel(rotation); saveItemsLocal(ITEMS); buildSpinBag(); } };
+
     hideBtn.onclick=()=> editor.classList.toggle("show", false);
-    normalizeBtn.onclick=()=>{ const sum=sumWeights(); if(sum<=0){ const eq=ITEMS.length?(100/ITEMS.length):0; ITEMS=ITEMS.map(it=>({...it, weight:eq})); } else { ITEMS=ITEMS.map(it=>({...it, weight:(it.weight/sum)*100 })); } CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
+
+    normalizeBtn.onclick=()=>{ const sum=sumWeights();
+      if(sum<=0){ const eq=ITEMS.length?(100/ITEMS.length):0; ITEMS=ITEMS.map(it=>({...it, weight:eq})); }
+      else { ITEMS=ITEMS.map(it=>({...it, weight:(it.weight/sum)*100 })); }
+      CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
+
     exportBtn.onclick=()=>{ importArea.value=JSON.stringify(ITEMS,null,2); importArea.focus(); importArea.select(); };
-    importBtn.onclick=()=>{ try{ const arr=JSON.parse(importArea.value); if(Array.isArray(arr)){ ITEMS=arr.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } else alert("Invalid JSON format."); }catch{ alert("Invalid JSON."); } };
+    importBtn.onclick=()=>{ try{
+        const arr=JSON.parse(importArea.value);
+        if(Array.isArray(arr) && arr.length){
+          ITEMS=arr.map(sanitizeItem);
+        } else if (Array.isArray(arr) && arr.length===0) {
+          // pozwalam wczytać pustą listę, ale UI zablokuje usunięcie ostatniej pozycji w przyszłości
+          ITEMS=[];
+        } else {
+          alert("Invalid JSON format."); return;
+        }
+        CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+      }catch{ alert("Invalid JSON."); } };
 
     function toggleEditor(show){ editor.classList.toggle("show", !!show); editor.setAttribute("aria-hidden", show?"false":"true"); }
 
@@ -444,8 +603,13 @@
 
       // 1st try server config; fallback local/default
       const fromServer = await fetchServerConfig();
-      if (fromServer && fromServer.length) ITEMS = fromServer.map(sanitizeItem);
-      else ITEMS = loadItemsLocal();
+      if (fromServer && fromServer.length >= 0) {
+        // pozwól na pustą tablicę z serwera; zsanityzuj elementy jeśli są
+        ITEMS = Array.isArray(fromServer) ? fromServer.map(sanitizeItem) : loadItemsLocal();
+        if (fromServer.length === 0) console.warn("Server config is empty.");
+      } else {
+        ITEMS = loadItemsLocal();
+      }
 
       // preload admin key field (local, only on your machine)
       adminKeyInput.value = localStorage.getItem("ADMIN_KEY") || "";

@@ -253,7 +253,13 @@ function loadConfigItems() {
   } catch {}
   return null;
 }
+function ensureDirFor(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
 function saveConfigItems(items) {
+  ensureDirFor(CFG_PATH);
   const obj = { items };
   fs.writeFileSync(CFG_PATH, JSON.stringify(obj, null, 2));
   console.log(`[config] saved ${items.length} items -> ${CFG_PATH}`);
