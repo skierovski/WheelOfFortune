@@ -14,11 +14,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Render / reverse proxy
+app.set("trust proxy", 1);
 
 // ---- Config / env ----
 const PORT_HTTP = Number(process.env.PORT) || 3000;
 const PUB = path.join(__dirname, "public");
 const WEBHOOK_SECRET = process.env.KICK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "dev_webhook_secret";
+
+// Helper: bazowy URL (http/https + host)
+function getBaseUrl(req) {
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
+  const host  = (req.headers["x-forwarded-host"]  || req.get("host")).split(",")[0].trim();
+  return `${proto}://${host}`;
+}
 
 // Lżejszy CSP żeby WS mógł się łączyć z lokalnymi/remote hostami
 app.use((req, res, next) => {
@@ -26,8 +35,9 @@ app.use((req, res, next) => {
     "Content-Security-Policy",
     [
       "default-src 'self' data: blob:",
-      `connect-src 'self' http://localhost:${PORT_HTTP} ws://localhost:${PORT_HTTP} https: wss:`,
-      `script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:${PORT_HTTP}`,
+      // pozwól na WS/HTTP/HTTPS globalnie (w tym Render)
+      "connect-src 'self' https: wss: http: ws:",
+      `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:"
@@ -38,8 +48,6 @@ app.use((req, res, next) => {
 
 /* =======================================================================================
    TOKEN STORE + AUTO REFRESH
-   - zapis do tokens.json
-   - auto-odświeżanie przy użyciu KickAuthClient.refreshAccessToken (jeśli jest)
    ======================================================================================= */
 
 const TOK_PATH = process.env.TOK_PATH || path.join(process.cwd(), "tokens.json");
@@ -65,7 +73,8 @@ function saveTokens(t) {
     console.log("[tokens] saved:", {
       access_token: mask(t.access_token),
       refresh_token: mask(t.refresh_token),
-      expires_at: t.expires_at
+      expires_at: t.expires_at,
+      scope: t.scope,
     });
   } catch (e) {
     console.error("[tokens] save failed:", e);
@@ -73,9 +82,8 @@ function saveTokens(t) {
 }
 
 function withExpiresAt(tokens) {
-  // jeśli brak expires_at – wylicz z expires_in
   if (!tokens) return null;
-  const skewMs = 60_000 * 5; // 5 minut bufora
+  const skewMs = 60_000 * 5; // 5 min bufora
   const now = Date.now();
   if (!tokens.expires_at && Number.isFinite(tokens.expires_in)) {
     tokens.expires_at = now + (Number(tokens.expires_in) * 1000) - skewMs;
@@ -83,13 +91,14 @@ function withExpiresAt(tokens) {
   return tokens;
 }
 
-const kickAuth = new KickAuthClient({
+// Uwaga: instancja bazowa (fallback). W /auth/login i /auth/callback tworzymy klienta z dynamicznym redirectUri.
+const kickAuthBase = new KickAuthClient({
   clientId:     process.env.KICK_CLIENT_ID     || "YOUR_CLIENT_ID",
   clientSecret: process.env.KICK_CLIENT_SECRET || "YOUR_CLIENT_SECRET",
   redirectUri:  process.env.KICK_REDIRECT_URI  || `http://localhost:${PORT_HTTP}/auth/callback`,
 });
 
-// Zapewnia ważny access_token (autorefresh jeśli wygasł lub za chwilę wygaśnie)
+// Zapewnia ważny access_token (autorefresh jeśli wygasł)
 async function ensureAccessToken() {
   let tokens = withExpiresAt(loadTokens());
   if (!tokens?.access_token) throw new Error("No tokens stored. Log in via /auth/login");
@@ -99,73 +108,113 @@ async function ensureAccessToken() {
 
   if (!needRefresh) return tokens.access_token;
 
-  // Spróbuj użyć metody klienta jeśli istnieje
-  if (typeof kickAuth.refreshAccessToken === "function") {
+  // Spróbuj użyć refresh z biblioteki
+  if (typeof kickAuthBase.refreshAccessToken === "function") {
     console.log("[tokens] refreshing via KickAuthClient.refreshAccessToken()");
-    const refreshed = await kickAuth.refreshAccessToken(tokens.refresh_token);
-    const merged = withExpiresAt({
-      ...tokens,
-      ...refreshed,
-      // niektóre biblioteki zwracają nowe expires_in, token_type, scope
-    });
+    const refreshed = await kickAuthBase.refreshAccessToken(tokens.refresh_token);
+    const merged = withExpiresAt({ ...tokens, ...refreshed });
     saveTokens(merged);
     return merged.access_token;
   }
 
-  // Fallback: jeśli biblioteka nie ma metody, rzuć błąd / zrób własny fetch do endpointu token
-  // (Możemy dorobić gdyby było trzeba)
   throw new Error("refreshAccessToken() not available on KickAuthClient");
 }
 
 /* =======================================================================================
    WEBHOOK z walidacją HMAC (Kick-Signature: hex sha256)
-   - UWAGA: surowe body MUSI być przed bodyParser.json()
+   UWAGA: surowe body MUSI być przed bodyParser.json()
    ======================================================================================= */
+   
+const KICK_PUBLIC_KEY_PEM = `
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq/+l1WnlRrGSolDMA+A8
+6rAhMbQGmQ2SapVcGM3zq8ANXjnhDWocMqfWcTd95btDydITa10kDvHzw9WQOqp2
+MZI7ZyrfzJuz5nhTPCiJwTwnEtWft7nV14BYRDHvlfqPUaZ+1KR4OCaO/wWIk/rQ
+L/TjY0M70gse8rlBkbo2a8rKhu69RQTRsoaf4DVhDPEeSeI5jVrRDGAMGL3cGuyY
+6CLKGdjVEM78g3JfYOvDU/RvfqD7L89TZ3iN94jrmWdGz34JNlEI5hqK8dd7C5EF
+BEbZ5jgB8s8ReQV8H+MkuffjdAj3ajDDX3DOJMIut1lBrUVD1AaSrGCKHooWoL2e
+twIDAQAB
+-----END PUBLIC KEY-----
+`.trim();
+
+// Prosta ochrona przed powtórkami (idempotency): pamiętaj ostatnie N ID
+const SEEN_IDS = new Set();
+const MAX_SEEN = 200;
+function rememberId(id) {
+  SEEN_IDS.add(id);
+  if (SEEN_IDS.size > MAX_SEEN) {
+    const it = SEEN_IDS.values().next();
+    if (!it.done) SEEN_IDS.delete(it.value);
+  }
+}
+
 app.post("/webhook", express.raw({ type: "*/*" }), async (req, res) => {
   try {
-    // 1) Walidacja HMAC
-    const signature = req.get("Kick-Signature");
-    if (!signature) return res.status(401).send("Missing signature");
+    // === 1) Zbierz nagłówki wymagane przez Kick ===
+    const msgId = req.get("Kick-Event-Message-Id");
+    const ts    = req.get("Kick-Event-Message-Timestamp");
+    const sigB64= req.get("Kick-Event-Signature");
+    const eventType = req.get("Kick-Event-Type"); // informacyjnie
 
-    const hmac = crypto.createHmac("sha256", WEBHOOK_SECRET).update(req.body).digest("hex");
-    const sigBuf = Buffer.from(signature, "hex");
-    const hmacBuf = Buffer.from(hmac, "hex");
-    if (
-      sigBuf.length !== hmacBuf.length ||
-      !crypto.timingSafeEqual(sigBuf, hmacBuf)
-    ) {
-      return res.status(401).send("Invalid signature");
+    if (!msgId || !ts || !sigB64) {
+      return res.status(400).send("Missing signature headers");
     }
 
-    // 2) JSON po walidacji
+    // Odrzucaj duplikaty (idempotency key)
+    if (SEEN_IDS.has(msgId)) {
+      return res.status(200).send("ok-duplicate");
+    }
+
+    // Opcjonalnie: sprawdź świeżość timestampu (np. ±5 minut)
+    const now = Date.now();
+    const sentAt = Date.parse(ts); // RFC3339
+    const MAX_SKEW_MS = 5 * 60 * 1000;
+    if (!Number.isFinite(sentAt) || Math.abs(now - sentAt) > MAX_SKEW_MS) {
+      return res.status(400).send("Stale or invalid timestamp");
+    }
+
+    // === 2) Zbuduj „signed input”: id.timestamp.rawBody ===
+    const rawBody = req.body instanceof Buffer ? req.body : Buffer.from(req.body || "");
+    const signed  = Buffer.from(`${msgId}.${ts}.${rawBody.toString("utf8")}`, "utf8");
+
+    // === 3) Weryfikacja podpisu RSA-SHA256 z publicznym kluczem Kicka ===
+    const verifier = crypto.createVerify("RSA-SHA256");
+    verifier.update(signed);
+    verifier.end();
+
+    const ok = verifier.verify(KICK_PUBLIC_KEY_PEM, sigB64, "base64");
+    if (!ok) return res.status(401).send("Invalid signature");
+
+    // Pamiętaj ID po udanej weryfikacji
+    rememberId(msgId);
+
+    // === 4) Dopiero teraz parsuj JSON ===
     let payload = {};
     try {
-      payload = JSON.parse(req.body.toString("utf8"));
-    } catch (e) {
-      console.error("Webhook JSON parse error:", e);
+      payload = JSON.parse(rawBody.toString("utf8"));
+    } catch {
       return res.status(400).send("Invalid JSON");
     }
 
-    const eventType = req.get("Kick-Event-Type") || payload?.type || payload?.event;
-    console.log("Webhook event:", eventType);
+    console.log("Webhook OK:", eventType || payload?.type || payload?.event);
 
-    if (eventType === "channel.subscription.gifts") {
+    // === 5) Twoja logika ===
+    const typ = eventType || payload?.type || payload?.event;
+    if (typ === "channel.subscription.gifts") {
       const { gifter = {}, giftees = [] } = payload || {};
       const count = Array.isArray(giftees) ? giftees.length : Number(payload?.count || 0);
       console.log(`🎁 ${gifter.username || "Anon"} gifted ${count} subs`);
-
       const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
-      if (spins > 0) {
-        broadcast({ action: "spin", times: spins });
-      }
+      if (spins > 0) broadcast({ action: "spin", times: spins });
     }
 
     res.status(200).send("ok");
   } catch (e) {
     console.error("Webhook error:", e);
-    return res.status(400).send("Bad webhook");
+    res.status(400).send("Bad webhook");
   }
 });
+
 
 // ===== Reszta middleware =====
 app.use(bodyParser.json());
@@ -177,17 +226,16 @@ app.post("/chat/announce", async (req, res) => {
     const label = String(req.body?.label ?? "").trim();
     if (!label) return res.status(400).json({ ok:false, error:"Missing label" });
 
-    // Tu sformatuj własny tekst:
     const msg = `🎯 Koło fortuny: ${label}`;
     await postChatMessage(msg);
 
     res.json({ ok:true });
   } catch (e) {
     console.error("chat/announce error:", e);
-    res.status(500).json({ ok:false, error: e.message });
+    // nie blokuj gry
+    res.status(200).json({ ok:false, warn: e.message });
   }
 });
-
 
 // Index
 app.get("/", (req, res) => {
@@ -200,11 +248,11 @@ app.get("/", (req, res) => {
 app.get("/health", (_, res) => res.send("OK"));
 
 /* =======================================================================================
-   OAuth: login/callback (+ zapis tokenów)
+   OAuth: login/callback (+ zapis tokenów) z DYNAMICZNYM redirectUri
    ======================================================================================= */
 const oauthStore = new Map();
 
-app.get("/auth/login", async (_req, res) => {
+app.get("/auth/login", async (req, res) => {
   try {
     const desiredScopes = [
       "user:read",
@@ -215,51 +263,66 @@ app.get("/auth/login", async (_req, res) => {
       "events:write",
     ];
 
-    const { url, state, codeVerifier } = await kickAuth.getAuthorizationUrl({
+    const redirectUri = process.env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
+    const authClient = new KickAuthClient({
+      clientId:     process.env.KICK_CLIENT_ID     || "YOUR_CLIENT_ID",
+      clientSecret: process.env.KICK_CLIENT_SECRET || "YOUR_CLIENT_SECRET",
+      redirectUri,
+    });
+
+    let { url, state, codeVerifier } = await authClient.getAuthorizationUrl({
       scopes: desiredScopes,
     });
-    oauthStore.set(state, codeVerifier);
+
+    // Zapamiętaj zarówno codeVerifier jak i redirectUri użyte w tej sesji
+    oauthStore.set(state, { codeVerifier, redirectUri });
 
     // Wymuś prompt=consent i scope dokładnie jak chcemy (space-separated)
     const scopeParam = encodeURIComponent(desiredScopes.join(" "));
-    let authUrl = url;
-
-    if (authUrl.includes("scope=")) {
-      authUrl = authUrl.replace(/([?&])scope=[^&]*/i, `$1scope=${scopeParam}`);
+    if (url.includes("scope=")) {
+      url = url.replace(/([?&])scope=[^&]*/i, `$1scope=${scopeParam}`);
     } else {
-      authUrl += (authUrl.includes("?") ? "&" : "?") + `scope=${scopeParam}`;
+      url += (url.includes("?") ? "&" : "?") + `scope=${scopeParam}`;
     }
-    if (!/([?&])prompt=/.test(authUrl)) {
-      authUrl += "&prompt=consent";
+    if (!/([?&])prompt=/.test(url)) {
+      url += "&prompt=consent";
     }
 
-    console.log("[AUTH URL]", authUrl); // <-- sprawdzimy co naprawdę leci
-    res.redirect(authUrl);
+    console.log("[AUTH URL]", url);
+    res.redirect(url);
   } catch (e) {
     console.error("Auth init error:", e);
     res.status(500).send("Failed to start auth");
   }
 });
 
-
 app.get("/auth/callback", async (req, res) => {
   try {
     const { code, state } = req.query;
     if (!code || !state) return res.status(400).send("Missing code/state");
-    const codeVerifier = oauthStore.get(state);
-    if (!codeVerifier) return res.status(400).send("Invalid state");
 
-    const tokens = await kickAuth.getAccessToken(String(code), codeVerifier);
+    const stored = oauthStore.get(state);
+    if (!stored?.codeVerifier || !stored?.redirectUri) return res.status(400).send("Invalid state");
     oauthStore.delete(state);
 
-    const stored = withExpiresAt(tokens);
-    saveTokens(stored);
+    // Stwórz klienta z TYM SAMYM redirectUri co w /auth/login
+    const authClient = new KickAuthClient({
+      clientId:     process.env.KICK_CLIENT_ID     || "YOUR_CLIENT_ID",
+      clientSecret: process.env.KICK_CLIENT_SECRET || "YOUR_CLIENT_SECRET",
+      redirectUri:  stored.redirectUri,
+    });
+
+    const tokens = await authClient.getAccessToken(String(code), stored.codeVerifier);
+
+    const saved = withExpiresAt(tokens);
+    saveTokens(saved);
 
     console.log("OAuth tokens:", {
-      access_token: mask(stored.access_token),
-      refresh_token: mask(stored.refresh_token),
-      expires_in: stored.expires_in,
-      expires_at: stored.expires_at
+      access_token: mask(saved.access_token),
+      refresh_token: mask(saved.refresh_token),
+      expires_in: saved.expires_in,
+      expires_at: saved.expires_at,
+      scope: saved.scope,
     });
     res.send("Auth OK. You can close this window.");
   } catch (e) {
@@ -279,8 +342,7 @@ app.get("/test/:n", (req, res) => {
   res.send(`sent ${n}`);
 });
 
-
-// ===== Kick Chat helpers =====
+// Kick Chat helpers
 
 // cache na broadcaster_user_id (id zalogowanego użytkownika, którego token mamy)
 let CACHED_BROADCASTER_ID = null;
@@ -290,7 +352,7 @@ async function getBroadcasterId() {
 
   const token = await ensureAccessToken();
 
-  // POPRAWNY endpoint wg docs: GET /public/v1/users
+  // self user z publicznego API
   const r = await fetch("https://api.kick.com/public/v1/users", {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -301,7 +363,7 @@ async function getBroadcasterId() {
   }
 
   const data = await r.json();
-  // struktura wg docs: { data: [ { user_id, name, email, ... } ], message }
+  // { data: [ { user_id, ... } ] }
   const id = data?.data?.[0]?.user_id;
   if (!Number.isFinite(Number(id))) {
     throw new Error("Cannot determine broadcaster_user_id from /public/v1/users");
@@ -314,40 +376,43 @@ async function getBroadcasterId() {
 /**
  * Wyślij wiadomość na czat Kick (typ 'user' używając tokenu streamera).
  * Wymagane scope: chat:write
- * Docs: https://docs.kick.com/apis/chat (POST /public/v1/chat)
+ * POST /public/v1/chat
  */
 async function postChatMessage(content) {
   if (!content || !content.trim()) return;
 
-  const token = await ensureAccessToken();
-  const broadcasterId = await getBroadcasterId();
+  try {
+    const token = await ensureAccessToken();
+    const broadcasterId = await getBroadcasterId();
 
-  const payload = {
-    broadcaster_user_id: broadcasterId,
-    content: content.slice(0, 500),
-    type: "user"
-  };
+    const payload = {
+      broadcaster_user_id: broadcasterId,
+      content: content.slice(0, 500),
+      type: "user"
+    };
 
-  const r = await fetch("https://api.kick.com/public/v1/chat", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+    const r = await fetch("https://api.kick.com/public/v1/chat", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
 
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`chat send failed: ${r.status} ${txt}`);
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      console.warn(`chat send failed: ${r.status} ${txt}`);
+    }
+  } catch (e) {
+    console.warn("[chat] error:", e.message);
   }
-  return r.json();
 }
 
-//SETUP
-
-app.get("/setup", (_req, res) => {
+// SETUP – prosta strona
+app.get("/setup", (req, res) => {
   const hasTokens = !!loadTokens()?.access_token;
+  const base = getBaseUrl(req);
   res.type("html").send(`
     <!doctype html>
     <html><head><meta charset="utf-8"><title>Kick Wheel – Setup</title>
@@ -359,7 +424,7 @@ app.get("/setup", (_req, res) => {
       <hr>
       <h2>OBS</h2>
       <ol>
-        <li>W OBS dodaj <b>Browser Source</b> z URL: <code>http://localhost:${PORT_HTTP}/?overlay=1</code></li>
+        <li>W OBS dodaj <b>Browser Source</b> z URL: <code>${base}/?overlay=1</code></li>
         <li>Ustaw szer./wys. według canvasu (np. 1920×1080). Tło strony jest przezroczyste.</li>
       </ol>
       <p>Test koła: <a class="btn" href="/test/1">▶️ /test/1</a></p>
@@ -368,15 +433,12 @@ app.get("/setup", (_req, res) => {
 });
 
 // Ping do API z aktualnym tokenem (auto-refresh)
-app.get("/debug/oauth/ping", async (req, res) => {
+app.get("/debug/oauth/ping", async (_req, res) => {
   try {
-    const tokenFromQuery = req.query.token ? String(req.query.token) : null;
-    const token = tokenFromQuery || (await ensureAccessToken());
-
-    const r = await fetch("https://api.kick.com/v1/users/me", {
+    const token = await ensureAccessToken();
+    const r = await fetch("https://api.kick.com/public/v1/users", {
       headers: { Authorization: `Bearer ${token}` }
     });
-
     const text = await r.text();
     res.status(r.status).type("application/json; charset=utf-8").send(text);
   } catch (e) {
@@ -392,10 +454,10 @@ app.post("/debug/oauth/refresh", async (_req, res) => {
     if (!tokens?.refresh_token) {
       return res.status(400).json({ ok: false, error: "No refresh_token stored" });
     }
-    if (typeof kickAuth.refreshAccessToken !== "function") {
+    if (typeof kickAuthBase.refreshAccessToken !== "function") {
       return res.status(400).json({ ok: false, error: "refreshAccessToken() not available" });
     }
-    const refreshed = await kickAuth.refreshAccessToken(tokens.refresh_token);
+    const refreshed = await kickAuthBase.refreshAccessToken(tokens.refresh_token);
     const merged = withExpiresAt({ ...tokens, ...refreshed });
     saveTokens(merged);
     res.json({
@@ -420,7 +482,8 @@ app.get("/debug/token", (_req, res) => {
       access_token: mask(t.access_token),
       refresh_token: mask(t.refresh_token),
       expires_in: t.expires_in,
-      expires_at: t.expires_at
+      expires_at: t.expires_at,
+      scope: t.scope
     }
   });
 });
@@ -462,7 +525,8 @@ server.listen(PORT_HTTP, () => {
   console.log("Public:", PUB, fs.existsSync(PUB) ? "(ok)" : "(missing)");
   console.log("[ENV]", {
     KICK_CLIENT_ID: process.env.KICK_CLIENT_ID,
-    KICK_REDIRECT_URI: process.env.KICK_REDIRECT_URI || `http://localhost:${PORT_HTTP}/auth/callback`,
-    WEBHOOK_SECRET: mask(WEBHOOK_SECRET)
+    KICK_REDIRECT_URI: process.env.KICK_REDIRECT_URI || "<dynamic>",
+    WEBHOOK_SECRET: mask(WEBHOOK_SECRET),
+    TOK_PATH
   });
 });
