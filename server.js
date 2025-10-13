@@ -155,6 +155,24 @@ app.head("/webhook", (req, res) => {
   res.status(200).end();
 });
 
+/* ====== kolejka spinów, gdy WS nie ma ====== */
+const pendingSpins = [];
+function isAnyWsConnected() {
+  for (const c of wss.clients) if (c.readyState === 1) return true;
+  return false;
+}
+function broadcastOrQueue(obj) {
+  if (isAnyWsConnected()) broadcast(obj);
+  else {
+    if (obj?.action === "spin" && Number.isFinite(obj.times) && obj.times > 0) {
+      pendingSpins.push(obj.times);
+      console.log(`[WS] No clients. Queued spins: +${obj.times} (total in queue: ${pendingSpins.reduce((a,b)=>a+b,0)})`);
+    } else {
+      console.log("[WS] No clients. Dropping non-spin message.");
+    }
+  }
+}
+
 // RAW body before json()
 app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
   const startedAt = Date.now();
@@ -225,7 +243,7 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
       const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
       if (spins > 0) {
         console.log("[WEBHOOK] → Broadcasting spins:", spins);
-        broadcast({ action: "spin", times: spins });
+        broadcastOrQueue({ action: "spin", times: spins });
       } else {
         console.log("[WEBHOOK] No spins (count < 5)");
       }
@@ -414,7 +432,6 @@ app.post("/config", express.json(), (req, res) => {
   let items = Array.isArray(req.body?.items) ? req.body.items : null;
   if (!items) return res.status(400).json({ ok: false, error: "Missing items[]" });
 
-  // normalizacja do 100% przed zapisem
   const normalized = saveConfigItems(items);
   broadcast({ type: "config", items: normalized });
   res.json({ ok: true, items: normalized });
@@ -528,7 +545,7 @@ app.get("/auth/callback", async (req, res) => {
 });
 
 /* =======================================================================================
-   SUBSKRYPCJE EVENTÓW – /setup
+   SUBSKRYPCJE EVENTÓW – /setup + watchdog
    ======================================================================================= */
 async function subscribeToEvents(token, broadcasterId, callbackUrl) {
   const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
@@ -553,16 +570,29 @@ async function subscribeToEvents(token, broadcasterId, callbackUrl) {
   return JSON.parse(text);
 }
 
+async function listSubscriptions(token, broadcasterId) {
+  const r = await fetch(`https://api.kick.com/public/v1/events/subscriptions?broadcaster_user_id=${broadcasterId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!r.ok) return [];
+  const j = await r.json().catch(()=> ({}));
+  return Array.isArray(j?.data) ? j.data : [];
+}
+
+// Utrzymujemy ostatnio znany callback do watchdoga
+let LAST_CALLBACK_URL = null;
+
 app.get("/setup", async (req, res) => {
   const hasTokens = !!loadTokens()?.access_token;
   const base = getBaseUrl(req);
+  LAST_CALLBACK_URL = `${base}/webhook`; // zapamiętaj dla watchdoga
   let subLine = '<span class="warn">pomińnięto (brak tokenu)</span>';
 
   if (hasTokens) {
     try {
       const token = await ensureAccessToken();
       const broadcasterId = await getBroadcasterId();
-      const cb = `${base}/webhook`;
+      const cb = LAST_CALLBACK_URL;
 
       console.log("[SUBSCRIBE] Trying to subscribe:", {
         broadcaster_user_id: String(broadcasterId),
@@ -608,12 +638,32 @@ app.get("/setup", async (req, res) => {
   `);
 });
 
+/* Watchdog subskrypcji – co 10 min upewnia się, że mamy event gifts */
+async function ensureSubscribed() {
+  try {
+    if (!LAST_CALLBACK_URL) return; // jeszcze nie wiemy jaki jest publiczny callback — odwiedź /setup
+    const token = await ensureAccessToken();
+    const broadcasterId = await getBroadcasterId();
+    const subs = await listSubscriptions(token, broadcasterId);
+    const hasGifts = subs.some(s => s?.name === "channel.subscription.gifts");
+    if (!hasGifts) {
+      console.log("[SUBSCRIBE][watchdog] missing gifts sub -> creating");
+      await subscribeToEvents(token, broadcasterId, LAST_CALLBACK_URL);
+    } else {
+      console.log("[SUBSCRIBE][watchdog] OK (gifts sub exists)");
+    }
+  } catch (e) {
+    console.warn("[SUBSCRIBE][watchdog] error:", e?.message || e);
+  }
+}
+setInterval(ensureSubscribed, 10 * 60 * 1000);
+
 /* =======================================================================================
    DEBUG / TESTY
    ======================================================================================= */
 app.get("/test/:n", (req, res) => {
   const n = parseInt(req.params.n, 10) || 0;
-  broadcast({ action: "spin", times: n });
+  broadcastOrQueue({ action: "spin", times: n });
   res.send(`sent ${n}`);
 });
 
@@ -653,7 +703,7 @@ app.get("/debug/token", (_req, res) => {
 });
 
 /* =======================================================================================
-   HTTP + WS
+   HTTP + WS (z heartbeat i opróżnianiem kolejki)
    ======================================================================================= */
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -665,10 +715,36 @@ server.on("upgrade", (req, socket, head) => {
 
 wss.on("connection", (ws, req) => {
   console.log("WS client connected:", req.socket.remoteAddress);
+
+  // heartbeat
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
+
+  // po połączeniu wyślij zaległe spiny
+  const totalQueued = pendingSpins.reduce((a,b)=>a+b,0);
+  if (totalQueued > 0) {
+    const n = pendingSpins.splice(0).reduce((a,b)=>a+b,0);
+    console.log(`[WS] Flushing queued spins -> ${n}`);
+    broadcast({ action: "spin", times: n });
+  }
+
   ws.on("close", () => console.log("WS closed"));
   ws.on("error", (e) => console.error("WS client error:", e));
 });
 wss.on("error", (err) => console.error("WS server error:", err));
+
+// ping co 30s
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      console.log("[WS] terminating dead connection");
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    try { ws.ping(); } catch {}
+  }
+}, 30_000);
 
 function broadcast(obj) {
   const msg = JSON.stringify(obj);
