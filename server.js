@@ -14,10 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Render / reverse proxy
 app.set("trust proxy", 1);
 
-// Access log – wszystko, co wchodzi/wychodzi
+// Access log
 app.use((req, res, next) => {
   const start = Date.now();
   const ua = req.get("user-agent") || "";
@@ -35,6 +34,7 @@ const PORT_HTTP = Number(process.env.PORT) || 3000;
 const PUB = path.join(__dirname, "public");
 const TOK_PATH = process.env.TOK_PATH || path.join(process.cwd(), "tokens.json");
 const CFG_PATH = process.env.CFG_PATH || "/data/wheel.json";
+const GOALS_PATH = process.env.GOALS_PATH || "/data/goals.json";
 const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ustaw w Renderze!
 const WEBHOOK_SECRET = process.env.KICK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "dev_webhook_secret";
 
@@ -243,28 +243,166 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
 });
 
 /* =======================================================================================
-   CONFIG (wspólne dla OBS/przeglądarki)  /data/wheel.json
+   CONFIG plik + GOALS + helpers
    ======================================================================================= */
-function loadConfigItems() {
-  try {
-    const raw = fs.readFileSync(CFG_PATH, "utf8");
-    const obj = JSON.parse(raw);
-    if (Array.isArray(obj?.items)) return obj.items;
-  } catch {}
-  return null;
-}
 function ensureDirFor(filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
-
-function saveConfigItems(items) {
-  ensureDirFor(CFG_PATH);
-  const obj = { items };
-  fs.writeFileSync(CFG_PATH, JSON.stringify(obj, null, 2));
-  console.log(`[config] saved ${items.length} items -> ${CFG_PATH}`);
+function loadJsonSafe(file, fallback) {
+  try {
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch { return fallback; }
 }
 
+// Wheel config
+function loadConfigItems() {
+  const obj = loadJsonSafe(CFG_PATH, null);
+  if (obj && Array.isArray(obj.items)) return obj.items;
+  return null;
+}
+function normalizeItemsTo100(items) {
+  const safe = (x) => Math.max(0, Number(x) || 0);
+  const sum = items.reduce((s, it) => s + safe(it.weight), 0);
+  if (sum <= 0) {
+    const eq = items.length ? 100 / items.length : 0;
+    return items.map(it => ({ ...it, weight: +eq.toFixed(2) }));
+  }
+  return items.map(it => ({ ...it, weight: +((safe(it.weight) * 100) / sum).toFixed(2) }));
+}
+function saveConfigItems(items) {
+  ensureDirFor(CFG_PATH);
+  const normalized = normalizeItemsTo100(items);
+  fs.writeFileSync(CFG_PATH, JSON.stringify({ items: normalized }, null, 2));
+  console.log(`[config] saved ${normalized.length} items (normalized to 100%) -> ${CFG_PATH}`);
+  return normalized;
+}
+
+// Goals
+function loadGoals() {
+  const arr = loadJsonSafe(GOALS_PATH, []);
+  return Array.isArray(arr) ? arr : [];
+}
+function saveGoals(arr) {
+  ensureDirFor(GOALS_PATH);
+  const list = Array.isArray(arr) ? arr.map(String) : [];
+  fs.writeFileSync(GOALS_PATH, JSON.stringify(list, null, 2));
+  console.log(`[goals] saved ${list.length} goals -> ${GOALS_PATH}`);
+  return list;
+}
+
+// ===== HOME (dashboard) =====
+app.get("/home", (req, res) => {
+  const file = path.join(PUB, "home.html");
+  if (!fs.existsSync(file)) return res.status(404).send("home.html not found");
+  res.sendFile(file);
+});
+
+// Status: token, broadcaster_id, subskrypcje
+let CACHED_BROADCASTER_ID = null;
+async function getBroadcasterId() {
+  if (CACHED_BROADCASTER_ID) return CACHED_BROADCASTER_ID;
+  const token = await ensureAccessToken();
+  const r = await fetch("https://api.kick.com/public/v1/users", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!r.ok) throw new Error(`users (self) failed: ${r.status} ${await r.text().catch(()=> "")}`);
+  const data = await r.json();
+  const id = data?.data?.[0]?.user_id;
+  if (!Number.isFinite(Number(id))) throw new Error("Cannot determine broadcaster_user_id from /public/v1/users");
+  CACHED_BROADCASTER_ID = Number(id);
+  return CACHED_BROADCASTER_ID;
+}
+
+app.get("/status", async (req, res) => {
+  try {
+    const tokens = loadTokens();
+    const hasTokens = !!tokens?.access_token;
+    let broadcasterId = null;
+    let scope = tokens?.scope || null;
+    let subs = [];
+
+    if (hasTokens) {
+      const token = await ensureAccessToken();
+      broadcasterId = await getBroadcasterId();
+      const r = await fetch(`https://api.kick.com/public/v1/events/subscriptions?broadcaster_user_id=${broadcasterId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) {
+        const j = await r.json().catch(()=> ({}));
+        subs = Array.isArray(j?.data) ? j.data : [];
+      }
+    }
+
+    res.json({
+      ok: true,
+      hasTokens,
+      scope,
+      broadcaster_user_id: broadcasterId,
+      subscriptions: subs
+    });
+  } catch (e) {
+    console.error("[/status] error:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Ręczna subskrypcja (webhook) z panelu
+app.post("/subscribe", express.json(), async (req, res) => {
+  try {
+    const token = await ensureAccessToken();
+    const broadcasterId = await getBroadcasterId();
+    const base = getBaseUrl(req);
+    const cb = `${base}/webhook`;
+
+    const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        broadcaster_user_id: Number(broadcasterId),
+        events: [{ name: "channel.subscription.gifts", version: 1 }],
+        method: "webhook",
+        callback: cb
+      })
+    });
+    const text = await response.text();
+    console.log("[SUBSCRIBE][/home] status:", response.status, text);
+    if (!response.ok) throw new Error(`Failed to subscribe: ${response.status} ${text}`);
+
+    res.json({ ok: true, data: JSON.parse(text) });
+  } catch (e) {
+    console.error("[/subscribe] error:", e);
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// === Goals endpoints ===
+app.get("/goals", (req, res) => {
+  try {
+    const goals = loadGoals();
+    res.json({ ok: true, goals });
+  } catch {
+    res.json({ ok: true, goals: [] });
+  }
+});
+app.post("/goals", express.json(), (req, res) => {
+  if (!ADMIN_KEY || req.get("X-Admin-Key") !== ADMIN_KEY) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+  try {
+    const goals = Array.isArray(req.body?.goals) ? req.body.goals : [];
+    const saved = saveGoals(goals);
+    res.json({ ok: true, goals: saved });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: "Save failed" });
+  }
+});
+
+// === Wheel config endpoints ===
 app.get("/config", (_req, res) => {
   res.json({ ok: true, items: loadConfigItems() });
 });
@@ -273,11 +411,13 @@ app.post("/config", express.json(), (req, res) => {
   if (!ADMIN_KEY || req.get("X-Admin-Key") !== ADMIN_KEY) {
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   }
-  const items = Array.isArray(req.body?.items) ? req.body.items : null;
+  let items = Array.isArray(req.body?.items) ? req.body.items : null;
   if (!items) return res.status(400).json({ ok: false, error: "Missing items[]" });
-  saveConfigItems(items);
-  broadcast({ type: "config", items });
-  res.json({ ok: true });
+
+  // normalizacja do 100% przed zapisem
+  const normalized = saveConfigItems(items);
+  broadcast({ type: "config", items: normalized });
+  res.json({ ok: true, items: normalized });
 });
 
 // ===== Reszta middleware =====
@@ -285,6 +425,20 @@ app.use(bodyParser.json());
 app.use(express.static(PUB));
 
 // Ogłoszenie na czat po spinie (non-blocking)
+async function postChatMessage(content) {
+  if (!content?.trim()) return;
+  try {
+    const token = await ensureAccessToken();
+    const broadcasterId = await getBroadcasterId();
+    const r = await fetch("https://api.kick.com/public/v1/chat", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ broadcaster_user_id: broadcasterId, content: content.slice(0,500), type: "user" })
+    });
+    if (!r.ok) console.warn(`chat send failed: ${r.status} ${await r.text().catch(()=> "")}`);
+  } catch (e) { console.warn("[chat] error:", e.message); }
+}
+
 app.post("/chat/announce", async (req, res) => {
   try {
     const label = String(req.body?.label ?? "").trim();
@@ -374,29 +528,8 @@ app.get("/auth/callback", async (req, res) => {
 });
 
 /* =======================================================================================
-   SUBSKRYPCJE EVENTÓW – tylko na /setup
+   SUBSKRYPCJE EVENTÓW – /setup
    ======================================================================================= */
-
-// cache na broadcaster_user_id (id zalogowanego użytkownika, którego token mamy)
-let CACHED_BROADCASTER_ID = null;
-async function getBroadcasterId() {
-  if (CACHED_BROADCASTER_ID) return CACHED_BROADCASTER_ID;
-  const token = await ensureAccessToken();
-  const r = await fetch("https://api.kick.com/public/v1/users", {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!r.ok) throw new Error(`users (self) failed: ${r.status} ${await r.text().catch(()=> "")}`);
-  const data = await r.json();
-  const id = data?.data?.[0]?.user_id;
-  if (!Number.isFinite(Number(id))) throw new Error("Cannot determine broadcaster_user_id from /public/v1/users");
-  CACHED_BROADCASTER_ID = Number(id);
-  return CACHED_BROADCASTER_ID;
-}
-
-/**
- * Próbuje zasubskrybować channel.subscription.gifts dla zalogowanego streamera.
- * Wywoływane TYLKO na /setup (żeby nie walić subskrypcjami przy każdym odświeżeniu overlayu).
- */
 async function subscribeToEvents(token, broadcasterId, callbackUrl) {
   const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
     method: "POST",
@@ -420,41 +553,15 @@ async function subscribeToEvents(token, broadcasterId, callbackUrl) {
   return JSON.parse(text);
 }
 
-
-/* =======================================================================================
-   DEBUG / TESTY
-   ======================================================================================= */
-app.get("/test/:n", (req, res) => {
-  const n = parseInt(req.params.n, 10) || 0;
-  broadcast({ action: "spin", times: n });
-  res.send(`sent ${n}`);
-});
-
-async function postChatMessage(content) {
-  if (!content?.trim()) return;
-  try {
-    const token = await ensureAccessToken();
-    const broadcasterId = await getBroadcasterId();
-    const r = await fetch("https://api.kick.com/public/v1/chat", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ broadcaster_user_id: broadcasterId, content: content.slice(0,500), type: "user" })
-    });
-    if (!r.ok) console.warn(`chat send failed: ${r.status} ${await r.text().catch(()=> "")}`);
-  } catch (e) { console.warn("[chat] error:", e.message); }
-}
-
-// SETUP page — TU próbujemy subskrypcję
 app.get("/setup", async (req, res) => {
   const hasTokens = !!loadTokens()?.access_token;
   const base = getBaseUrl(req);
-
   let subLine = '<span class="warn">pomińnięto (brak tokenu)</span>';
 
   if (hasTokens) {
     try {
-      const token = await ensureAccessToken();        // 1) token
-      const broadcasterId = await getBroadcasterId(); // 2) id streamera
+      const token = await ensureAccessToken();
+      const broadcasterId = await getBroadcasterId();
       const cb = `${base}/webhook`;
 
       console.log("[SUBSCRIBE] Trying to subscribe:", {
@@ -464,8 +571,7 @@ app.get("/setup", async (req, res) => {
         callback: cb
       });
 
-      const resp = await subscribeToEvents(token, broadcasterId, cb); // 3) właściwe wywołanie
-      // jeśli API nie zwraca {ok:true}, po prostu pokaż status „ok”
+      const resp = await subscribeToEvents(token, broadcasterId, cb);
       subLine = '<span class="ok">ok</span>';
       console.log("[SUBSCRIBE] success:", resp);
     } catch (e) {
@@ -496,11 +602,20 @@ app.get("/setup", async (req, res) => {
         <li>Tło strony jest przezroczyste.</li>
         <li>Webhook callback: <code>${base}/webhook</code></li>
       </ol>
+      <p>Panel: <a class="btn" href="/home">🏠 /home</a></p>
       <p>Test koła: <a class="btn" href="/test/1">▶️ /test/1</a></p>
     </body></html>
   `);
 });
 
+/* =======================================================================================
+   DEBUG / TESTY
+   ======================================================================================= */
+app.get("/test/:n", (req, res) => {
+  const n = parseInt(req.params.n, 10) || 0;
+  broadcast({ action: "spin", times: n });
+  res.send(`sent ${n}`);
+});
 
 app.get("/debug/oauth/ping", async (_req, res) => {
   try {
@@ -568,7 +683,7 @@ server.listen(PORT_HTTP, () => {
     KICK_CLIENT_ID: process.env.KICK_CLIENT_ID,
     KICK_REDIRECT_URI: process.env.KICK_REDIRECT_URI || "<dynamic>",
     WEBHOOK_SECRET: mask(WEBHOOK_SECRET),
-    TOK_PATH, CFG_PATH,
+    TOK_PATH, CFG_PATH, GOALS_PATH,
     ADMIN_KEY: ADMIN_KEY ? "(set)" : "(missing)"
   });
 });

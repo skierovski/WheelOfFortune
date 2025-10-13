@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Wheel – Home</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui, sans-serif; background:#0b0d10; color:#e5e7eb; }
+    .wrap { max-width: 980px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 24px; margin: 0 0 16px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 900px){ .grid { grid-template-columns: 1fr 1fr; } }
+    .card { background: #111418; border:1px solid #1f2430; border-radius:14px; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .btn { padding:8px 12px; border-radius:10px; border:1px solid #2b3242; background:#171b22; color:#e5e7eb; cursor:pointer; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+    .ok { color:#22c55e }
+    .bad { color:#ef4444 }
+    .muted { color:#9aa0a6; font-size: 13px; }
+    table { width:100%; border-collapse: collapse; }
+    td, th { border-bottom: 1px solid #222835; padding: 8px; text-align: left; }
+    .small { font-size: 12px; }
+    input[type="text"] { padding:8px 10px; border-radius:8px; border:1px solid #2b3242; background:#12161c; color:#e5e7eb; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🏠 Wheel – Home</h1>
+
+    <div class="grid">
+      <!-- AUTH / STATUS -->
+      <div class="card">
+        <h2>🔐 Autoryzacja Kick / Status</h2>
+        <div id="statusBox" class="muted">Ładowanie…</div>
+        <div class="row" style="margin-top:10px;">
+          <a class="btn" href="/auth/login">🔑 Zaloguj przez Kick</a>
+          <button class="btn" id="refreshBtn">🔄 Odśwież status</button>
+        </div>
+      </div>
+
+      <!-- WEBHOOK -->
+      <div class="card">
+        <h2>📡 Webhook / Subskrypcje</h2>
+        <div class="muted">Subskrybuje event: <b>channel.subscription.gifts</b></div>
+        <div id="subsBox" style="margin:10px 0;"></div>
+        <div class="row">
+          <button id="subscribeBtn" class="btn">➕ Zasubskrybuj teraz</button>
+          <a class="btn" href="/setup" target="_blank">⚙️ Przejdź do /setup</a>
+        </div>
+      </div>
+
+      <!-- KOŁO: szybki edytor (zapis na serwer) -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>🎛️ Koło – szybka konfiguracja</h2>
+        <div class="muted">To te same dane co w overlayu. Zapis idzie na serwer (/config). Wagi przy zapisie są automatycznie skalowane do 100%.</div>
+
+        <div class="row" style="margin:8px 0;">
+          <input type="text" id="adminKey" placeholder="X-Admin-Key">
+          <button class="btn" id="saveKeyBtn">💾 Zapisz klucz</button>
+          <button class="btn" id="loadCfgBtn">⬇️ Wczytaj</button>
+        </div>
+
+        <div id="wheelList"></div>
+
+        <div class="row" style="margin-top:8px;">
+          <input type="text" id="newLabel" placeholder="Nowa nagroda…">
+          <input type="text" id="newWeight" placeholder="Waga (%)" style="width:120px;">
+          <button class="btn" id="addItemBtn">Dodaj</button>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="saveCfgBtn">⬆️ Zapisz (normalizuj do 100%)</button>
+          <button class="btn" id="testSpinBtn">🎯 Wyślij testowy spin</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === Utils
+    function el(id){ return document.getElementById(id); }
+    function msgHTML(ok, text) { return ok ? `<span class="ok">${text}</span>` : `<span class="bad">${text}</span>`; }
+
+    // === STATUS
+    async function loadStatus(){
+      const box = el("statusBox");
+      box.textContent = "Ładowanie…";
+      try {
+        const r = await fetch("/status", { cache: "no-store" });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error || "Brak ok");
+        const lines = [];
+        lines.push(`Token: ${j.hasTokens ? '<span class="ok">OK</span>' : '<span class="bad">brak</span>'}`);
+        if (j.scope) lines.push(`<div>Scope: <code>${j.scope}</code></div>`);
+        if (j.broadcaster_user_id) lines.push(`<div>Broadcaster ID: <code>${j.broadcaster_user_id}</code></div>`);
+        box.innerHTML = lines.join("");
+        await loadSubs(j);
+      } catch (e) {
+        box.innerHTML = msgHTML(false, "Błąd statusu: " + e.message);
+      }
+    }
+
+    async function loadSubs(statusJson){
+      const subsBox = el("subsBox");
+      const j = statusJson || (await (await fetch("/status")).json());
+      if (!j.ok) { subsBox.innerHTML = msgHTML(false, "Błąd statusu"); return; }
+      const subs = Array.isArray(j.subscriptions) ? j.subscriptions : [];
+      if (!subs.length) {
+        subsBox.innerHTML = '<div class="muted">Brak subskrypcji. Kliknij „Zasubskrybuj teraz”.</div>';
+        return;
+      }
+      let html = `<table><thead><tr><th>Nazwa</th><th>Wersja</th><th>ID</th></tr></thead><tbody>`;
+      for (const s of subs) {
+        html += `<tr>
+          <td>${s.name || "-"}</td>
+          <td>${s.version ?? "-"}</td>
+          <td class="mono small">${s.subscription_id || "-"}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+      subsBox.innerHTML = html;
+    }
+
+    el("refreshBtn").onclick = loadStatus;
+    el("subscribeBtn").onclick = async () => {
+      try {
+        const r = await fetch("/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "Nie udało się subskrybować");
+        alert("Subskrypcja OK.");
+        loadStatus();
+      } catch (e) {
+        alert("Błąd subskrypcji: " + e.message);
+      }
+    };
+
+    // === KOŁO – prosty edytor server-backed (/config)
+    const defaultItems = [
+      { label:"VIP na 24h", weight:10 }, { label:"Śpiewasz 30s", weight:10 },
+      { label:"Mem na IG", weight:10 },  { label:"Reroll", weight:10 },
+      { label:"Wybór czatu", weight:10 },{ label:"Shot (18+)", weight:10 },
+      { label:"Giveaway 1x", weight:10 },{ label:"Wybór mapy", weight:10 },
+    ];
+    let items = [];
+
+    async function loadWheel(){
+      try {
+        const r = await fetch("/config", { cache: "no-store" });
+        const j = await r.json();
+        items = Array.isArray(j?.items) && j.items.length ? j.items : defaultItems.slice();
+      } catch {
+        items = defaultItems.slice();
+      }
+      renderWheelList();
+    }
+
+    function renderWheelList(){
+      const box = el("wheelList");
+      let html = `<table><thead><tr><th>Nagroda</th><th>Waga</th><th></th></tr></thead><tbody>`;
+      items.forEach((it, idx) => {
+        html += `<tr>
+          <td><input data-i="${idx}" data-k="label" type="text" value="${(it.label??"").replaceAll('"','&quot;')}"></td>
+          <td><input data-i="${idx}" data-k="weight" type="text" value="${Number(it.weight)||0}"></td>
+          <td><button class="btn small" data-del="${idx}">Usuń</button></td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      box.innerHTML = html;
+
+      box.querySelectorAll("input[data-i]").forEach(inp => {
+        inp.addEventListener("change", () => {
+          const i = Number(inp.dataset.i);
+          const k = String(inp.dataset.k);
+          const v = inp.value;
+          if (k === "weight") items[i][k] = Math.max(0, Number(v)||0);
+          else items[i][k] = String(v||"").trim();
+        });
+      });
+      box.querySelectorAll("button[data-del]").forEach(btn => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.del);
+          items.splice(i,1);
+          renderWheelList();
+        };
+      });
+    }
+
+    el("addItemBtn").onclick = () => {
+      const label = (el("newLabel").value||"").trim();
+      const w = Math.max(0, Number(el("newWeight").value)||0);
+      if (!label) return;
+      items.push({ label, weight: w });
+      el("newLabel").value = ""; el("newWeight").value = "";
+      renderWheelList();
+    };
+
+    // Normalizacja do 100%
+    function normalizeWeightsTo100(list) {
+      const safe = (x) => Math.max(0, Number(x) || 0);
+      const sum = list.reduce((s, it) => s + safe(it.weight), 0);
+      if (sum <= 0) {
+        const eq = list.length ? 100 / list.length : 0;
+        return list.map(it => ({ ...it, weight: +eq.toFixed(2) }));
+      }
+      return list.map(it => ({
+        ...it,
+        weight: +((safe(it.weight) * 100) / sum).toFixed(2)
+      }));
+    }
+
+    // Przyciski pod listą
+    el("saveKeyBtn").onclick = () => {
+      localStorage.setItem("ADMIN_KEY", (el("adminKey").value||"").trim());
+      alert("Zapisano X-Admin-Key lokalnie.");
+    };
+    el("loadCfgBtn").onclick = loadWheel;
+
+    el("saveCfgBtn").onclick = async () => {
+      try {
+        // 1) auto-normalizacja
+        items = normalizeWeightsTo100(items);
+        renderWheelList();
+
+        // 2) zapis
+        const key = localStorage.getItem("ADMIN_KEY") || el("adminKey").value || "";
+        const r = await fetch("/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Admin-Key": key },
+          body: JSON.stringify({ items })
+        });
+        if (!r.ok) throw new Error(await r.text());
+        alert("Zapisano na serwerze (wagi przeskalowane do 100%).");
+      } catch (e) {
+        alert("Błąd zapisu: " + e.message);
+      }
+    };
+
+    el("testSpinBtn").onclick = async () => {
+      try {
+        await fetch("/test/1", { cache: "no-store" });
+        alert("Wysłano testowy spin.");
+      } catch {
+        alert("Nie udało się wywołać testowego spinu.");
+      }
+    };
+
+    // BOOT
+    (async function(){
+      el("adminKey").value = localStorage.getItem("ADMIN_KEY") || "";
+      await loadStatus();
+      await loadWheel();
+    })();
+  </script>
+</body>
+</html>
