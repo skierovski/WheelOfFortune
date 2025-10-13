@@ -240,7 +240,8 @@
       for (let i = 0; i < sectors.length; i++) {
         const s = sectors[i];
         const start = angle + s.start;
-        const end   = angle + s.end;
+        theEnd   = angle + s.end;
+        const end = theEnd; // (naprawa literówki na niektórych starych silnikach)
         const arcAngle = end - start;
 
         ctx.beginPath();
@@ -327,7 +328,6 @@
     function buildSpinBag(){
       const L = ITEMS.length;
       if (L === 0) {
-        // nic nie losujemy gdy brak pozycji
         spinBag = [];
         bagPos = 0;
         spinBagVersion = CONFIG_VERSION;
@@ -468,26 +468,84 @@
       hideOverlay(1000);
     }
 
-    // ====== WebSocket (z obsługą config push) ======
+    // ====== WebSocket: auto-reconnect + watchdog + auto-reload ======
+    const OBS_EDIT_MODE = new URLSearchParams(location.search).get("edit") === "1";
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
-    const ws = new WebSocket(WS_URL);
-    ws.onopen = () => console.log("✅ WS connected", WS_URL);
-    ws.onerror = (e) => console.error("WS error", e);
-    ws.onmessage = (evt) => {
+
+    let ws = null;
+    let reconnectDelay = 1000;           // backoff start 1s
+    let lastSignalAt = Date.now();       // ostatni sygnał od serwera
+    const staleKickMs = 60_000;          // jeśli 60s ciszy — zerwij połączenie (trafi w onclose => reconnect)
+    const hardReloadEveryMs = 30 * 60_000; // twardy reload co 30 min (off w trybie edycji)
+
+    function handleServerMessage(data) {
+      if (data.type === "config" && Array.isArray(data.items)) {
+        ITEMS = data.items.map(sanitizeItem);
+        CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+        console.log("🔄 Config updated from server");
+        return;
+      }
+      if (data.action === "spin" && Number.isFinite(data.times)) {
+        for (let i = 0; i < data.times; i++) queue.push(1);
+        showOverlay(); runQueue(); return;
+      }
+    }
+
+    function connectWS() {
+      try { if (ws) ws.close(); } catch {}
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log("✅ WS connected", WS_URL);
+        lastSignalAt = Date.now();
+        reconnectDelay = 1000;
+      };
+      ws.onmessage = (evt) => {
+        lastSignalAt = Date.now();
+        try { handleServerMessage(JSON.parse(evt.data)); }
+        catch(e){ console.error("Bad WS message", e); }
+      };
+      ws.onerror = (e) => {
+        console.warn("WS error", e?.message || e);
+        try { ws.close(); } catch {}
+      };
+      ws.onclose = () => {
+        const wait = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 1.8, 15000);
+        setTimeout(connectWS, wait);
+      };
+
+      // lokalny strażnik stagnacji
+      const guard = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) { clearInterval(guard); return; }
+        if (Date.now() - lastSignalAt > staleKickMs) {
+          console.warn("WS stale >60s — forcing reconnect");
+          try { ws.close(); } catch {}
+          clearInterval(guard);
+        }
+      }, 5000);
+    }
+    connectWS();
+
+    // twardy reload co 30 min (nie w trybie edycji)
+    if (!OBS_EDIT_MODE) {
+      setInterval(() => {
+        location.reload();
+      }, hardReloadEveryMs);
+    }
+
+    // awaryjny reload gdy długo nie mamy sygnału i /health nie działa
+    setInterval(async () => {
+      if (OBS_EDIT_MODE) return;
+      if (Date.now() - lastSignalAt < staleKickMs * 2) return;
       try {
-        const data = JSON.parse(evt.data);
-        if (data.type === "config" && Array.isArray(data.items)) {
-          ITEMS = data.items.map(sanitizeItem);
-          CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
-          console.log("🔄 Config updated from server");
-          return;
-        }
-        if (data.action === "spin" && Number.isFinite(data.times)) {
-          for (let i = 0; i < data.times; i++) queue.push(1);
-          showOverlay(); runQueue(); return;
-        }
-      } catch (e) { console.error("Bad WS message", e); }
-    };
+        const r = await fetch('/health', { cache:'no-store' });
+        if (!r.ok) throw 0;
+      } catch {
+        console.warn("Health check failed — reloading page");
+        location.reload();
+      }
+    }, 20_000);
 
     canvas.addEventListener("click", () => { queue.push(1); showOverlay(); runQueue(); });
 
@@ -512,8 +570,9 @@
     saveKeyBtn.onclick = ()=>{ localStorage.setItem("ADMIN_KEY", adminKeyInput.value.trim()); alert("Admin key saved locally."); };
     loadCfgBtn.onclick = async ()=> {
       const s = await fetchServerConfig();
-      if (s && s.length) {
-        ITEMS = s.map(sanitizeItem); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+      if (s && s.length >= 0) {
+        ITEMS = s.map(sanitizeItem);
+        CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
         alert("Loaded from server.");
       } else {
         alert("No server config (using local/default).");
@@ -587,7 +646,6 @@
         if(Array.isArray(arr) && arr.length){
           ITEMS=arr.map(sanitizeItem);
         } else if (Array.isArray(arr) && arr.length===0) {
-          // pozwalam wczytać pustą listę, ale UI zablokuje usunięcie ostatniej pozycji w przyszłości
           ITEMS=[];
         } else {
           alert("Invalid JSON format."); return;
@@ -604,7 +662,6 @@
       // 1st try server config; fallback local/default
       const fromServer = await fetchServerConfig();
       if (fromServer && fromServer.length >= 0) {
-        // pozwól na pustą tablicę z serwera; zsanityzuj elementy jeśli są
         ITEMS = Array.isArray(fromServer) ? fromServer.map(sanitizeItem) : loadItemsLocal();
         if (fromServer.length === 0) console.warn("Server config is empty.");
       } else {
