@@ -37,6 +37,7 @@ const CFG_PATH = process.env.CFG_PATH || "/data/wheel.json";
 const GOALS_PATH = process.env.GOALS_PATH || "/data/goals.json";
 const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ustaw w Renderze!
 const WEBHOOK_SECRET = process.env.KICK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "dev_webhook_secret";
+const KICK_OAUTH_HOST = "https://id.kick.com";
 
 // Helper: bazowy URL (http/https + host)
 function getBaseUrl(req) {
@@ -62,7 +63,7 @@ app.use((req, res, next) => {
 });
 
 /* =======================================================================================
-   TOKEN STORE + AUTO REFRESH
+   TOKEN STORE + AUTO REFRESH (manualny /oauth/token)
    ======================================================================================= */
 
 function mask(v) {
@@ -84,13 +85,44 @@ function saveTokens(t) {
     });
   } catch (e) { console.error("[tokens] save failed:", e); }
 }
+
 function withExpiresAt(tokens) {
   if (!tokens) return null;
-  const skewMs = 60_000 * 5;
-  if (!tokens.expires_at && Number.isFinite(tokens.expires_in)) {
+  // odświeżaj 15 min przed końcem
+  const skewMs = 60_000 * 15;
+  if (Number.isFinite(tokens.expires_in)) {
     tokens.expires_at = Date.now() + (Number(tokens.expires_in) * 1000) - skewMs;
   }
   return tokens;
+}
+
+function secondsUntilExpiry(t) {
+  if (!t?.expires_at) return -Infinity;
+  return Math.floor((t.expires_at - Date.now()) / 1000);
+}
+
+// Manualny refresh wg dokumentacji Kick
+async function refreshAccessTokenManual(refreshToken) {
+  const body = new URLSearchParams();
+  body.set("grant_type", "refresh_token");
+  body.set("client_id", process.env.KICK_CLIENT_ID || "");
+  body.set("client_secret", process.env.KICK_CLIENT_SECRET || "");
+  body.set("refresh_token", refreshToken || "");
+
+  const r = await fetch(`${KICK_OAUTH_HOST}/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`refresh failed: ${r.status} ${text}`);
+
+  let json;
+  try { json = JSON.parse(text); } catch { throw new Error("refresh parse error"); }
+
+  // spodziewamy się: access_token, refresh_token, expires_in, scope, token_type
+  if (!json?.access_token) throw new Error("refresh response missing access_token");
+  return json;
 }
 
 const kickAuthBase = new KickAuthClient({
@@ -100,19 +132,21 @@ const kickAuthBase = new KickAuthClient({
 });
 
 async function ensureAccessToken() {
-  let tokens = withExpiresAt(loadTokens());
+  let tokens = loadTokens();
   if (!tokens?.access_token) throw new Error("No tokens stored. Log in via /auth/login");
-  const needRefresh = !tokens.expires_at || Date.now() >= tokens.expires_at;
-  if (!needRefresh) return tokens.access_token;
 
-  if (typeof kickAuthBase.refreshAccessToken === "function") {
-    console.log("[tokens] refreshing via KickAuthClient.refreshAccessToken()");
-    const refreshed = await kickAuthBase.refreshAccessToken(tokens.refresh_token);
+  // jeżeli mamy expires_at i zostało mniej niż 15 min – odśwież
+  const secsLeft = secondsUntilExpiry(tokens);
+  if (!Number.isFinite(secsLeft) || secsLeft <= 0 || secsLeft <= 15 * 60) {
+    if (!tokens.refresh_token) throw new Error("No refresh_token stored");
+    console.log(`[tokens] refreshing (left ${secsLeft}s) via manual /oauth/token`);
+    const refreshed = await refreshAccessTokenManual(tokens.refresh_token);
     const merged = withExpiresAt({ ...tokens, ...refreshed });
     saveTokens(merged);
     return merged.access_token;
   }
-  throw new Error("refreshAccessToken() not available on KickAuthClient");
+
+  return tokens.access_token;
 }
 
 /* =======================================================================================
@@ -166,7 +200,8 @@ function broadcastOrQueue(obj) {
   else {
     if (obj?.action === "spin" && Number.isFinite(obj.times) && obj.times > 0) {
       pendingSpins.push(obj.times);
-      console.log(`[WS] No clients. Queued spins: +${obj.times} (total in queue: ${pendingSpins.reduce((a,b)=>a+b,0)})`);
+      const total = pendingSpins.reduce((a,b)=>a+b,0);
+      console.log(`[WS] No clients. Queued spins: +${obj.times} (total in queue: ${total})`);
     } else {
       console.log("[WS] No clients. Dropping non-spin message.");
     }
@@ -658,6 +693,24 @@ async function ensureSubscribed() {
 }
 setInterval(ensureSubscribed, 10 * 60 * 1000);
 
+/* Watchdog tokenów – co 2 min, jeśli do końca < 15 min, odśwież */
+async function refreshIfSoon() {
+  try {
+    const t = loadTokens();
+    if (!t?.refresh_token) return;
+    const left = secondsUntilExpiry(t);
+    if (!Number.isFinite(left) || left <= 15 * 60) {
+      console.log(`[tokens] watchdog refresh (left ${left}s)`);
+      const refreshed = await refreshAccessTokenManual(t.refresh_token);
+      const merged = withExpiresAt({ ...t, ...refreshed });
+      saveTokens(merged);
+    }
+  } catch (e) {
+    console.warn("[tokens] watchdog error:", e?.message || e);
+  }
+}
+setInterval(refreshIfSoon, 120_000);
+
 /* =======================================================================================
    DEBUG / TESTY
    ======================================================================================= */
@@ -685,8 +738,7 @@ app.post("/debug/oauth/refresh", async (_req, res) => {
   try {
     const tokens = loadTokens();
     if (!tokens?.refresh_token) return res.status(400).json({ ok: false, error: "No refresh_token stored" });
-    if (typeof kickAuthBase.refreshAccessToken !== "function") return res.status(400).json({ ok: false, error: "refreshAccessToken() not available" });
-    const refreshed = await kickAuthBase.refreshAccessToken(tokens.refresh_token);
+    const refreshed = await refreshAccessTokenManual(tokens.refresh_token);
     const merged = withExpiresAt({ ...tokens, ...refreshed });
     saveTokens(merged);
     res.json({ ok: true, access_token: mask(merged.access_token), refresh_token: mask(merged.refresh_token), expires_at: merged.expires_at });
