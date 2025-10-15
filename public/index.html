@@ -491,20 +491,70 @@
       }
     }
 
+    async function fetchPending() {
+  try {
+    const r = await fetch('/spins/pending', { cache: 'no-store' });
+    const j = await r.json();
+    return Math.max(0, Number(j?.count || 0));
+  } catch { return 0; }
+}
+
+async function consumePending(n) {
+  try {
+    const r = await fetch('/spins/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: n })
+    });
+    const j = await r.json();
+    return Math.max(0, Number(j?.taken || 0));
+  } catch { return 0; }
+}
+
+async function catchUpPending() {
+  const cnt = await fetchPending();
+  if (cnt > 0) {
+    const taken = await consumePending(cnt);
+    if (taken > 0) {
+      for (let i = 0; i < taken; i++) queue.push(1);
+      showOverlay(); runQueue();
+    }
+  }
+}
+
     function connectWS() {
       try { if (ws) ws.close(); } catch {}
       ws = new WebSocket(WS_URL);
 
-      ws.onopen = () => {
-        console.log("✅ WS connected", WS_URL);
-        lastSignalAt = Date.now();
-        reconnectDelay = 1000;
-      };
-      ws.onmessage = (evt) => {
-        lastSignalAt = Date.now();
-        try { handleServerMessage(JSON.parse(evt.data)); }
-        catch(e){ console.error("Bad WS message", e); }
-      };
+      ws.onopen = async () => {
+  console.log("✅ WS connected", WS_URL);
+  lastSignalAt = Date.now();
+  reconnectDelay = 1000;
+  await catchUpPending(); // <-- NOWE
+};
+
+ws.onmessage = async (evt) => {
+  lastSignalAt = Date.now();
+  try {
+    const data = JSON.parse(evt.data);
+    if (data.type === "config" && Array.isArray(data.items)) {
+      ITEMS = data.items.map(sanitizeItem);
+      CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
+      return;
+    }
+    if (data.action === "pending" && Number.isFinite(data.count)) {
+      await catchUpPending(); // <-- NOWE
+      return;
+    }
+    if (data.action === "spin" && Number.isFinite(data.times)) {
+      for (let i = 0; i < data.times; i++) queue.push(1);
+      showOverlay(); runQueue();
+      return;
+    }
+  } catch (e) {
+    console.error("Bad WS message", e);
+  }
+};
       ws.onerror = (e) => {
         console.warn("WS error", e?.message || e);
         try { ws.close(); } catch {}
@@ -526,6 +576,8 @@
       }, 5000);
     }
     connectWS();
+    setInterval(catchUpPending, 10_000);
+
 
     // twardy reload co 30 min (nie w trybie edycji)
     if (!OBS_EDIT_MODE) {

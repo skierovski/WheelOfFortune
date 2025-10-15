@@ -189,7 +189,36 @@ app.head("/webhook", (req, res) => {
   res.status(200).end();
 });
 
-/* ====== kolejka spinów, gdy WS nie ma ====== */
+/* ====== bezstratny licznik spinów (pull & consume) ====== */
+let PENDING_SPINS_COUNT = 0;
+
+function addPendingSpins(n) {
+  const x = Number(n) || 0;
+  if (x > 0) {
+    PENDING_SPINS_COUNT += x;
+    console.log(`[spins] pending += ${x}  (total=${PENDING_SPINS_COUNT})`);
+  }
+}
+
+function consumePendingSpins(n) {
+  const want = Math.max(0, Number(n) || 0);
+  const take = Math.min(PENDING_SPINS_COUNT, want);
+  PENDING_SPINS_COUNT -= take;
+  console.log(`[spins] consumed ${take}  (left=${PENDING_SPINS_COUNT})`);
+  return take;
+}
+
+app.get("/spins/pending", (_req, res) => {
+  res.json({ ok: true, count: PENDING_SPINS_COUNT });
+});
+
+app.post("/spins/consume", express.json(), (req, res) => {
+  const want = Number(req.body?.count || 0);
+  const taken = consumePendingSpins(want);
+  res.json({ ok: true, taken });
+});
+
+/* ====== krótkoterminowa kolejka WS ====== */
 const pendingSpins = [];
 function isAnyWsConnected() {
   for (const c of wss.clients) if (c.readyState === 1) return true;
@@ -277,6 +306,9 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
       console.log("[WEBHOOK] 🎁 Gifts summary:", { gifter: gifter?.username || "Anon", count });
       const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
       if (spins > 0) {
+        // 1) zawsze do licznika (bezstratnie)
+        addPendingSpins(spins);
+        // 2) realtime do WS (best-effort)
         console.log("[WEBHOOK] → Broadcasting spins:", spins);
         broadcastOrQueue({ action: "spin", times: spins });
       } else {
@@ -772,13 +804,16 @@ wss.on("connection", (ws, req) => {
   ws.isAlive = true;
   ws.on("pong", () => { ws.isAlive = true; });
 
-  // po połączeniu wyślij zaległe spiny
+  // po połączeniu wyślij zaległe spiny z kolejki WS
   const totalQueued = pendingSpins.reduce((a,b)=>a+b,0);
   if (totalQueued > 0) {
     const n = pendingSpins.splice(0).reduce((a,b)=>a+b,0);
     console.log(`[WS] Flushing queued spins -> ${n}`);
     broadcast({ action: "spin", times: n });
   }
+
+  // ZAWSZE poinformuj klienta o stanie licznika bezstratnego
+  try { ws.send(JSON.stringify({ action: "pending", count: PENDING_SPINS_COUNT })); } catch {}
 
   ws.on("close", () => console.log("WS closed"));
   ws.on("error", (e) => console.error("WS client error:", e));
