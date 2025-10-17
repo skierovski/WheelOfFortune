@@ -306,11 +306,15 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
       console.log("[WEBHOOK] 🎁 Gifts summary:", { gifter: gifter?.username || "Anon", count });
       const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
       if (spins > 0) {
-        // 1) zawsze do licznika (bezstratnie)
-        addPendingSpins(spins);
-        // 2) realtime do WS (best-effort)
-        console.log("[WEBHOOK] → Broadcasting spins:", spins);
-        broadcastOrQueue({ action: "spin", times: spins });
+        if (isAnyWsConnected()) {
+          // WS online → broadcast only
+          console.log("[WEBHOOK] WS online → broadcast only:", spins);
+          broadcast({ action: "spin", times: spins });
+        } else {
+          // WS offline → tylko licznik (do odbioru przez /spins/pending)
+          console.log("[WEBHOOK] WS offline → add to pending:", spins);
+          addPendingSpins(spins);
+        }
       } else {
         console.log("[WEBHOOK] No spins (count < 5)");
       }
