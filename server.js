@@ -218,25 +218,6 @@ app.post("/spins/consume", express.json(), (req, res) => {
   res.json({ ok: true, taken });
 });
 
-/* ====== krótkoterminowa kolejka WS ====== */
-const pendingSpins = [];
-function isAnyWsConnected() {
-  for (const c of wss.clients) if (c.readyState === 1) return true;
-  return false;
-}
-function broadcastOrQueue(obj) {
-  if (isAnyWsConnected()) broadcast(obj);
-  else {
-    if (obj?.action === "spin" && Number.isFinite(obj.times) && obj.times > 0) {
-      pendingSpins.push(obj.times);
-      const total = pendingSpins.reduce((a,b)=>a+b,0);
-      console.log(`[WS] No clients. Queued spins: +${obj.times} (total in queue: ${total})`);
-    } else {
-      console.log("[WS] No clients. Dropping non-spin message.");
-    }
-  }
-}
-
 // RAW body before json()
 app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
   const startedAt = Date.now();
@@ -304,17 +285,11 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
       const { gifter = {}, giftees = [] } = payload || {};
       const count = Array.isArray(giftees) ? giftees.length : Number(payload?.count || 0);
       console.log("[WEBHOOK] 🎁 Gifts summary:", { gifter: gifter?.username || "Anon", count });
-      const spins = Math.floor(count / 5) || (count >= 5 ? 1 : 0);
+
+      // policz spiny: 5 giftów => 1 spin, 10 => 2, itd. (floor)
+      const spins = Math.floor(count / 5);
       if (spins > 0) {
-        if (isAnyWsConnected()) {
-          // WS online → broadcast only
-          console.log("[WEBHOOK] WS online → broadcast only:", spins);
-          broadcast({ action: "spin", times: spins });
-        } else {
-          // WS offline → tylko licznik (do odbioru przez /spins/pending)
-          console.log("[WEBHOOK] WS offline → add to pending:", spins);
-          addPendingSpins(spins);
-        }
+        deliverSpinOrQueue(spins); // <-- kluczowe: spróbuj nadać, a jak nikomu nie wyślesz → licznik pending
       } else {
         console.log("[WEBHOOK] No spins (count < 5)");
       }
@@ -752,7 +727,7 @@ setInterval(refreshIfSoon, 120_000);
    ======================================================================================= */
 app.get("/test/:n", (req, res) => {
   const n = parseInt(req.params.n, 10) || 0;
-  broadcastOrQueue({ action: "spin", times: n });
+  deliverSpinOrQueue(n);                // <-- użyj bezstratnej dostawy
   res.send(`sent ${n}`);
 });
 
@@ -791,7 +766,7 @@ app.get("/debug/token", (_req, res) => {
 });
 
 /* =======================================================================================
-   HTTP + WS (z heartbeat i opróżnianiem kolejki)
+   HTTP + WS (z heartbeat)
    ======================================================================================= */
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -807,14 +782,6 @@ wss.on("connection", (ws, req) => {
   // heartbeat
   ws.isAlive = true;
   ws.on("pong", () => { ws.isAlive = true; });
-
-  // po połączeniu wyślij zaległe spiny z kolejki WS
-  const totalQueued = pendingSpins.reduce((a,b)=>a+b,0);
-  if (totalQueued > 0) {
-    const n = pendingSpins.splice(0).reduce((a,b)=>a+b,0);
-    console.log(`[WS] Flushing queued spins -> ${n}`);
-    broadcast({ action: "spin", times: n });
-  }
 
   // ZAWSZE poinformuj klienta o stanie licznika bezstratnego
   try { ws.send(JSON.stringify({ action: "pending", count: PENDING_SPINS_COUNT })); } catch {}
@@ -837,9 +804,32 @@ setInterval(() => {
   }
 }, 30_000);
 
+/* =======================================================================================
+   Broadcast + bezstratne doręczenie spinów
+   ======================================================================================= */
 function broadcast(obj) {
   const msg = JSON.stringify(obj);
-  for (const client of wss.clients) if (client.readyState === 1) client.send(msg);
+  let sent = 0;
+  for (const client of wss.clients) {
+    if (client.readyState === 1) {
+      try { client.send(msg); sent++; } catch {}
+    }
+  }
+  return sent;
+}
+
+function deliverSpinOrQueue(times) {
+  const safe = Math.max(0, Number(times) || 0);
+  if (!safe) return 0;
+  const delivered = broadcast({ action: "spin", times: safe });
+  if (delivered === 0) {
+    // nikt nie odebrał → nie gubimy: dopisz do licznika
+    addPendingSpins(safe);
+    console.log(`[SPIN] No WS recipients → added to pending: +${safe} (now=${PENDING_SPINS_COUNT})`);
+  } else {
+    console.log(`[SPIN] Broadcast delivered to ${delivered} client(s)`);
+  }
+  return delivered;
 }
 
 server.listen(PORT_HTTP, () => {
