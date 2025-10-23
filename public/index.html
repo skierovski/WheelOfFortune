@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <title>Wheel of Fortune</title>
-  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
     .overlay { position: fixed; left:50%; top:50%; transform: translate(-50%, -40%) scale(0.94);
@@ -12,17 +11,17 @@
     .overlay.show { opacity:1; transform: translate(-50%, -50%) scale(1); pointer-events:auto; }
     canvas { width:1000px; height:1000px; display:block; }
 
-    .editor { position:fixed; right:16px; top:16px; width:400px; max-height:92vh; overflow:auto; background:rgba(20,20,20,.95); color:#fff;
+    .editor { position:fixed; right:16px; top:16px; width:460px; max-height:92vh; overflow:auto; background:rgba(20,20,20,.95); color:#fff;
       font-family:system-ui,sans-serif; border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.08);
       z-index:9999; display:none; }
     .editor.show { display:block; }
     .editor h2{ margin:0 0 10px 0; font-size:18px; }
-    .row{ display:flex; gap:8px; margin-bottom:8px; }
+    .row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
     .row input[type="text"]{ flex:1; padding:8px 10px; border-radius:8px; border:1px solid #333; background:#141414; color:#fff; }
     .row input[type="number"]{ width:84px; padding:8px 10px; border-radius:8px; border:1px solid #333; background:#141414; color:#fff; }
     .row button, .editor .btn { padding:8px 10px; border-radius:8px; border:1px solid #333; background:#1f1f1f; color:#fff; cursor:pointer; }
     .list{ display:grid; gap:6px; margin:10px 0; }
-    .item{ display:grid; grid-template-columns:1fr 80px auto auto auto auto; gap:6px; align-items:center; background:#151515; border:1px solid #2a2a2a; border-radius:8px; padding:8px; }
+    .item{ display:grid; grid-template-columns:1fr 80px 98px auto auto auto auto; gap:6px; align-items:center; background:#151515; border:1px solid #2a2a2a; border-radius:8px; padding:8px; }
     .item span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .muted{ color:#9aa0a6; font-size:12px; }
     .pill{ display:inline-block; padding:4px 8px; border-radius:999px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:12px; }
@@ -32,9 +31,7 @@
       line-height: 1; font-size: 48px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08); backdrop-filter: blur(6px);
       pointer-events: none; z-index: 20; transition: opacity .35s ease, transform .35s ease; }
     .result-banner.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
-
-    .admin { display:flex; gap:6px; align-items:center; margin:6px 0 10px; }
-    .admin input { flex:1; padding:6px 8px; border-radius:8px; border:1px solid #333; background:#141414; color:#fff; }
+    .bonus-badge{ font-size:14px; margin-left:8px; padding:4px 8px; background:#14532d; border:1px solid #166534; color:#bbf7d0; border-radius:999px; vertical-align:middle; }
   </style>
 </head>
 <body>
@@ -43,19 +40,20 @@
     <canvas id="wheel" width="1000" height="1000"></canvas>
   </div>
 
+  <!-- SFX/TTS -->
+  <audio id="sfx" preload="auto"></audio>
+
+  <!-- Admin/editor panel -->
   <div id="editor" class="editor" aria-hidden="true">
     <h2>🎛️ Wheel editor <span class="pill">open via ?edit=1</span></h2>
     <div class="muted">Server-backed config. Viewers do not see this panel.</div>
 
-    <div class="admin">
-      <input id="adminKey" type="text" placeholder="X-Admin-Key (only for editor owner)">
-      <button id="saveKeyBtn" class="btn">Save Key</button>
-      <button id="loadCfgBtn" class="btn">Load</button>
-    </div>
-
     <div class="row" style="margin-top:6px;">
       <input id="newLabel" type="text" placeholder="New prize…">
       <input id="newWeight" type="number" min="0" step="0.1" value="10" title="Percent">
+      <label class="muted" style="display:flex;align-items:center;gap:6px;">
+        <input id="newBonus" type="checkbox"> Bonus spin
+      </label>
       <button id="addBtn">Add</button>
     </div>
     <div class="muted" id="sumInfo"></div>
@@ -69,25 +67,30 @@
       <button class="btn" id="importBtn">Import</button>
     </div>
     <textarea id="importArea" placeholder='Paste JSON here (from "Export") and click "Import".'></textarea>
+
+    <div class="row" style="margin-top:10px;">
+      <input id="adminKey" type="text" placeholder="X-Admin-Key (only for editor owner)">
+      <button id="saveKeyBtn" class="btn">Save Key</button>
+      <button id="loadCfgBtn" class="btn">Load</button>
+    </div>
   </div>
 
   <script>
     // ====== Server config helpers ======
-    async function fetchServerConfig() {
+    async function fetchServerConfigFull() {
       try {
         const r = await fetch("/config", { cache: "no-store" });
         if (!r.ok) return null;
         const j = await r.json();
-        if (j?.ok && Array.isArray(j.items)) return j.items;
-      } catch {}
-      return null;
+        return j?.ok ? j : null;
+      } catch { return null; }
     }
-    async function saveToServer(items) {
+    async function saveToServer(items, theme) {
       const key = localStorage.getItem("ADMIN_KEY") || "";
       const r = await fetch("/config", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Admin-Key": key },
-        body: JSON.stringify({ items })
+        body: JSON.stringify({ items, theme })
       });
       return r.ok;
     }
@@ -95,12 +98,10 @@
     // ====== Data / persistence (local cache only) ======
     const STORAGE_KEY_V2 = "wheel.prizes.v2";
     const DEFAULT_ITEMS = [
-      { label:"VIP na 24h", weight:10 }, { label:"Śpiewasz 30s", weight:10 },
-      { label:"Mem na IG", weight:10 },  { label:"Reroll", weight:10 },
-      { label:"Wybór czatu", weight:10 },{ label:"Shot (18+)", weight:10 },
-      { label:"Giveaway 1x", weight:10 },{ label:"Wybór mapy", weight:10 },
-      { label:"Ban 5 min (joke)", weight:5 }, { label:"Reroll", weight:5 },
-      { label:"Sub-Chat", weight:5 }, { label:"Losowy klip", weight:5 }
+      { label:"VIP na 24h", weight:10, bonus:false }, { label:"Śpiewasz 30s", weight:10, bonus:false },
+      { label:"Mem na IG", weight:10, bonus:false },  { label:"Reroll", weight:10, bonus:false },
+      { label:"Wybór czatu", weight:10, bonus:false },{ label:"Shot (18+)", weight:10, bonus:false },
+      { label:"Giveaway 1x", weight:10, bonus:false },{ label:"Wybór mapy", weight:10, bonus:false }
     ];
 
     function genId(){ return 'itm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
@@ -109,7 +110,8 @@
       let weight = Number(it?.weight);
       if (!Number.isFinite(weight) || weight < 0) weight = 0;
       const id = String(it?.id || "");
-      return { id: id || genId(), label, weight };
+      const bonus = !!it?.bonus;
+      return { id: id || genId(), label, weight, bonus };
     }
     function loadItemsLocal(){
       try{
@@ -120,7 +122,9 @@
     }
     function saveItemsLocal(items){ localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(items.map(sanitizeItem))); }
 
-    let ITEMS = []; let CONFIG_VERSION = 1;
+    let ITEMS = [];
+    let CONFIG_VERSION = 1;
+    let THEME = "wood"; // default theme; can be overridden by server/URL
 
     // ====== Drawing etc. ======
     const COLORS = ["#FF4D4F","#40A9FF","#73D13D","#FAAD14","#9254DE","#13C2C2","#EB2F96","#A0D911","#FFD666","#5CDBD3","#FF7A45","#597EF7"];
@@ -151,12 +155,12 @@
       for(let i=0;i<items.length;i++){
         const startPct=acc, endPct=acc+pct[i]; acc=endPct;
         const start=(startPct/100)*2*Math.PI, end=(endPct/100)*2*Math.PI;
-        sectors.push({ id:items[i].id, label:items[i].label, start, end, center:(start+end)/2 });
+        sectors.push({ id:items[i].id, label:items[i].label, start, end, center:(start+end)/2, bonus: !!items[i].bonus });
       }
       return sectors;
     }
     function shuffleInPlace(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
-    function cloneItems(items){ return items.map(it=>({ id:it.id, label:it.label, weight:it.weight })); }
+    function cloneItems(items){ return items.map(it=>({ id:it.id, label:it.label, weight:it.weight, bonus:!!it.bonus })); }
 
     function sectorUnderPointer(angle, sectors){
       const POINTER_ANGLE = -Math.PI/2;
@@ -168,7 +172,7 @@
       return 0;
     }
 
-    // helpers do tekstu po łuku
+    // ===== Helpers: text/arc =====
     function fitFontForArc(ctx, text, radius, arcAngle, maxPx = 42, minPx = 10) {
       const maxLen = radius * arcAngle * 0.9;
       let lo = minPx, hi = maxPx, best = minPx;
@@ -188,11 +192,18 @@
       return s + ell;
     }
 
+    // ===== Theme router =====
     function drawWheel(angle = 0) {
+      if (THEME === "classic") return drawWheelClassic(angle);
+      return drawWheelWood(angle);
+    }
+
+    // ===== Wood theme (as-is) =====
+    function drawWheelWood(angle = 0) {
       const items = ACTIVE_SNAPSHOT || ITEMS;
       ctx.clearRect(0, 0, W, H);
 
-      // tło pierścienia
+      // ring
       ctx.beginPath();
       ctx.arc(CX, CY, R + 44, 0, 2 * Math.PI);
       ctx.fillStyle = "#deb887";
@@ -201,9 +212,7 @@
       ctx.strokeStyle = "#8b5a2b";
       ctx.stroke();
 
-      // jeżeli brak pozycji — narysuj tylko środek i wskaźnik
       if (!items || items.length === 0) {
-        // środek
         const hubR0 = Math.max(22, R * 0.42);
         ctx.beginPath();
         ctx.arc(CX, CY, hubR0, 0, 2 * Math.PI);
@@ -216,7 +225,6 @@
         ctx.strokeStyle = "#5e3d1e";
         ctx.stroke();
 
-        // wskaźnik
         ctx.fillStyle = "#000";
         ctx.beginPath();
         ctx.moveTo(CX, CY - R - 16);
@@ -225,7 +233,6 @@
         ctx.closePath();
         ctx.fill();
 
-        // obwód
         ctx.beginPath();
         ctx.arc(CX, CY, R + 6, 0, 2 * Math.PI);
         ctx.strokeStyle = "rgba(255,255,255,.35)";
@@ -236,12 +243,10 @@
 
       const sectors = buildSectors(items);
 
-      // sektory
       for (let i = 0; i < sectors.length; i++) {
         const s = sectors[i];
         const start = angle + s.start;
-        theEnd   = angle + s.end;
-        const end = theEnd; // (naprawa literówki na niektórych starych silnikach)
+        const end   = angle + s.end;
         const arcAngle = end - start;
 
         ctx.beginPath();
@@ -259,7 +264,6 @@
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // napis
         const mid = start + arcAngle / 2;
         const rText = R * 0.72;
         const rawLabel = String(s.label || "");
@@ -280,14 +284,11 @@
         ctx.fillStyle = "#fff";
         ctx.shadowColor = "rgba(0,0,0,0.25)";
         ctx.shadowBlur = fontPx * 0.35;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
         ctx.strokeText(label, 0, 0);
         ctx.fillText(label, 0, 0);
         ctx.restore();
       }
 
-      // środek
       const hubR = Math.max(22, R * 0.42);
       ctx.beginPath();
       ctx.arc(CX, CY, hubR, 0, 2 * Math.PI);
@@ -300,7 +301,6 @@
       ctx.strokeStyle = "#5e3d1e";
       ctx.stroke();
 
-      // wskaźnik
       ctx.fillStyle = "#000";
       ctx.beginPath();
       ctx.moveTo(CX, CY - R - 16);
@@ -309,18 +309,141 @@
       ctx.closePath();
       ctx.fill();
 
-      // obwód
       ctx.beginPath();
       ctx.arc(CX, CY, R + 6, 0, 2 * Math.PI);
       ctx.strokeStyle = "rgba(255,255,255,.35)";
       ctx.lineWidth = 4;
       ctx.stroke();
 
-      // stojak
       ctx.fillStyle = "#8B5A2B";
       ctx.fillRect(CX - 55, CY + R + 12, 110, 115);
       ctx.fillStyle = "#6f451d";
       ctx.fillRect(CX - 130, CY + R + 120, 260, 28);
+    }
+
+    // ===== Classic theme (metal/rivets/glass) — bez halo poza kołem =====
+    function drawWheelClassic(angle = 0) {
+      const items = ACTIVE_SNAPSHOT || ITEMS;
+      ctx.clearRect(0, 0, W, H);
+
+      const rimOuter = R + 42;
+      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, 2*Math.PI);
+      const metal = ctx.createRadialGradient(CX, CY, R, CX, CY, rimOuter);
+      metal.addColorStop(0, "#d9dee5");
+      metal.addColorStop(0.5, "#8f99a8");
+      metal.addColorStop(1, "#e9eef5");
+      ctx.fillStyle = metal; ctx.fill();
+
+      const rimInnerOut = R + 22, rimInnerIn = R + 6;
+      ctx.beginPath(); ctx.arc(CX, CY, rimInnerOut, 0, 2*Math.PI);
+      ctx.arc(CX, CY, rimInnerIn, 0, 2*Math.PI, true);
+      const metal2 = ctx.createLinearGradient(CX-R, CY-R, CX+R, CY+R);
+      metal2.addColorStop(0, "#cfd6df");
+      metal2.addColorStop(0.5, "#7c8798");
+      metal2.addColorStop(1, "#dfe6ef");
+      ctx.fillStyle = metal2; ctx.fill();
+
+      const rivets = Math.max(12, Math.floor((R*2*Math.PI)/90));
+      for (let i=0;i<rivets;i++){
+        const a = (i/rivets)*2*Math.PI;
+        const rx = CX + Math.cos(a)*(R+14);
+        const ry = CY + Math.sin(a)*(R+14);
+        ctx.beginPath();
+        const rg = ctx.createRadialGradient(rx, ry, 1, rx, ry, 6);
+        rg.addColorStop(0, "#ffffff");
+        rg.addColorStop(1, "#4b5563");
+        ctx.fillStyle = rg;
+        ctx.arc(rx, ry, 6, 0, 2*Math.PI);
+        ctx.fill();
+      }
+
+      if (!items || items.length === 0) {
+        const hubR0 = Math.max(22, R * 0.42);
+        ctx.beginPath(); ctx.arc(CX, CY, hubR0, 0, 2*Math.PI);
+        const glass = ctx.createRadialGradient(CX-8, CY-8, 4, CX, CY, hubR0);
+        glass.addColorStop(0, "#ffffff");
+        glass.addColorStop(1, "#90a4c4");
+        ctx.fillStyle = glass; ctx.fill();
+        ctx.lineWidth = 3; ctx.strokeStyle = "#6b7280"; ctx.stroke();
+
+        ctx.fillStyle = "#d1d5db";
+        ctx.beginPath();
+        ctx.moveTo(CX, CY - R - 18);
+        ctx.lineTo(CX - 20, CY - R + 10);
+        ctx.lineTo(CX + 20, CY - R + 10);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "#6b7280"; ctx.lineWidth = 2; ctx.stroke();
+
+        ctx.beginPath(); ctx.arc(CX, CY, R + 6, 0, 2*Math.PI);
+        ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 3; ctx.stroke();
+        return;
+      }
+
+      const sectors = buildSectors(items);
+      const baseColors = ["#FF3B3B","#1E90FF","#2ED573","#FFC107","#A55EEA","#17A2B8","#FF6B6B","#7bed9f","#FFD166","#74C0FC","#FFA94D","#748FFC"];
+
+      for (let i=0;i<sectors.length;i++){
+        const s = sectors[i];
+        const start = angle + s.start, end = angle + s.end;
+        const arcAngle = end - start;
+
+        ctx.beginPath();
+        ctx.moveTo(CX, CY);
+        ctx.arc(CX, CY, R, start, end);
+        ctx.closePath();
+
+        const segGrad = ctx.createRadialGradient(CX, CY, R*0.2, CX, CY, R);
+        segGrad.addColorStop(0, baseColors[i % baseColors.length]);
+        segGrad.addColorStop(1, "#1f2937");
+        ctx.fillStyle = segGrad; ctx.fill();
+
+        ctx.strokeStyle = "rgba(255,255,255,.65)";
+        ctx.lineWidth = 1.5; ctx.stroke();
+
+        const mid = start + arcAngle/2, rText = R*0.72;
+        const raw = String(s.label||"");
+        const fontPx = fitFontForArc(ctx, raw, rText, arcAngle, 40, 10);
+        ctx.font = `800 ${fontPx}px system-ui, sans-serif`;
+        const maxLen = rText * arcAngle * 0.9;
+        const label = ellipsize(ctx, raw, maxLen);
+
+        const tx = CX + Math.cos(mid)*rText;
+        const ty = CY + Math.sin(mid)*rText;
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(mid + Math.PI/2);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.12));
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.fillStyle = "#fff";
+        ctx.shadowBlur = 0;
+        ctx.strokeText(label, 0, 0);
+        ctx.fillText(label, 0, 0);
+        ctx.restore();
+      }
+
+      const hubR = Math.max(22, R * 0.42);
+      ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, 2*Math.PI);
+      const glass2 = ctx.createRadialGradient(CX-10, CY-12, 6, CX, CY, hubR);
+      glass2.addColorStop(0, "#ffffff");
+      glass2.addColorStop(1, "#90a4c4");
+      ctx.fillStyle = glass2; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = "#9aa3b2"; ctx.stroke();
+
+      ctx.fillStyle = "#d1d5db";
+      ctx.beginPath();
+      ctx.moveTo(CX, CY - R - 18);
+      ctx.lineTo(CX - 20, CY - R + 10);
+      ctx.lineTo(CX + 20, CY - R + 10);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#6b7280"; ctx.lineWidth = 2; ctx.stroke();
+
+      ctx.beginPath(); ctx.arc(CX, CY, R + 6, 0, 2*Math.PI);
+      ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 3; ctx.stroke();
+
+      ctx.fillStyle = "#0f1115";
+      ctx.fillRect(CX - 55, CY + R + 12, 110, 12);
     }
 
     function getNormalizedWeights(){ return getNormalizedWeightsFrom(ITEMS); }
@@ -382,7 +505,7 @@
     function easeOutQuint(t){ return 1 - Math.pow(1 - t, 5); }
 
     async function spinToId(pickedId){
-      if (!pickedId) return { index:-1, snap:null, label:"" };
+      if (!pickedId) return { index:-1, snap:null, label:"", bonus:false };
       ACTIVE_SNAPSHOT = cloneItems(ITEMS);
       const SNAP = ACTIVE_SNAPSHOT; const sectors = buildSectors(SNAP);
       let pickedIdx = sectors.findIndex(s => s.id === pickedId);
@@ -410,10 +533,10 @@
             drawWheel(rotation);
             const winIdx = sectorUnderPointer(rotation, sectors);
             const winSec = sectors[winIdx];
-            console.log(`🎯 WIN(byBag): ${picked.label} | WIN(byGeom): ${winSec.label} | same=${picked.id===winSec.id}`);
+            const bonus = !!winSec.bonus;
             lastIndex = pickedIdx;
             setTimeout(()=>{ ACTIVE_SNAPSHOT = null; }, 0);
-            resolve({ index: pickedIdx, snap: SNAP, label: picked.label });
+            resolve({ index: winIdx, snap: SNAP, label: winSec.label, bonus });
           }
         }
         requestAnimationFrame(frame);
@@ -430,10 +553,12 @@
 
     const resultBanner = document.getElementById("resultBanner");
     let resultTimer = null;
-    function showResult(label, ms = 1800) {
+    function showResult(label, ms = 1800, isBonus = false) {
       if (!resultBanner) return;
       clearTimeout(resultTimer);
-      resultBanner.textContent = label || "";
+      resultBanner.innerHTML = isBonus
+        ? `${label} <span class="bonus-badge">+ bonus spin</span>`
+        : label || "";
       resultBanner.classList.add("show");
       resultBanner.setAttribute("aria-hidden", "false");
       resultTimer = setTimeout(hideResult, ms);
@@ -446,6 +571,23 @@
 
     function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
+    // ====== SFX / TTS ======
+    const urlp = new URLSearchParams(location.search);
+    const SND_URL = urlp.get("sound") || "";   // ?sound=/sounds/ding.mp3
+    const USE_TTS = urlp.get("tts") === "1";   // ?tts=1
+    const sfx = document.getElementById("sfx");
+    if (SND_URL) sfx.src = SND_URL;
+
+    function playSound(){ try{ if (SND_URL) { sfx.currentTime = 0; sfx.play().catch(()=>{}); } }catch{} }
+    function speak(text){
+      if (!USE_TTS || !("speechSynthesis" in window)) return;
+      try {
+        const u = new SpeechSynthesisUtterance(String(text||""));
+        u.rate=1; u.pitch=1; u.lang="pl-PL";
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+      } catch {}
+    }
+
     async function runQueue(){
       if (spinning) return;
       spinning=true;
@@ -454,11 +596,19 @@
         const pickedId = nextFromBag();
         const result = await spinToId(pickedId);
         if (result.label) {
-          console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label}`);
-          showResult(result.label, 1800);
+          console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label} ${result.bonus ? '(bonus)' : ''}`);
+          showResult(result.label, 1800, result.bonus);
+          playSound();
+          speak(result.label);
+
+          // BONUS: dokładamy jedno ekstra zakręcenie
+          if (result.bonus) {
+            queue.push(1);
+          }
+
           fetch('/chat/announce', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label: result.label })
+            body: JSON.stringify({ label: result.label + (result.bonus ? " (+bonus)" : "") })
           }).catch(()=>{});
         }
         queue.shift();
@@ -468,21 +618,21 @@
       hideOverlay(1000);
     }
 
-    // ====== WebSocket: auto-reconnect + watchdog + auto-reload ======
+    // ====== WebSocket & watchdog ======
     const OBS_EDIT_MODE = new URLSearchParams(location.search).get("edit") === "1";
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
 
     let ws = null;
-    let reconnectDelay = 1000;           // backoff start 1s
-    let lastSignalAt = Date.now();       // ostatni sygnał od serwera
-    const staleKickMs = 60_000;          // jeśli 60s ciszy — zerwij połączenie (trafi w onclose => reconnect)
-    const hardReloadEveryMs = 30 * 60_000; // twardy reload co 30 min (off w trybie edycji)
+    let reconnectDelay = 1000;
+    let lastSignalAt = Date.now();
+    const staleKickMs = 60_000;
+    const hardReloadEveryMs = 30 * 60_000;
 
     function handleServerMessage(data) {
       if (data.type === "config" && Array.isArray(data.items)) {
         ITEMS = data.items.map(sanitizeItem);
+        if (typeof data.theme === "string") THEME = data.theme;
         CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
-        console.log("🔄 Config updated from server");
         return;
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
@@ -492,84 +642,57 @@
     }
 
     async function fetchPending() {
-  try {
-    const r = await fetch('/spins/pending', { cache: 'no-store' });
-    const j = await r.json();
-    return Math.max(0, Number(j?.count || 0));
-  } catch { return 0; }
-}
-
-async function consumePending(n) {
-  try {
-    const r = await fetch('/spins/consume', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: n })
-    });
-    const j = await r.json();
-    return Math.max(0, Number(j?.taken || 0));
-  } catch { return 0; }
-}
-
-async function catchUpPending() {
-  const cnt = await fetchPending();
-  if (cnt > 0) {
-    const taken = await consumePending(cnt);
-    if (taken > 0) {
-      for (let i = 0; i < taken; i++) queue.push(1);
-      showOverlay(); runQueue();
+      try {
+        const r = await fetch('/spins/pending', { cache: 'no-store' });
+        const j = await r.json();
+        return Math.max(0, Number(j?.count || 0));
+      } catch { return 0; }
     }
-  }
-}
+    async function consumePending(n) {
+      try {
+        const r = await fetch('/spins/consume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: n })
+        });
+        const j = await r.json();
+        return Math.max(0, Number(j?.taken || 0));
+      } catch { return 0; }
+    }
+    async function catchUpPending() {
+      const cnt = await fetchPending();
+      if (cnt > 0) {
+        const taken = await consumePending(cnt);
+        if (taken > 0) {
+          for (let i = 0; i < taken; i++) queue.push(1);
+          showOverlay(); runQueue();
+        }
+      }
+    }
 
     function connectWS() {
       try { if (ws) ws.close(); } catch {}
       ws = new WebSocket(WS_URL);
 
       ws.onopen = async () => {
-  console.log("✅ WS connected", WS_URL);
-  lastSignalAt = Date.now();
-  reconnectDelay = 1000;
-  await catchUpPending(); // <-- NOWE
-};
-
-ws.onmessage = async (evt) => {
-  lastSignalAt = Date.now();
-  try {
-    const data = JSON.parse(evt.data);
-    if (data.type === "config" && Array.isArray(data.items)) {
-      ITEMS = data.items.map(sanitizeItem);
-      CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
-      return;
-    }
-    if (data.action === "pending" && Number.isFinite(data.count)) {
-      await catchUpPending(); // <-- NOWE
-      return;
-    }
-    if (data.action === "spin" && Number.isFinite(data.times)) {
-      for (let i = 0; i < data.times; i++) queue.push(1);
-      showOverlay(); runQueue();
-      return;
-    }
-  } catch (e) {
-    console.error("Bad WS message", e);
-  }
-};
-      ws.onerror = (e) => {
-        console.warn("WS error", e?.message || e);
-        try { ws.close(); } catch {}
+        lastSignalAt = Date.now();
+        reconnectDelay = 1000;
+        await catchUpPending();
       };
+      ws.onmessage = async (evt) => {
+        lastSignalAt = Date.now();
+        try { handleServerMessage(JSON.parse(evt.data)); } catch (e) { console.error("Bad WS message", e); }
+      };
+      ws.onerror = (e) => { try { ws.close(); } catch {} };
       ws.onclose = () => {
         const wait = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 1.8, 15000);
         setTimeout(connectWS, wait);
       };
 
-      // lokalny strażnik stagnacji
       const guard = setInterval(() => {
         if (!ws || ws.readyState !== WebSocket.OPEN) { clearInterval(guard); return; }
         if (Date.now() - lastSignalAt > staleKickMs) {
-          console.warn("WS stale >60s — forcing reconnect");
           try { ws.close(); } catch {}
           clearInterval(guard);
         }
@@ -578,34 +701,25 @@ ws.onmessage = async (evt) => {
     connectWS();
     setInterval(catchUpPending, 10_000);
 
+    if (!OBS_EDIT_MODE) setInterval(() => { location.reload(); }, hardReloadEveryMs);
 
-    // twardy reload co 30 min (nie w trybie edycji)
-    if (!OBS_EDIT_MODE) {
-      setInterval(() => {
-        location.reload();
-      }, hardReloadEveryMs);
-    }
-
-    // awaryjny reload gdy długo nie mamy sygnału i /health nie działa
     setInterval(async () => {
       if (OBS_EDIT_MODE) return;
       if (Date.now() - lastSignalAt < staleKickMs * 2) return;
       try {
         const r = await fetch('/health', { cache:'no-store' });
         if (!r.ok) throw 0;
-      } catch {
-        console.warn("Health check failed — reloading page");
-        location.reload();
-      }
+      } catch { location.reload(); }
     }, 20_000);
 
     canvas.addEventListener("click", () => { queue.push(1); showOverlay(); runQueue(); });
 
-    // ====== Editor ======
+    // ====== Editor (client-side helper) ======
     const editor=document.getElementById("editor");
     const listEl=document.getElementById("list");
     const newLabel=document.getElementById("newLabel");
     const newWeight=document.getElementById("newWeight");
+    const newBonus=document.getElementById("newBonus");
     const addBtn=document.getElementById("addBtn");
     const saveBtn=document.getElementById("saveBtn");
     const resetBtn=document.getElementById("resetBtn");
@@ -621,9 +735,10 @@ ws.onmessage = async (evt) => {
 
     saveKeyBtn.onclick = ()=>{ localStorage.setItem("ADMIN_KEY", adminKeyInput.value.trim()); alert("Admin key saved locally."); };
     loadCfgBtn.onclick = async ()=> {
-      const s = await fetchServerConfig();
-      if (s && s.length >= 0) {
-        ITEMS = s.map(sanitizeItem);
+      const cfg = await fetchServerConfigFull();
+      if (cfg) {
+        ITEMS = Array.isArray(cfg.items) ? cfg.items.map(sanitizeItem) : loadItemsLocal();
+        if (typeof cfg.theme === "string") THEME = cfg.theme;
         CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
         alert("Loaded from server.");
       } else {
@@ -636,14 +751,24 @@ ws.onmessage = async (evt) => {
 
     function renderList(){
       listEl.innerHTML="";
-      sumInfo.textContent=`Sum of weights: ${sumWeights().toFixed(2)}%`;
+      sumInfo.textContent=`Sum of weights: ${sumWeights().toFixed(2)}%  |  Theme: ${THEME}`;
       ITEMS.forEach((it,i)=>{
         const row=document.createElement("div"); row.className="item";
+
         const name=document.createElement("span"); name.textContent=it.label;
+
         const weight=document.createElement("input"); weight.type="number"; weight.min="0"; weight.step="0.1";
         weight.value=Number(it.weight).toFixed(2); weight.title="Percent (weight)";
         weight.onchange=()=>{ let v=Number(weight.value); if(!Number.isFinite(v)||v<0) v=0;
           ITEMS[i].weight=v; CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
+
+        const bonusWrap = document.createElement("label");
+        bonusWrap.style.display="inline-flex"; bonusWrap.style.alignItems="center"; bonusWrap.style.gap="6px";
+        bonusWrap.style.userSelect="none"; bonusWrap.title="Bonus: dodatkowe zakręcenie po trafieniu";
+        const bonusChk = document.createElement("input"); bonusChk.type="checkbox"; bonusChk.checked=!!it.bonus;
+        bonusChk.onchange=()=>{ ITEMS[i].bonus = !!bonusChk.checked; CONFIG_VERSION++; };
+        const bonusTxt = document.createElement("span"); bonusTxt.textContent="Bonus spin";
+        bonusWrap.appendChild(bonusChk); bonusWrap.appendChild(bonusTxt);
 
         const up=document.createElement("button"); up.textContent="↑";
         up.onclick=()=>{ if(i>0){ [ITEMS[i-1],ITEMS[i]]=[ITEMS[i],ITEMS[i-1]]; CONFIG_VERSION++; renderList();
@@ -664,18 +789,21 @@ ws.onmessage = async (evt) => {
           ITEMS.splice(i,1); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
         };
 
-        row.appendChild(name); row.appendChild(weight); row.appendChild(up); row.appendChild(down); row.appendChild(edit); row.appendChild(del);
+        row.appendChild(name);
+        row.appendChild(weight);
+        row.appendChild(bonusWrap);
+        row.appendChild(up); row.appendChild(down); row.appendChild(edit); row.appendChild(del);
         listEl.appendChild(row);
       });
     }
 
     addBtn.onclick=()=>{ const label=(newLabel.value||"").trim(); let w=Number(newWeight.value);
       if(!label) return; if(!Number.isFinite(w)||w<0) w=0;
-      ITEMS.push({id:genId(), label, weight:w}); CONFIG_VERSION++; newLabel.value="";
+      ITEMS.push({id:genId(), label, weight:w, bonus: !!newBonus.checked}); CONFIG_VERSION++; newLabel.value=""; newBonus.checked=false;
       renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
 
-    saveBtn.onclick=async ()=>{
-      const ok = await saveToServer(ITEMS);
+    saveBtn.onclick=async ()=>{ // zapisuje także THEME i bonus
+      const ok = await saveToServer(ITEMS, THEME);
       if (ok){ saveItemsLocal(ITEMS); alert("Saved to server."); }
       else { alert("Server save failed (check X-Admin-Key)."); }
       CONFIG_VERSION++; buildSpinBag();
@@ -695,10 +823,8 @@ ws.onmessage = async (evt) => {
     exportBtn.onclick=()=>{ importArea.value=JSON.stringify(ITEMS,null,2); importArea.focus(); importArea.select(); };
     importBtn.onclick=()=>{ try{
         const arr=JSON.parse(importArea.value);
-        if(Array.isArray(arr) && arr.length){
+        if(Array.isArray(arr)){
           ITEMS=arr.map(sanitizeItem);
-        } else if (Array.isArray(arr) && arr.length===0) {
-          ITEMS=[];
         } else {
           alert("Invalid JSON format."); return;
         }
@@ -711,16 +837,17 @@ ws.onmessage = async (evt) => {
       const p = new URLSearchParams(location.search);
       if (p.get("edit") === "1") toggleEditor(true);
 
-      // 1st try server config; fallback local/default
-      const fromServer = await fetchServerConfig();
-      if (fromServer && fromServer.length >= 0) {
-        ITEMS = Array.isArray(fromServer) ? fromServer.map(sanitizeItem) : loadItemsLocal();
-        if (fromServer.length === 0) console.warn("Server config is empty.");
+      const cfg = await fetchServerConfigFull();
+      if (cfg) {
+        if (Array.isArray(cfg.items)) ITEMS = cfg.items.map(sanitizeItem); else ITEMS = loadItemsLocal();
+        if (typeof cfg.theme === "string") THEME = cfg.theme;
       } else {
         ITEMS = loadItemsLocal();
       }
 
-      // preload admin key field (local, only on your machine)
+      const themeParam = p.get("theme");
+      if (themeParam) THEME = themeParam;
+
       adminKeyInput.value = localStorage.getItem("ADMIN_KEY") || "";
 
       CONFIG_VERSION++; renderList(); buildSpinBag(); drawWheel(0);

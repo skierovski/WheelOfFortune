@@ -20,9 +20,15 @@
     .bad { color:#ef4444 }
     .muted { color:#9aa0a6; font-size: 13px; }
     table { width:100%; border-collapse: collapse; }
-    td, th { border-bottom: 1px solid #222835; padding: 8px; text-align: left; }
+    td, th { border-bottom: 1px solid #222835; padding: 8px; text-align: left; vertical-align: middle; }
     .small { font-size: 12px; }
-    input[type="text"] { padding:8px 10px; border-radius:8px; border:1px solid #2b3242; background:#12161c; color:#e5e7eb; }
+    input[type="text"], input[type="number"] { padding:8px 10px; border-radius:8px; border:1px solid #2b3242; background:#12161c; color:#e5e7eb; }
+    input[type="number"] { width:110px; }
+    select { padding:8px 10px; border-radius:10px; border:1px solid #2b3242; background:#171b22; color:#e5e7eb; }
+    .thumb { width:140px; height:140px; border-radius:12px; background:#0e1116; border:1px solid #202837; display:flex; align-items:center; justify-content:center; }
+    canvas.preview { width:140px; height:140px; }
+    label.chk { display:inline-flex; align-items:center; gap:8px; user-select:none; }
+    input[type="checkbox"] { transform: scale(1.2); }
   </style>
 </head>
 <body>
@@ -51,27 +57,54 @@
         </div>
       </div>
 
-      <!-- KOŁO: szybki edytor (zapis na serwer) -->
+      <!-- KOŁO: szybka konfiguracja + WYBÓR MOTYWU + BONUS SPIN -->
       <div class="card" style="grid-column: 1 / -1;">
-        <h2>🎛️ Koło – szybka konfiguracja</h2>
-        <div class="muted">To te same dane co w overlayu. Zapis idzie na serwer (/config). Wagi przy zapisie są automatycznie skalowane do 100%.</div>
+        <h2>🎛️ Koło – konfiguracja & motyw</h2>
+        <div class="muted">
+          To te same dane co w overlayu. Zapis idzie na serwer (<code>/config</code>).
+          Wagi przy zapisie są automatycznie skalowane do 100%.
+        </div>
 
+        <!-- Admin key -->
         <div class="row" style="margin:8px 0;">
-          <input type="text" id="adminKey" placeholder="X-Admin-Key">
+          <input type="text" id="adminKey" placeholder="X-Admin-Key" />
           <button class="btn" id="saveKeyBtn">💾 Zapisz klucz</button>
           <button class="btn" id="loadCfgBtn">⬇️ Wczytaj</button>
         </div>
 
-        <div id="wheelList"></div>
+        <!-- Theme picker + previews -->
+        <div class="row" style="margin:10px 0;">
+          <label for="themeSel" class="muted">Motyw:&nbsp;</label>
+          <select id="themeSel">
+            <option value="wood">Wood (drewniany)</option>
+            <option value="classic">Classic (metal/srebro)</option>
+          </select>
+
+          <div class="row" style="gap:16px; margin-left:auto;">
+            <div>
+              <div class="muted small">Podgląd: wood</div>
+              <div class="thumb"><canvas id="prevWood" class="preview" width="140" height="140"></canvas></div>
+            </div>
+            <div>
+              <div class="muted small">Podgląd: classic</div>
+              <div class="thumb"><canvas id="prevClassic" class="preview" width="140" height="140"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- List editor -->
+        <div id="wheelList" style="margin-top:10px;"></div>
 
         <div class="row" style="margin-top:8px;">
-          <input type="text" id="newLabel" placeholder="Nowa nagroda…">
-          <input type="text" id="newWeight" placeholder="Waga (%)" style="width:120px;">
+          <input type="text" id="newLabel" placeholder="Nowa nagroda…" />
+          <input type="number" id="newWeight" placeholder="Waga (%)" min="0" step="0.1" />
+          <label class="chk"><input type="checkbox" id="newBonus" /> Bonus: dodatkowy spin</label>
           <button class="btn" id="addItemBtn">Dodaj</button>
         </div>
 
         <div class="row" style="margin-top:12px;">
-          <button class="btn" id="saveCfgBtn">⬆️ Zapisz (normalizuj do 100%)</button>
+          <button class="btn" id="normalizeBtn">📏 Normalizuj do 100%</button>
+          <button class="btn" id="saveCfgBtn">⬆️ Zapisz (items + theme)</button>
           <button class="btn" id="testSpinBtn">🎯 Wyślij testowy spin</button>
         </div>
       </div>
@@ -104,7 +137,7 @@
 
     async function loadSubs(statusJson){
       const subsBox = el("subsBox");
-      const j = statusJson || (await (await fetch("/status")).json());
+      const j = statusJson || (await (await fetch("/status", { cache:"no-store" })).json());
       if (!j.ok) { subsBox.innerHTML = msgHTML(false, "Błąd statusu"); return; }
       const subs = Array.isArray(j.subscriptions) ? j.subscriptions : [];
       if (!subs.length) {
@@ -136,65 +169,111 @@
       }
     };
 
-    // === KOŁO – prosty edytor server-backed (/config)
+    // === CONFIG (items + theme + bonus)
     const defaultItems = [
-      { label:"VIP na 24h", weight:10 }, { label:"Śpiewasz 30s", weight:10 },
-      { label:"Mem na IG", weight:10 },  { label:"Reroll", weight:10 },
-      { label:"Wybór czatu", weight:10 },{ label:"Shot (18+)", weight:10 },
-      { label:"Giveaway 1x", weight:10 },{ label:"Wybór mapy", weight:10 },
+      { label:"VIP na 24h", weight:10, bonus:false },
+      { label:"Śpiewasz 30s", weight:10, bonus:false },
+      { label:"Mem na IG", weight:10, bonus:false },
+      { label:"Reroll", weight:10, bonus:true },
+      { label:"Wybór czatu", weight:10, bonus:false },
+      { label:"Shot (18+)", weight:10, bonus:false },
+      { label:"Giveaway 1x", weight:10, bonus:false },
+      { label:"Wybór mapy", weight:10, bonus:false },
     ];
     let items = [];
+    let theme = "wood";
+
+    function sanitizeItem(it){
+      return {
+        label: String(it?.label ?? "").trim(),
+        weight: Math.max(0, Number(it?.weight)||0),
+        // jeśli nie ma pola w pliku – domyślnie false
+        bonus: Boolean(it?.bonus)
+      };
+    }
 
     async function loadWheel(){
       try {
         const r = await fetch("/config", { cache: "no-store" });
         const j = await r.json();
-        items = Array.isArray(j?.items) && j.items.length ? j.items : defaultItems.slice();
+        items = Array.isArray(j?.items) && j.items.length ? j.items.map(sanitizeItem) : defaultItems.slice();
+        theme = typeof j?.theme === "string" ? j.theme : "wood";
       } catch {
         items = defaultItems.slice();
+        theme = "wood";
       }
+      el("themeSel").value = theme;
       renderWheelList();
+      renderPreviews();
     }
 
     function renderWheelList(){
       const box = el("wheelList");
-      let html = `<table><thead><tr><th>Nagroda</th><th>Waga</th><th></th></tr></thead><tbody>`;
+      let html = `<table>
+        <thead>
+          <tr>
+            <th style="width:46%;">Nagroda</th>
+            <th style="width:16%;">Waga (%)</th>
+            <th style="width:20%;">Bonus spin</th>
+            <th style="width:18%;"></th>
+          </tr>
+        </thead>
+        <tbody>`;
       items.forEach((it, idx) => {
+        const safeLabel = (it.label??"").replaceAll('"','&quot;');
         html += `<tr>
-          <td><input data-i="${idx}" data-k="label" type="text" value="${(it.label??"").replaceAll('"','&quot;')}"></td>
-          <td><input data-i="${idx}" data-k="weight" type="text" value="${Number(it.weight)||0}"></td>
-          <td><button class="btn small" data-del="${idx}">Usuń</button></td>
+          <td><input data-i="${idx}" data-k="label" type="text" value="${safeLabel}"></td>
+          <td><input data-i="${idx}" data-k="weight" type="number" min="0" step="0.1" value="${Number(it.weight)||0}"></td>
+          <td>
+            <label class="chk">
+              <input type="checkbox" data-i="${idx}" data-k="bonus" ${it.bonus ? "checked":""} />
+              <span class="small muted">dodatkowe zakręcenie</span>
+            </label>
+          </td>
+          <td>
+            <button class="btn small" data-up="${idx}">↑</button>
+            <button class="btn small" data-down="${idx}">↓</button>
+            <button class="btn small" data-del="${idx}">Usuń</button>
+          </td>
         </tr>`;
       });
       html += `</tbody></table>`;
       box.innerHTML = html;
 
+      // inputs
       box.querySelectorAll("input[data-i]").forEach(inp => {
         inp.addEventListener("change", () => {
           const i = Number(inp.dataset.i);
           const k = String(inp.dataset.k);
-          const v = inp.value;
-          if (k === "weight") items[i][k] = Math.max(0, Number(v)||0);
-          else items[i][k] = String(v||"").trim();
+          if (k === "weight") items[i][k] = Math.max(0, Number(inp.value)||0);
+          else if (k === "label") items[i][k] = String(inp.value||"").trim();
+          else if (k === "bonus") items[i][k] = inp.checked;
+          renderPreviewsDebounced();
         });
       });
+      // delete
       box.querySelectorAll("button[data-del]").forEach(btn => {
         btn.onclick = () => {
           const i = Number(btn.dataset.del);
           items.splice(i,1);
           renderWheelList();
+          renderPreviewsDebounced();
+        };
+      });
+      // reorders
+      box.querySelectorAll("button[data-up]").forEach(btn => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.up);
+          if (i>0){ [items[i-1], items[i]] = [items[i], items[i-1]]; renderWheelList(); renderPreviewsDebounced(); }
+        };
+      });
+      box.querySelectorAll("button[data-down]").forEach(btn => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.down);
+          if (i < items.length-1){ [items[i+1], items[i]] = [items[i], items[i+1]]; renderWheelList(); renderPreviewsDebounced(); }
         };
       });
     }
-
-    el("addItemBtn").onclick = () => {
-      const label = (el("newLabel").value||"").trim();
-      const w = Math.max(0, Number(el("newWeight").value)||0);
-      if (!label) return;
-      items.push({ label, weight: w });
-      el("newLabel").value = ""; el("newWeight").value = "";
-      renderWheelList();
-    };
 
     // Normalizacja do 100%
     function normalizeWeightsTo100(list) {
@@ -210,33 +289,58 @@
       }));
     }
 
-    // Przyciski pod listą
+    // Admin key local
     el("saveKeyBtn").onclick = () => {
       localStorage.setItem("ADMIN_KEY", (el("adminKey").value||"").trim());
       alert("Zapisano X-Admin-Key lokalnie.");
     };
     el("loadCfgBtn").onclick = loadWheel;
 
+    // Add item
+    el("addItemBtn").onclick = () => {
+      const label = (el("newLabel").value||"").trim();
+      const w = Math.max(0, Number(el("newWeight").value)||0);
+      const b = el("newBonus").checked;
+      if (!label) return;
+      items.push({ label, weight: w, bonus: b });
+      el("newLabel").value = ""; el("newWeight").value = ""; el("newBonus").checked = false;
+      renderWheelList();
+      renderPreviewsDebounced();
+    };
+
+    // Theme change
+    el("themeSel").onchange = () => {
+      theme = el("themeSel").value || "wood";
+      renderPreviews();
+    };
+
+    // Save config
     el("saveCfgBtn").onclick = async () => {
       try {
-        // 1) auto-normalizacja
         items = normalizeWeightsTo100(items);
         renderWheelList();
 
-        // 2) zapis
         const key = localStorage.getItem("ADMIN_KEY") || el("adminKey").value || "";
         const r = await fetch("/config", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Admin-Key": key },
-          body: JSON.stringify({ items })
+          body: JSON.stringify({ items, theme })
         });
         if (!r.ok) throw new Error(await r.text());
-        alert("Zapisano na serwerze (wagi przeskalowane do 100%).");
+        alert("Zapisano na serwerze (wagi -> 100%, motyw i bonusy zapisane).");
       } catch (e) {
         alert("Błąd zapisu: " + e.message);
       }
     };
 
+    // Normalize only
+    el("normalizeBtn").onclick = () => {
+      items = normalizeWeightsTo100(items);
+      renderWheelList();
+      renderPreviewsDebounced();
+    };
+
+    // Test spin
     el("testSpinBtn").onclick = async () => {
       try {
         await fetch("/test/1", { cache: "no-store" });
@@ -245,6 +349,70 @@
         alert("Nie udało się wywołać testowego spinu.");
       }
     };
+
+    // ==== Mini PREVIEWS (wood/classic) – uproszczone rysowanie ====
+    const prevWood = el("prevWood");
+    const prevClassic = el("prevClassic");
+    const ctxW = prevWood.getContext("2d");
+    const ctxC = prevClassic.getContext("2d");
+
+    function drawPreview(ctx, mode, list){
+      const W=140, H=140, CX=W/2, CY=H/2, R=52;
+      ctx.clearRect(0,0,W,H);
+
+      if (mode === "wood"){
+        ctx.beginPath(); ctx.arc(CX,CY,R+10,0,2*Math.PI);
+        ctx.fillStyle="#b8860b"; ctx.fill();
+        ctx.lineWidth=4; ctx.strokeStyle="#6b4513"; ctx.stroke();
+      } else {
+        const g = ctx.createRadialGradient(CX, CY, R*0.6, CX, CY, R+12);
+        g.addColorStop(0, "#d9dee5"); g.addColorStop(0.5, "#8f99a8"); g.addColorStop(1, "#e9eef5");
+        ctx.beginPath(); ctx.arc(CX,CY,R+12,0,2*Math.PI); ctx.fillStyle=g; ctx.fill();
+      }
+
+      const sum = list.reduce((s,it)=>s+Math.max(0,Number(it.weight)||0),0) || 1;
+      let a = -Math.PI/2;
+      const colorsWood = ["#FF4D4F","#40A9FF","#73D13D","#FAAD14","#9254DE","#13C2C2","#EB2F96","#A0D911"];
+      const colorsCl   = ["#FF3B3B","#1E90FF","#2ED573","#FFC107","#A55EEA","#17A2B8","#FF6B6B","#7bed9f"];
+      for (let i=0;i<list.length;i++){
+        const frac = Math.max(0, Number(list[i].weight)||0)/sum;
+        const b = a + frac*2*Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(CX,CY);
+        ctx.arc(CX,CY,R,a,b);
+        ctx.closePath();
+        ctx.fillStyle = (mode==="wood" ? colorsWood : colorsCl)[i % 8];
+        ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.stroke();
+        a = b;
+      }
+
+      // hub
+      if (mode === "wood"){
+        ctx.beginPath(); ctx.arc(CX,CY,R*0.45,0,2*Math.PI);
+        const hg=ctx.createRadialGradient(CX,CY,2,CX,CY,R*0.45);
+        hg.addColorStop(0,"#f1c27d"); hg.addColorStop(1,"#8b5a2b");
+        ctx.fillStyle=hg; ctx.fill();
+        ctx.lineWidth=2; ctx.strokeStyle="#5e3d1e"; ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(CX,CY,R*0.45,0,2*Math.PI);
+        const gg=ctx.createRadialGradient(CX-4,CY-4,2,CX,CY,R*0.45);
+        gg.addColorStop(0,"#ffffff"); gg.addColorStop(1,"#90a4c4");
+        ctx.fillStyle=gg; ctx.fill();
+        ctx.lineWidth=2; ctx.strokeStyle="#9aa3b2"; ctx.stroke();
+      }
+    }
+
+    let previewTimer;
+    function renderPreviews(){
+      const list = items.length ? items : defaultItems;
+      drawPreview(ctxW, "wood", list);
+      drawPreview(ctxC, "classic", list);
+    }
+    function renderPreviewsDebounced(){
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(renderPreviews, 60);
+    }
 
     // BOOT
     (async function(){

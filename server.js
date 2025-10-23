@@ -1,7 +1,6 @@
-// server.js
 import 'dotenv/config';
 import express from "express";
-import bodyParser from "body-parser";
+// import bodyParser from "body-parser"; // niepotrzebne – używamy express.json()
 import { WebSocketServer } from "ws";
 import http from "http";
 import path from "path";
@@ -29,13 +28,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// Nie buforuj odpowiedzi – konfiguracja/admin
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // ---- Config / env ----
-const PORT_HTTP = Number(process.env.PORT) || 3000;
-const PUB = path.join(__dirname, "public");
-const TOK_PATH = process.env.TOK_PATH || path.join(process.cwd(), "tokens.json");
-const CFG_PATH = process.env.CFG_PATH || "/data/wheel.json";
+const PORT_HTTP  = Number(process.env.PORT) || 3000;
+const PUB        = path.join(__dirname, "public");
+const TOK_PATH   = process.env.TOK_PATH   || path.join(process.cwd(), "tokens.json");
+const CFG_PATH   = process.env.CFG_PATH   || "/data/wheel.json";
 const GOALS_PATH = process.env.GOALS_PATH || "/data/goals.json";
-const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ustaw w Renderze!
+const PENDING_PATH = process.env.PENDING_PATH || "/data/pending.json";
+const ADMIN_KEY  = process.env.ADMIN_KEY || ""; // ustaw w Renderze!
 const WEBHOOK_SECRET = process.env.KICK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "dev_webhook_secret";
 const KICK_OAUTH_HOST = "https://id.kick.com";
 
@@ -120,7 +126,6 @@ async function refreshAccessTokenManual(refreshToken) {
   let json;
   try { json = JSON.parse(text); } catch { throw new Error("refresh parse error"); }
 
-  // spodziewamy się: access_token, refresh_token, expires_in, scope, token_type
   if (!json?.access_token) throw new Error("refresh response missing access_token");
   return json;
 }
@@ -190,12 +195,37 @@ app.head("/webhook", (req, res) => {
 });
 
 /* ====== bezstratny licznik spinów (pull & consume) ====== */
-let PENDING_SPINS_COUNT = 0;
+// trwała pamięć pending
+function ensureDirFor(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+function loadJsonSafe(file, fallback) {
+  try {
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch { return fallback; }
+}
+function loadPendingSafe() {
+  try {
+    if (!fs.existsSync(PENDING_PATH)) return 0;
+    const n = JSON.parse(fs.readFileSync(PENDING_PATH, "utf8"));
+    return Math.max(0, Number(n) || 0);
+  } catch { return 0; }
+}
+function savePendingSafe(n) {
+  ensureDirFor(PENDING_PATH);
+  try { fs.writeFileSync(PENDING_PATH, JSON.stringify(Math.max(0, Number(n)||0))); }
+  catch (e) { console.warn("[pending] save failed:", e.message); }
+}
+
+let PENDING_SPINS_COUNT = loadPendingSafe();
 
 function addPendingSpins(n) {
   const x = Number(n) || 0;
   if (x > 0) {
     PENDING_SPINS_COUNT += x;
+    savePendingSafe(PENDING_SPINS_COUNT);
     console.log(`[spins] pending += ${x}  (total=${PENDING_SPINS_COUNT})`);
   }
 }
@@ -204,6 +234,7 @@ function consumePendingSpins(n) {
   const want = Math.max(0, Number(n) || 0);
   const take = Math.min(PENDING_SPINS_COUNT, want);
   PENDING_SPINS_COUNT -= take;
+  savePendingSafe(PENDING_SPINS_COUNT);
   console.log(`[spins] consumed ${take}  (left=${PENDING_SPINS_COUNT})`);
   return take;
 }
@@ -218,7 +249,7 @@ app.post("/spins/consume", express.json(), (req, res) => {
   res.json({ ok: true, taken });
 });
 
-// RAW body before json()
+// RAW body before json() – webhook musi być raw
 app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
   const startedAt = Date.now();
   try {
@@ -289,7 +320,7 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
       // policz spiny: 5 giftów => 1 spin, 10 => 2, itd. (floor)
       const spins = Math.floor(count / 5);
       if (spins > 0) {
-        deliverSpinOrQueue(spins); // <-- kluczowe: spróbuj nadać, a jak nikomu nie wyślesz → licznik pending
+        deliverSpinOrQueue(spins); // bezstratnie
       } else {
         console.log("[WEBHOOK] No spins (count < 5)");
       }
@@ -309,41 +340,6 @@ app.post("/webhook", express.raw({ type: "*/*", limit: "2mb" }), async (req, res
 /* =======================================================================================
    CONFIG plik + GOALS + helpers
    ======================================================================================= */
-function ensureDirFor(filePath) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-function loadJsonSafe(file, fallback) {
-  try {
-    if (!fs.existsSync(file)) return fallback;
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch { return fallback; }
-}
-
-// Wheel config
-function loadConfigItems() {
-  const obj = loadJsonSafe(CFG_PATH, null);
-  if (obj && Array.isArray(obj.items)) return obj.items;
-  return null;
-}
-function normalizeItemsTo100(items) {
-  const safe = (x) => Math.max(0, Number(x) || 0);
-  const sum = items.reduce((s, it) => s + safe(it.weight), 0);
-  if (sum <= 0) {
-    const eq = items.length ? 100 / items.length : 0;
-    return items.map(it => ({ ...it, weight: +eq.toFixed(2) }));
-  }
-  return items.map(it => ({ ...it, weight: +((safe(it.weight) * 100) / sum).toFixed(2) }));
-}
-function saveConfigItems(items) {
-  ensureDirFor(CFG_PATH);
-  const normalized = normalizeItemsTo100(items);
-  fs.writeFileSync(CFG_PATH, JSON.stringify({ items: normalized }, null, 2));
-  console.log(`[config] saved ${normalized.length} items (normalized to 100%) -> ${CFG_PATH}`);
-  return normalized;
-}
-
-// Goals
 function loadGoals() {
   const arr = loadJsonSafe(GOALS_PATH, []);
   return Array.isArray(arr) ? arr : [];
@@ -354,6 +350,32 @@ function saveGoals(arr) {
   fs.writeFileSync(GOALS_PATH, JSON.stringify(list, null, 2));
   console.log(`[goals] saved ${list.length} goals -> ${GOALS_PATH}`);
   return list;
+}
+
+// Wheel config (items + theme)
+function loadConfigFull() {
+  const obj = loadJsonSafe(CFG_PATH, null);
+  if (!obj) return { items: null, theme: "wood" };
+  const theme = typeof obj.theme === "string" ? obj.theme : "wood";
+  const items = Array.isArray(obj.items) ? obj.items : null;
+  return { items, theme };
+}
+function normalizeItemsTo100(items) {
+  const safe = (x) => Math.max(0, Number(x) || 0);
+  const sum = items.reduce((s, it) => s + safe(it.weight), 0);
+  if (sum <= 0) {
+    const eq = items.length ? 100 / items.length : 0;
+    return items.map(it => ({ ...it, weight: +eq.toFixed(2) }));
+  }
+  return items.map(it => ({ ...it, weight: +((safe(it.weight) * 100) / sum).toFixed(2) }));
+}
+function saveConfigFull({ items, theme }) {
+  ensureDirFor(CFG_PATH);
+  const normalized = normalizeItemsTo100(items);
+  const safeTheme = typeof theme === "string" && theme ? theme : "wood";
+  fs.writeFileSync(CFG_PATH, JSON.stringify({ items: normalized, theme: safeTheme }, null, 2));
+  console.log(`[config] saved ${normalized.length} items (->100%) theme=${safeTheme} -> ${CFG_PATH}`);
+  return { items: normalized, theme: safeTheme };
 }
 
 // ===== HOME (dashboard) =====
@@ -468,23 +490,43 @@ app.post("/goals", express.json(), (req, res) => {
 
 // === Wheel config endpoints ===
 app.get("/config", (_req, res) => {
-  res.json({ ok: true, items: loadConfigItems() });
+  const { items, theme } = loadConfigFull();
+  res.json({ ok: true, items, theme });
 });
 
 app.post("/config", express.json(), (req, res) => {
   if (!ADMIN_KEY || req.get("X-Admin-Key") !== ADMIN_KEY) {
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   }
-  let items = Array.isArray(req.body?.items) ? req.body.items : null;
+  const items = Array.isArray(req.body?.items) ? req.body.items : null;
   if (!items) return res.status(400).json({ ok: false, error: "Missing items[]" });
+  const theme = typeof req.body?.theme === "string" ? req.body.theme : undefined; // optional
 
-  const normalized = saveConfigItems(items);
-  broadcast({ type: "config", items: normalized });
-  res.json({ ok: true, items: normalized });
+  const saved = saveConfigFull({ items, theme });
+  broadcast({ type: "config", items: saved.items, theme: saved.theme });
+  res.json({ ok: true, items: saved.items, theme: saved.theme });
 });
 
+/* ========= Lekki rate-limit (anty-spam) ========= */
+const RATE = new Map(); // ip -> {ts, tokens}
+function rateLimit({capacity=10, refillPerSec=1}={}) {
+  return (req,res,next)=>{
+    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const now = Date.now();
+    const b = RATE.get(ip) || { ts: now, tokens: capacity };
+    const dt = (now - b.ts)/1000;
+    b.tokens = Math.min(capacity, b.tokens + dt*refillPerSec);
+    b.ts = now;
+    if (b.tokens < 1) { return res.status(429).json({ ok:false, error:"Too many requests" }); }
+    b.tokens -= 1;
+    RATE.set(ip,b);
+    next();
+  };
+}
+
 // ===== Reszta middleware =====
-app.use(bodyParser.json());
+app.use(express.json()); // globalny JSON (webhook ma raw)
+// app.use(bodyParser.json());
 app.use(express.static(PUB));
 
 // Ogłoszenie na czat po spinie (non-blocking)
@@ -502,7 +544,7 @@ async function postChatMessage(content) {
   } catch (e) { console.warn("[chat] error:", e.message); }
 }
 
-app.post("/chat/announce", async (req, res) => {
+app.post("/chat/announce", rateLimit({capacity:12, refillPerSec:0.5}), async (req, res) => {
   try {
     const label = String(req.body?.label ?? "").trim();
     if (!label) return res.status(400).json({ ok:false, error:"Missing label" });
@@ -513,6 +555,18 @@ app.post("/chat/announce", async (req, res) => {
     console.error("chat/announce error:", e);
     res.status(200).json({ ok:false, warn: e.message });
   }
+});
+
+// Adminowy grant spinów (np. hotkey w panelu)
+app.post("/spins/grant", rateLimit({capacity:30, refillPerSec:2}), express.json(), (req, res) => {
+  if (!ADMIN_KEY || req.get("X-Admin-Key") !== ADMIN_KEY) {
+    return res.status(401).json({ ok:false, error:"Unauthorized" });
+  }
+  const n = Math.max(0, Number(req.body?.count || 0));
+  if (!n) return res.status(400).json({ ok:false, error:"count>0 required" });
+
+  const delivered = deliverSpinOrQueue(n);
+  res.json({ ok:true, delivered, queued: Math.max(0, n - delivered), pending: PENDING_SPINS_COUNT });
 });
 
 // Index / Health
@@ -727,7 +781,7 @@ setInterval(refreshIfSoon, 120_000);
    ======================================================================================= */
 app.get("/test/:n", (req, res) => {
   const n = parseInt(req.params.n, 10) || 0;
-  deliverSpinOrQueue(n);                // <-- użyj bezstratnej dostawy
+  deliverSpinOrQueue(n);                // użyj bezstratnej dostawy
   res.send(`sent ${n}`);
 });
 
@@ -783,7 +837,7 @@ wss.on("connection", (ws, req) => {
   ws.isAlive = true;
   ws.on("pong", () => { ws.isAlive = true; });
 
-  // ZAWSZE poinformuj klienta o stanie licznika bezstratnego
+  // stan licznika bezstratnego
   try { ws.send(JSON.stringify({ action: "pending", count: PENDING_SPINS_COUNT })); } catch {}
 
   ws.on("close", () => console.log("WS closed"));
@@ -832,6 +886,9 @@ function deliverSpinOrQueue(times) {
   return delivered;
 }
 
+process.on("SIGTERM", ()=>{ savePendingSafe(PENDING_SPINS_COUNT); process.exit(0); });
+process.on("SIGINT",  ()=>{ savePendingSafe(PENDING_SPINS_COUNT); process.exit(0); });
+
 server.listen(PORT_HTTP, () => {
   console.log(`HTTP on http://localhost:${PORT_HTTP}`);
   console.log(`WS on    ws://localhost:${PORT_HTTP}/ws`);
@@ -840,7 +897,7 @@ server.listen(PORT_HTTP, () => {
     KICK_CLIENT_ID: process.env.KICK_CLIENT_ID,
     KICK_REDIRECT_URI: process.env.KICK_REDIRECT_URI || "<dynamic>",
     WEBHOOK_SECRET: mask(WEBHOOK_SECRET),
-    TOK_PATH, CFG_PATH, GOALS_PATH,
+    TOK_PATH, CFG_PATH, GOALS_PATH, PENDING_PATH,
     ADMIN_KEY: ADMIN_KEY ? "(set)" : "(missing)"
   });
 });
