@@ -57,12 +57,13 @@
         </div>
       </div>
 
-      <!-- KOŁO: szybka konfiguracja + WYBÓR MOTYWU + BONUS SPIN -->
+      <!-- KOŁO: konfiguracja + MOTYW + BONUS SPIN + poprawki wag -->
       <div class="card" style="grid-column: 1 / -1;">
         <h2>🎛️ Koło – konfiguracja & motyw</h2>
         <div class="muted">
           To te same dane co w overlayu. Zapis idzie na serwer (<code>/config</code>).
-          Wagi przy zapisie są automatycznie skalowane do 100%.
+          Wagi przy zapisie są automatycznie skalowane do 100% i zaokrąglane do pełnych.
+          Minimalna waga pozycji to 1%.
         </div>
 
         <!-- Admin key -->
@@ -97,13 +98,13 @@
 
         <div class="row" style="margin-top:8px;">
           <input type="text" id="newLabel" placeholder="Nowa nagroda…" />
-          <input type="number" id="newWeight" placeholder="Waga (%)" min="0" step="0.1" />
+          <input type="number" id="newWeight" placeholder="Waga (%)" min="1" step="1" />
           <label class="chk"><input type="checkbox" id="newBonus" /> Bonus: dodatkowy spin</label>
           <button class="btn" id="addItemBtn">Dodaj</button>
         </div>
 
         <div class="row" style="margin-top:12px;">
-          <button class="btn" id="normalizeBtn">📏 Normalizuj do 100%</button>
+          <button class="btn" id="normalizeBtn">📏 Normalizuj do 100% (pełne %)</button>
           <button class="btn" id="saveCfgBtn">⬆️ Zapisz (items + theme)</button>
           <button class="btn" id="testSpinBtn">🎯 Wyślij testowy spin</button>
         </div>
@@ -184,22 +185,21 @@
     let theme = "wood";
 
     function sanitizeItem(it){
-      return {
-        label: String(it?.label ?? "").trim(),
-        weight: Math.max(0, Number(it?.weight)||0),
-        // jeśli nie ma pola w pliku – domyślnie false
-        bonus: Boolean(it?.bonus)
-      };
+      const label = String(it?.label ?? "").trim();
+      // minimalnie 1%
+      const weight = Math.max(1, Math.round(Number(it?.weight) || 0));
+      const bonus  = Boolean(it?.bonus);
+      return { label, weight, bonus };
     }
 
     async function loadWheel(){
       try {
         const r = await fetch("/config", { cache: "no-store" });
         const j = await r.json();
-        items = Array.isArray(j?.items) && j.items.length ? j.items.map(sanitizeItem) : defaultItems.slice();
+        items = Array.isArray(j?.items) && j.items.length ? j.items.map(sanitizeItem) : defaultItems.slice().map(sanitizeItem);
         theme = typeof j?.theme === "string" ? j.theme : "wood";
       } catch {
-        items = defaultItems.slice();
+        items = defaultItems.slice().map(sanitizeItem);
         theme = "wood";
       }
       el("themeSel").value = theme;
@@ -223,7 +223,7 @@
         const safeLabel = (it.label??"").replaceAll('"','&quot;');
         html += `<tr>
           <td><input data-i="${idx}" data-k="label" type="text" value="${safeLabel}"></td>
-          <td><input data-i="${idx}" data-k="weight" type="number" min="0" step="0.1" value="${Number(it.weight)||0}"></td>
+          <td><input data-i="${idx}" data-k="weight" type="number" min="1" step="1" value="${Math.max(1, Math.round(Number(it.weight)||1))}"></td>
           <td>
             <label class="chk">
               <input type="checkbox" data-i="${idx}" data-k="bonus" ${it.bonus ? "checked":""} />
@@ -245,9 +245,16 @@
         inp.addEventListener("change", () => {
           const i = Number(inp.dataset.i);
           const k = String(inp.dataset.k);
-          if (k === "weight") items[i][k] = Math.max(0, Number(inp.value)||0);
-          else if (k === "label") items[i][k] = String(inp.value||"").trim();
-          else if (k === "bonus") items[i][k] = inp.checked;
+          if (k === "weight") {
+            let v = Math.round(Number(inp.value)||1);
+            if (v < 1) v = 1;
+            items[i][k] = v;
+            inp.value = v; // natychmiastowe poprawienie UI
+          } else if (k === "label") {
+            items[i][k] = String(inp.value||"").trim();
+          } else if (k === "bonus") {
+            items[i][k] = inp.checked;
+          }
           renderPreviewsDebounced();
         });
       });
@@ -275,18 +282,56 @@
       });
     }
 
-    // Normalizacja do 100%
+    // --- NORMALIZACJA: pełne % i suma = 100 (metoda największych reszt) ---
     function normalizeWeightsTo100(list) {
-      const safe = (x) => Math.max(0, Number(x) || 0);
-      const sum = list.reduce((s, it) => s + safe(it.weight), 0);
-      if (sum <= 0) {
-        const eq = list.length ? 100 / list.length : 0;
-        return list.map(it => ({ ...it, weight: +eq.toFixed(2) }));
+      const n = list.length;
+      if (!n) return [];
+
+      // Jeśli wszystkie 0 (nie powinno się zdarzyć, ale asekuracyjnie):
+      const sumRaw = list.reduce((s, it) => s + Math.max(0, Number(it.weight)||0), 0);
+      if (sumRaw <= 0) {
+        // równy podział pełnymi procentami
+        const base = Math.floor(100 / n);
+        let rest = 100 - base * n;
+        return list.map((it, i) => ({
+          ...it,
+          weight: base + (i < rest ? 1 : 0)
+        }));
       }
-      return list.map(it => ({
-        ...it,
-        weight: +((safe(it.weight) * 100) / sum).toFixed(2)
-      }));
+
+      // Skala do 100
+      const scaled = list.map((it) => {
+        const raw = Math.max(0, Number(it.weight)||0);
+        const val = (raw / sumRaw) * 100;
+        return { ...it, _val: val };
+      });
+
+      // Część całkowita + reszty
+      const floored = scaled.map((it) => ({ ...it, weight: Math.floor(it._val), _frac: it._val - Math.floor(it._val) }));
+      let total = floored.reduce((s, it) => s + it.weight, 0);
+      let remain = 100 - total;
+
+      // Rozdaj po 1% tym z największą resztą
+      floored.sort((a, b) => b._frac - a._frac);
+      for (let i = 0; i < floored.length && remain > 0; i++, remain--) {
+        floored[i].weight += 1;
+      }
+
+      // Minimalnie 1% dla każdej pozycji
+      let debt = 0;
+      for (const it of floored) {
+        if (it.weight < 1) { debt += (1 - it.weight); it.weight = 1; }
+      }
+      // Jeśli coś po korekcie przekroczyło 100, odbierz 1% od najmniejszych ułamków
+      if (debt > 0) {
+        floored.sort((a, b) => (a._frac - b._frac) || (a.weight - b.weight)); // najpierw najmniejsza reszta i waga
+        for (let i = 0; i < floored.length && debt > 0; i++) {
+          if (floored[i].weight > 1) { floored[i].weight -= 1; debt--; i = -1; } // restart pętli po zmianie
+        }
+      }
+
+      // Odrzuć pola pomocnicze i posortuj z powrotem wg oryginalnej kolejności (nie zmienialiśmy, więc tylko strip):
+      return floored.map(({ _val, _frac, ...rest }) => rest);
     }
 
     // Admin key local
@@ -299,7 +344,8 @@
     // Add item
     el("addItemBtn").onclick = () => {
       const label = (el("newLabel").value||"").trim();
-      const w = Math.max(0, Number(el("newWeight").value)||0);
+      let w = Math.round(Number(el("newWeight").value)||1);
+      if (w < 1) w = 1;
       const b = el("newBonus").checked;
       if (!label) return;
       items.push({ label, weight: w, bonus: b });
@@ -317,6 +363,9 @@
     // Save config
     el("saveCfgBtn").onclick = async () => {
       try {
+        // 1) dopilnuj min 1%
+        items = items.map(sanitizeItem);
+        // 2) normalizacja do pełnych %
         items = normalizeWeightsTo100(items);
         renderWheelList();
 
@@ -327,7 +376,7 @@
           body: JSON.stringify({ items, theme })
         });
         if (!r.ok) throw new Error(await r.text());
-        alert("Zapisano na serwerze (wagi -> 100%, motyw i bonusy zapisane).");
+        alert("Zapisano na serwerze (pełne % z sumą 100, motyw i bonusy zapisane).");
       } catch (e) {
         alert("Błąd zapisu: " + e.message);
       }
@@ -335,6 +384,7 @@
 
     // Normalize only
     el("normalizeBtn").onclick = () => {
+      items = items.map(sanitizeItem);
       items = normalizeWeightsTo100(items);
       renderWheelList();
       renderPreviewsDebounced();
