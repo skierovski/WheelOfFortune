@@ -34,11 +34,11 @@ router.get("/spins/pending", (_req, res) => {
     timeUntilNext: Math.ceil(timeUntilNext / 1000)
   });
 });
-router.post("/spins/consume", (req, res) => {
-  const want = Number(req.body?.count || 0);
-  const taken = spins.consumePending(want);
-  res.json({ ok:true, taken });
-});
+
+// REMOVED: /spins/consume endpoint was causing race conditions when multiple 
+// wheel instances tried to consume spins simultaneously. The server now handles
+// all spin distribution via WebSocket broadcasts in deliverSpinOrQueue().
+
 router.post("/spins/complete", (_req, res) => {
   spins.markSpinComplete();
   res.json({ ok: true });

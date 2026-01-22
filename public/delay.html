@@ -45,7 +45,7 @@
       if (currentDelaySeconds > 0) {
         delayTimeEl.textContent = formatTime(currentDelaySeconds);
         if (pendingCount > 0) {
-          delayPendingEl.innerHTML = `<strong>${pendingCount}</strong> spin${pendingCount !== 1 ? 's' : ''} queued`;
+          delayPendingEl.innerHTML = `<strong>${pendingCount}</strong> spinow${pendingCount !== 1 ? 's' : ''} w kolejce`;
         } else {
           delayPendingEl.textContent = "";
         }

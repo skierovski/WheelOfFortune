@@ -653,31 +653,6 @@
         return Math.max(0, Number(j?.count || 0));
       } catch { return 0; }
     }
-    async function consumePending(n) {
-      try {
-        const r = await fetch('/spins/consume', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ count: n })
-        });
-        const j = await r.json();
-        return Math.max(0, Number(j?.taken || 0));
-      } catch { return 0; }
-    }
-    async function catchUpPending() {
-      const r = await fetch('/spins/pending', { cache: 'no-store' });
-      const j = await r.json();
-      const cnt = Math.max(0, Number(j?.count || 0));
-      const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
-      
-      if (timeUntilNext === 0 && cnt > 0) {
-        const taken = await consumePending(cnt);
-        if (taken > 0) {
-          for (let i = 0; i < taken; i++) queue.push(1);
-          showOverlay(); runQueue();
-        }
-      }
-    }
 
     function connectWS() {
       try { if (ws) ws.close(); } catch {}
@@ -686,7 +661,7 @@
       ws.onopen = async () => {
         lastSignalAt = Date.now();
         reconnectDelay = 1000;
-        await catchUpPending();
+        // Don't fetch/consume spins - server will broadcast them when ready
       };
       ws.onmessage = async (evt) => {
         lastSignalAt = Date.now();
@@ -708,7 +683,7 @@
       }, 5000);
     }
     connectWS();
-    setInterval(catchUpPending, 10_000);
+    // Removed periodic catchUpPending - server broadcasts spins when ready via WebSocket
 
     if (!OBS_EDIT_MODE) setInterval(() => { location.reload(); }, hardReloadEveryMs);
 

@@ -71,6 +71,7 @@ export const spins = {
   getPending: () => PENDING_SPINS_COUNT,
   getTimeUntilNextSpin,
   setBroadcaster: (fn) => { broadcastFn = fn; },
+  addPending, // Keep this for internal use (e.g., webhooks)
   deliverSpinOrQueue(times) {
     const safe = Math.max(0, Number(times) || 0);
     if (!safe) return 0;
@@ -121,8 +122,6 @@ export const spins = {
     
     return 0;
   },
-  addPending,
-  consumePending,
   markSpinComplete() {
     spinInProgress = false;
     lastSpinTime = Date.now(); // Start 5-minute delay timer from now
