@@ -22,9 +22,10 @@
     table { width:100%; border-collapse: collapse; }
     td, th { border-bottom: 1px solid #222835; padding: 8px; text-align: left; vertical-align: middle; }
     .small { font-size: 12px; }
-    input[type="text"], input[type="number"] { padding:8px 10px; border-radius:8px; border:1px solid #2b3242; background:#12161c; color:#e5e7eb; }
+    input[type="text"], input[type="number"], select {
+      padding:8px 10px; border-radius:8px; border:1px solid #2b3242; background:#12161c; color:#e5e7eb;
+    }
     input[type="number"] { width:110px; }
-    select { padding:8px 10px; border-radius:10px; border:1px solid #2b3242; background:#171b22; color:#e5e7eb; }
     .thumb { width:140px; height:140px; border-radius:12px; background:#0e1116; border:1px solid #202837; display:flex; align-items:center; justify-content:center; }
     canvas.preview { width:140px; height:140px; }
     label.chk { display:inline-flex; align-items:center; gap:8px; user-select:none; }
@@ -39,7 +40,8 @@
       <!-- AUTH / STATUS -->
       <div class="card">
         <h2>🔐 Autoryzacja Kick / Status</h2>
-        <div id="statusBox" class="muted">Ładowanie…</div>
+        <div class="muted">Ta strona jest dostępna tylko po zalogowaniu przez Kick.</div>
+        <div id="statusBox" class="muted" style="margin-top:8px;">Ładowanie…</div>
         <div class="row" style="margin-top:10px;">
           <a class="btn" href="/auth/login">🔑 Zaloguj przez Kick</a>
           <button class="btn" id="refreshBtn">🔄 Odśwież status</button>
@@ -57,20 +59,12 @@
         </div>
       </div>
 
-      <!-- KOŁO: konfiguracja + MOTYW + BONUS SPIN + poprawki wag -->
+      <!-- KOŁO: konfiguracja + MOTYW + BONUS SPIN -->
       <div class="card" style="grid-column: 1 / -1;">
         <h2>🎛️ Koło – konfiguracja & motyw</h2>
         <div class="muted">
-          To te same dane co w overlayu. Zapis idzie na serwer (<code>/config</code>).
-          Wagi przy zapisie są automatycznie skalowane do 100% i zaokrąglane do pełnych.
-          Minimalna waga pozycji to 1%.
-        </div>
-
-        <!-- Admin key -->
-        <div class="row" style="margin:8px 0;">
-          <input type="text" id="adminKey" placeholder="X-Admin-Key" />
-          <button class="btn" id="saveKeyBtn">💾 Zapisz klucz</button>
-          <button class="btn" id="loadCfgBtn">⬇️ Wczytaj</button>
+          Zapis idzie na serwer (<code>/config</code>) i wymaga sesji (zalogowania).
+          Wagi są normalizowane do 100% i zaokrąglane do pełnych (min. 1%).
         </div>
 
         <!-- Theme picker + previews -->
@@ -186,7 +180,7 @@
 
     function sanitizeItem(it){
       const label = String(it?.label ?? "").trim();
-      // minimalnie 1%
+      // min 1% i pełne %
       const weight = Math.max(1, Math.round(Number(it?.weight) || 0));
       const bonus  = Boolean(it?.bonus);
       return { label, weight, bonus };
@@ -240,7 +234,6 @@
       html += `</tbody></table>`;
       box.innerHTML = html;
 
-      // inputs
       box.querySelectorAll("input[data-i]").forEach(inp => {
         inp.addEventListener("change", () => {
           const i = Number(inp.dataset.i);
@@ -249,7 +242,7 @@
             let v = Math.round(Number(inp.value)||1);
             if (v < 1) v = 1;
             items[i][k] = v;
-            inp.value = v; // natychmiastowe poprawienie UI
+            inp.value = v;
           } else if (k === "label") {
             items[i][k] = String(inp.value||"").trim();
           } else if (k === "bonus") {
@@ -258,7 +251,6 @@
           renderPreviewsDebounced();
         });
       });
-      // delete
       box.querySelectorAll("button[data-del]").forEach(btn => {
         btn.onclick = () => {
           const i = Number(btn.dataset.del);
@@ -267,7 +259,6 @@
           renderPreviewsDebounced();
         };
       });
-      // reorders
       box.querySelectorAll("button[data-up]").forEach(btn => {
         btn.onclick = () => {
           const i = Number(btn.dataset.up);
@@ -282,64 +273,37 @@
       });
     }
 
-    // --- NORMALIZACJA: pełne % i suma = 100 (metoda największych reszt) ---
+    // Normalizacja do pełnych %, suma = 100
     function normalizeWeightsTo100(list) {
       const n = list.length;
       if (!n) return [];
-
-      // Jeśli wszystkie 0 (nie powinno się zdarzyć, ale asekuracyjnie):
       const sumRaw = list.reduce((s, it) => s + Math.max(0, Number(it.weight)||0), 0);
       if (sumRaw <= 0) {
-        // równy podział pełnymi procentami
         const base = Math.floor(100 / n);
         let rest = 100 - base * n;
-        return list.map((it, i) => ({
-          ...it,
-          weight: base + (i < rest ? 1 : 0)
-        }));
+        return list.map((it, i) => ({ ...it, weight: base + (i < rest ? 1 : 0) }));
       }
-
-      // Skala do 100
       const scaled = list.map((it) => {
         const raw = Math.max(0, Number(it.weight)||0);
         const val = (raw / sumRaw) * 100;
         return { ...it, _val: val };
       });
-
-      // Część całkowita + reszty
       const floored = scaled.map((it) => ({ ...it, weight: Math.floor(it._val), _frac: it._val - Math.floor(it._val) }));
       let total = floored.reduce((s, it) => s + it.weight, 0);
       let remain = 100 - total;
-
-      // Rozdaj po 1% tym z największą resztą
       floored.sort((a, b) => b._frac - a._frac);
-      for (let i = 0; i < floored.length && remain > 0; i++, remain--) {
-        floored[i].weight += 1;
-      }
-
-      // Minimalnie 1% dla każdej pozycji
+      for (let i = 0; i < floored.length && remain > 0; i++, remain--) floored[i].weight += 1;
+      // min 1%
       let debt = 0;
-      for (const it of floored) {
-        if (it.weight < 1) { debt += (1 - it.weight); it.weight = 1; }
-      }
-      // Jeśli coś po korekcie przekroczyło 100, odbierz 1% od najmniejszych ułamków
+      for (const it of floored) { if (it.weight < 1) { debt += (1 - it.weight); it.weight = 1; } }
       if (debt > 0) {
-        floored.sort((a, b) => (a._frac - b._frac) || (a.weight - b.weight)); // najpierw najmniejsza reszta i waga
+        floored.sort((a, b) => (a._frac - b._frac) || (a.weight - b.weight));
         for (let i = 0; i < floored.length && debt > 0; i++) {
-          if (floored[i].weight > 1) { floored[i].weight -= 1; debt--; i = -1; } // restart pętli po zmianie
+          if (floored[i].weight > 1) { floored[i].weight -= 1; debt--; i = -1; }
         }
       }
-
-      // Odrzuć pola pomocnicze i posortuj z powrotem wg oryginalnej kolejności (nie zmienialiśmy, więc tylko strip):
       return floored.map(({ _val, _frac, ...rest }) => rest);
     }
-
-    // Admin key local
-    el("saveKeyBtn").onclick = () => {
-      localStorage.setItem("ADMIN_KEY", (el("adminKey").value||"").trim());
-      alert("Zapisano X-Admin-Key lokalnie.");
-    };
-    el("loadCfgBtn").onclick = loadWheel;
 
     // Add item
     el("addItemBtn").onclick = () => {
@@ -360,23 +324,19 @@
       renderPreviews();
     };
 
-    // Save config
+    // Save config (bez X-Admin-Key; sesja via cookie)
     el("saveCfgBtn").onclick = async () => {
       try {
-        // 1) dopilnuj min 1%
         items = items.map(sanitizeItem);
-        // 2) normalizacja do pełnych %
         items = normalizeWeightsTo100(items);
         renderWheelList();
-
-        const key = localStorage.getItem("ADMIN_KEY") || el("adminKey").value || "";
         const r = await fetch("/config", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Admin-Key": key },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items, theme })
         });
         if (!r.ok) throw new Error(await r.text());
-        alert("Zapisano na serwerze (pełne % z sumą 100, motyw i bonusy zapisane).");
+        alert("Zapisano na serwerze (pełne % z sumą 100, motyw i bonusy).");
       } catch (e) {
         alert("Błąd zapisu: " + e.message);
       }
@@ -437,7 +397,6 @@
         a = b;
       }
 
-      // hub
       if (mode === "wood"){
         ctx.beginPath(); ctx.arc(CX,CY,R*0.45,0,2*Math.PI);
         const hg=ctx.createRadialGradient(CX,CY,2,CX,CY,R*0.45);
@@ -466,7 +425,6 @@
 
     // BOOT
     (async function(){
-      el("adminKey").value = localStorage.getItem("ADMIN_KEY") || "";
       await loadStatus();
       await loadWheel();
     })();
