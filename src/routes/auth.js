@@ -28,7 +28,13 @@ router.get("/auth/login", async (req, res) => {
     }
 
     const desiredScopes = ["user:read","channel:read","channel:write","chat:write","events:subscribe"];
-    const redirectUri = env.KICK_REDIRECT_URI || `${req.protocol}://${req.get("host")}/auth/callback`;
+    // Use getBaseUrl helper for proper proxy support (x-forwarded-proto, x-forwarded-host)
+    const getBaseUrl = (req) => {
+      const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
+      const host  = (req.headers["x-forwarded-host"]  || req.get("host")).split(",")[0].trim();
+      return `${proto}://${host}`;
+    };
+    const redirectUri = env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
     const authClient = new KickAuthClient({
       clientId: env.KICK_CLIENT_ID,
       clientSecret: env.KICK_CLIENT_SECRET,

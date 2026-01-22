@@ -20,7 +20,7 @@ server.listen(env.PORT_HTTP, () => {
     KICK_CLIENT_ID: env.KICK_CLIENT_ID ? "(set)" : "(missing)",
     KICK_REDIRECT_URI: env.KICK_REDIRECT_URI || "<dynamic>",
     WEBHOOK_SECRET: env.mask(env.WEBHOOK_SECRET),
-    TOK_PATH: env.TOK_PATH, CFG_PATH: env.CFG_PATH, GOALS_PATH: env.GOALS_PATH,
+    TOK_PATH: env.TOK_PATH, CFG_PATH: env.CFG_PATH, GOALS_PATH: env.GOALS_PATH, PENDING_PATH: env.PENDING_PATH,
     ADMIN_KEY: env.ADMIN_KEY ? "(set)" : "(missing)",
     SESSION_SECRET: env.SESSION_SECRET ? "(set)" : "(missing)",
     TRIGGER_KEY: env.TRIGGER_KEY ? "(set)" : "(missing)",

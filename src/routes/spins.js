@@ -6,15 +6,42 @@ const router = Router();
 
 router.get("/test/:n", (req, res) => {
   const n = parseInt(req.params.n, 10) || 0;
+  const timeUntilNext = spins.getTimeUntilNextSpin();
+  const pendingBefore = spins.getPending();
+  
   spins.deliverSpinOrQueue(n);
-  res.send(`sent ${n}`);
+  
+  const pendingAfter = spins.getPending();
+  const delaySeconds = Math.ceil(timeUntilNext / 1000);
+  
+  if (timeUntilNext > 0) {
+    res.send(`✅ Dodano ${n} spin(ów) do kolejki\n` +
+             `⏱️ Opóźnienie: ${delaySeconds}s (${Math.floor(delaySeconds/60)}:${String(delaySeconds%60).padStart(2,'0')})\n` +
+             `📊 Oczekujące: ${pendingAfter} spin(ów)\n` +
+             `\nTimer będzie widoczny na /delay.html`);
+  } else {
+    res.send(`✅ Wysłano ${n} spin(ów)\n` +
+             `📊 Oczekujące: ${pendingAfter} spin(ów)\n` +
+             `\nNastępny spin będzie miał 5-minutowe opóźnienie po zakończeniu.`);
+  }
 });
 
-router.get("/spins/pending", (_req, res) => res.json({ ok:true, count: spins.getPending() }));
+router.get("/spins/pending", (_req, res) => {
+  const timeUntilNext = spins.getTimeUntilNextSpin();
+  res.json({ 
+    ok: true, 
+    count: spins.getPending(),
+    timeUntilNext: Math.ceil(timeUntilNext / 1000)
+  });
+});
 router.post("/spins/consume", (req, res) => {
   const want = Number(req.body?.count || 0);
   const taken = spins.consumePending(want);
   res.json({ ok:true, taken });
+});
+router.post("/spins/complete", (_req, res) => {
+  spins.markSpinComplete();
+  res.json({ ok: true });
 });
 
 router.get("/trigger/spin", (req, res) => {

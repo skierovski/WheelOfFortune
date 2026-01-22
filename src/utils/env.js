@@ -16,6 +16,7 @@ export const env = {
   TOK_PATH: process.env.TOK_PATH || `${process.cwd()}/tokens.json`,
   CFG_PATH: process.env.CFG_PATH || "/data/wheel.json",
   GOALS_PATH: process.env.GOALS_PATH || "/data/goals.json",
+  PENDING_PATH: process.env.PENDING_PATH || "/data/pending.json",
 
   DEV_BYPASS_AUTH: process.env.DEV_BYPASS_AUTH === "1",
   DEV_FAKE_BID: Number(process.env.DEV_FAKE_BID || 999999),

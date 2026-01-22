@@ -1,4 +1,4 @@
-import { ensureAccessToken } from "./tokens.js";
+import { ensureAccessToken, tokenStore } from "./tokens.js";
 import { getBroadcasterId, listSubscriptions, subscribeToEvents } from "./kick.js";
 
 let LAST_CALLBACK_URL = null; // ustawiane w /setup
@@ -7,7 +7,7 @@ export function setLastCallbackUrl(url) { LAST_CALLBACK_URL = url; }
 
 async function ensureSubscribed() {
   try {
-    if (!LAST_CALLBACK_URL) return;
+    if (!LAST_CALLBACK_URL) return; // jeszcze nie wiemy jaki jest publiczny callback — odwiedź /setup
     await ensureAccessToken();
     const bid = await getBroadcasterId();
     const subs = await listSubscriptions(bid);
@@ -16,15 +16,14 @@ async function ensureSubscribed() {
       console.log("[SUBSCRIBE][watchdog] missing gifts sub -> creating");
       await subscribeToEvents(bid, LAST_CALLBACK_URL);
     } else {
-      const current = subs.find(s => s?.name === "channel.subscription.gifts");
-      console.log(`[SUBSCRIBE][watchdog] OK gifts sub (id=${current?.subscription_id||"?"})`);
+      console.log("[SUBSCRIBE][watchdog] OK (gifts sub exists)");
     }
   } catch (e) {
     console.warn("[SUBSCRIBE][watchdog] error:", e?.message || e);
   }
 }
 
-import { tokenStore } from "./tokens.js";
+/* Watchdog tokenów – co 2 min, jeśli do końca < 15 min, odśwież */
 async function refreshIfSoon() {
   try {
     const t = tokenStore.loadTokens();

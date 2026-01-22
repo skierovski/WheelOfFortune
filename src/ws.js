@@ -7,7 +7,17 @@ export function createWSS() {
     console.log("WS client connected:", req.socket.remoteAddress);
     ws.isAlive = true;
     ws.on("pong", () => { ws.isAlive = true; });
-    try { ws.send(JSON.stringify({ action: "pending", count: spins.getPending() })); } catch {}
+    try { 
+      const pending = spins.getPending();
+      const timeUntilNext = spins.getTimeUntilNextSpin();
+      ws.send(JSON.stringify({ 
+        action: "pending", 
+        count: pending,
+        type: "delay",
+        timeUntilNext: Math.ceil(timeUntilNext / 1000),
+        pending: pending
+      })); 
+    } catch {}
     ws.on("close", () => console.log("WS closed"));
     ws.on("error", (e) => console.error("WS client error:", e));
   });

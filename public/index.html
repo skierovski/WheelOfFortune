@@ -613,6 +613,10 @@
         }
         queue.shift();
         await wait(2000);
+        
+        // Notify server after EACH spin completes (not just at the end)
+        // This ensures 5-minute delay between each spin, even if multiple are queued
+        fetch('/spins/complete', { method: 'POST' }).catch(()=>{});
       }
       spinning=false;
       hideOverlay(1000);
@@ -636,7 +640,8 @@
         return;
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
-        for (let i = 0; i < data.times; i++) queue.push(1);
+        // Server always sends 1 spin at a time to respect delays
+        queue.push(1);
         showOverlay(); runQueue(); return;
       }
     }
@@ -660,8 +665,12 @@
       } catch { return 0; }
     }
     async function catchUpPending() {
-      const cnt = await fetchPending();
-      if (cnt > 0) {
+      const r = await fetch('/spins/pending', { cache: 'no-store' });
+      const j = await r.json();
+      const cnt = Math.max(0, Number(j?.count || 0));
+      const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
+      
+      if (timeUntilNext === 0 && cnt > 0) {
         const taken = await consumePending(cnt);
         if (taken > 0) {
           for (let i = 0; i < taken; i++) queue.push(1);

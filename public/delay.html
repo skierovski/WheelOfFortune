@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Delay Timer</title>
+  <style>
+    html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
+    .delay-overlay { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); 
+      opacity: 0; transition: opacity .4s ease; pointer-events: none; z-index: 15;
+      padding: 20px 32px; border-radius: 16px; background: rgba(17, 17, 17, 0.92); 
+      color: #fff; font-family: system-ui, sans-serif; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.1);
+      backdrop-filter: blur(8px); }
+    .delay-overlay.show { opacity: 1; }
+    .delay-overlay h3 { margin: 0 0 12px 0; font-size: 24px; font-weight: 700; color: #fbbf24; }
+    .delay-overlay .time { font-size: 48px; font-weight: 800; margin: 8px 0; color: #fff; 
+      font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+    .delay-overlay .pending { font-size: 14px; color: #9ca3af; margin-top: 8px; }
+    .delay-overlay .pending strong { color: #fbbf24; }
+  </style>
+</head>
+<body>
+  <div id="delayOverlay" class="delay-overlay" aria-hidden="true">
+    <h3>⏱️ Nastepne koło za:</h3>
+    <div class="time" id="delayTime">0:00</div>
+    <div class="pending" id="delayPending"></div>
+  </div>
+
+  <script>
+    // ====== Delay overlay ======
+    const delayOverlay = document.getElementById("delayOverlay");
+    const delayTimeEl = document.getElementById("delayTime");
+    const delayPendingEl = document.getElementById("delayPending");
+    let currentDelaySeconds = 0;
+    let pendingCount = 0;
+    let delayUpdateInterval = null;
+
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function updateDelayDisplay() {
+      if (currentDelaySeconds > 0) {
+        delayTimeEl.textContent = formatTime(currentDelaySeconds);
+        if (pendingCount > 0) {
+          delayPendingEl.innerHTML = `<strong>${pendingCount}</strong> spin${pendingCount !== 1 ? 's' : ''} queued`;
+        } else {
+          delayPendingEl.textContent = "";
+        }
+        delayOverlay.classList.add("show");
+        delayOverlay.setAttribute("aria-hidden", "false");
+      } else {
+        delayOverlay.classList.remove("show");
+        delayOverlay.setAttribute("aria-hidden", "true");
+        if (delayUpdateInterval) {
+          clearInterval(delayUpdateInterval);
+          delayUpdateInterval = null;
+        }
+      }
+    }
+
+    function startDelayCountdown(seconds, pending = 0) {
+      currentDelaySeconds = seconds;
+      pendingCount = pending;
+      updateDelayDisplay();
+      
+      if (delayUpdateInterval) clearInterval(delayUpdateInterval);
+      delayUpdateInterval = setInterval(() => {
+        if (currentDelaySeconds > 0) {
+          currentDelaySeconds--;
+          updateDelayDisplay();
+        } else {
+          clearInterval(delayUpdateInterval);
+          delayUpdateInterval = null;
+        }
+      }, 1000);
+    }
+
+    // ====== WebSocket connection ======
+    const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
+    let ws = null;
+    let reconnectDelay = 1000;
+
+    function handleServerMessage(data) {
+      if (data.type === "delay" && Number.isFinite(data.timeUntilNext)) {
+        startDelayCountdown(data.timeUntilNext, data.pending || 0);
+        return;
+      }
+    }
+
+    async function fetchDelayStatus() {
+      try {
+        const r = await fetch('/spins/pending', { cache: 'no-store' });
+        const j = await r.json();
+        const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
+        const pending = Math.max(0, Number(j?.count || 0));
+        if (timeUntilNext > 0 || pending > 0) {
+          startDelayCountdown(timeUntilNext, pending);
+        }
+      } catch (e) {
+        console.error("Failed to fetch delay status:", e);
+      }
+    }
+
+    function connectWS() {
+      try { if (ws) ws.close(); } catch {}
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = async () => {
+        reconnectDelay = 1000;
+        await fetchDelayStatus();
+      };
+      
+      ws.onmessage = async (evt) => {
+        try { 
+          handleServerMessage(JSON.parse(evt.data)); 
+        } catch (e) { 
+          console.error("Bad WS message", e); 
+        }
+      };
+      
+      ws.onerror = (e) => { 
+        try { ws.close(); } catch {} 
+      };
+      
+      ws.onclose = () => {
+        const wait = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 1.8, 15000);
+        setTimeout(connectWS, wait);
+      };
+    }
+
+    // Initial connection and periodic status check
+    connectWS();
+    setInterval(fetchDelayStatus, 5000); // Check every 5 seconds as backup
+  </script>
+</body>
+</html>
