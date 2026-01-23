@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { spins } from "../services/spins.js";
+import { postChatMessage } from "../services/kick.js";
 import { env } from "../utils/env.js";
 
 const router = Router();
@@ -55,6 +56,23 @@ router.get("/trigger/spin", (req, res) => {
     return res.json({ ok:true, requested:n, delivered, pending:spins.getPending() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:String(e?.message||e) });
+  }
+});
+
+router.post("/chat/announce", async (req, res) => {
+  try {
+    const label = String(req.body?.label || "").trim();
+    if (!label) {
+      return res.status(400).json({ ok: false, error: "Missing label" });
+    }
+    
+    // Send result to Kick chat
+    await postChatMessage(`🎡 ${label}`);
+    
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("[chat/announce] error:", e);
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
