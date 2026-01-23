@@ -641,17 +641,39 @@
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
         // Server always sends 1 spin at a time to respect delays
+        console.log("[WS] 📥 Received spin command");
         queue.push(1);
         showOverlay(); runQueue(); return;
       }
     }
 
-    async function fetchPending() {
-      try {
-        const r = await fetch('/spins/pending', { cache: 'no-store' });
-        const j = await r.json();
-        return Math.max(0, Number(j?.count || 0));
-      } catch { return 0; }
+    // HTTP polling fallback - ensures we don't miss spins if WebSocket fails
+    let lastWsMessageTime = Date.now();
+    async function checkForMissedSpins() {
+      // Only poll if WebSocket seems dead (no messages for 10 seconds) or not connected
+      const timeSinceLastMessage = Date.now() - lastWsMessageTime;
+      const wsConnected = ws && ws.readyState === WebSocket.OPEN;
+      
+      if (!wsConnected || timeSinceLastMessage > 10000) {
+        // WebSocket might be dead - check server directly
+        console.log("[HTTP POLL] Checking server (WS inactive)...");
+        try {
+          const r = await fetch('/spins/pending', { cache: 'no-store' });
+          const j = await r.json();
+          const pending = Math.max(0, Number(j?.count || 0));
+          const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
+          
+          // If server says spin is ready but we haven't spun, we missed the WS message
+          if (pending > 0 && timeUntilNext === 0 && queue.length === 0 && !spinning) {
+            console.log("[HTTP POLL] ✅ Found ready spin (missed WS) - triggering!");
+            queue.push(1);
+            showOverlay();
+            runQueue();
+          }
+        } catch (e) {
+          console.error("[HTTP POLL] Failed:", e);
+        }
+      }
     }
 
     function connectWS() {
@@ -659,16 +681,24 @@
       ws = new WebSocket(WS_URL);
 
       ws.onopen = async () => {
+        console.log("[WS] ✅ Connected");
         lastSignalAt = Date.now();
+        lastWsMessageTime = Date.now();
         reconnectDelay = 1000;
-        // Don't fetch/consume spins - server will broadcast them when ready
+        // Check immediately if we missed any spins while disconnected
+        checkForMissedSpins();
       };
       ws.onmessage = async (evt) => {
         lastSignalAt = Date.now();
+        lastWsMessageTime = Date.now();
         try { handleServerMessage(JSON.parse(evt.data)); } catch (e) { console.error("Bad WS message", e); }
       };
-      ws.onerror = (e) => { try { ws.close(); } catch {} };
+      ws.onerror = (e) => { 
+        console.warn("[WS] ⚠️ Error - will reconnect");
+        try { ws.close(); } catch {} 
+      };
       ws.onclose = () => {
+        console.log("[WS] ❌ Closed - reconnecting in", Math.ceil(reconnectDelay/1000), "s");
         const wait = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 1.8, 15000);
         setTimeout(connectWS, wait);
@@ -677,13 +707,16 @@
       const guard = setInterval(() => {
         if (!ws || ws.readyState !== WebSocket.OPEN) { clearInterval(guard); return; }
         if (Date.now() - lastSignalAt > staleKickMs) {
+          console.warn("[WS] ⏱️ Stale connection - reconnecting");
           try { ws.close(); } catch {}
           clearInterval(guard);
         }
       }, 5000);
     }
     connectWS();
-    // Removed periodic catchUpPending - server broadcasts spins when ready via WebSocket
+    
+    // HTTP polling fallback - checks every 5 seconds
+    setInterval(checkForMissedSpins, 5000);
 
     if (!OBS_EDIT_MODE) setInterval(() => { location.reload(); }, hardReloadEveryMs);
 
@@ -697,6 +730,29 @@
     }, 20_000);
 
     canvas.addEventListener("click", () => { queue.push(1); showOverlay(); runQueue(); });
+
+    // ====== OBS Browser Source Visibility Detection ======
+    // Reconnect and check for spins when overlay becomes visible
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        console.log("[OBS] 👁️ Overlay visible - reconnecting WS");
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          connectWS();
+        } else {
+          // Already connected, just check for missed spins
+          checkForMissedSpins();
+        }
+      }
+    });
+
+    // OBS-specific activation event
+    window.addEventListener("obsSourceActiveChanged", (event) => {
+      if (event.detail?.active) {
+        console.log("[OBS] 🎬 Source activated - reconnecting WS");
+        connectWS();
+        checkForMissedSpins();
+      }
+    });
 
     // ====== Editor (client-side helper) ======
     const editor=document.getElementById("editor");

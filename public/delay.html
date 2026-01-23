@@ -82,8 +82,10 @@
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
     let ws = null;
     let reconnectDelay = 1000;
+    let lastWsMessageTime = Date.now();
 
     function handleServerMessage(data) {
+      lastWsMessageTime = Date.now();
       if (data.type === "delay" && Number.isFinite(data.timeUntilNext)) {
         startDelayCountdown(data.timeUntilNext, data.pending || 0);
         return;
@@ -98,9 +100,24 @@
         const pending = Math.max(0, Number(j?.count || 0));
         if (timeUntilNext > 0 || pending > 0) {
           startDelayCountdown(timeUntilNext, pending);
+        } else {
+          // No delay active, hide overlay
+          currentDelaySeconds = 0;
+          updateDelayDisplay();
         }
       } catch (e) {
-        console.error("Failed to fetch delay status:", e);
+        console.error("[DELAY] Failed to fetch status:", e);
+      }
+    }
+
+    // Smart polling - only poll if WebSocket seems dead
+    async function checkDelayStatus() {
+      const timeSinceLastMessage = Date.now() - lastWsMessageTime;
+      const wsConnected = ws && ws.readyState === WebSocket.OPEN;
+      
+      if (!wsConnected || timeSinceLastMessage > 10000) {
+        console.log("[DELAY POLL] Checking server (WS inactive)...");
+        await fetchDelayStatus();
       }
     }
 
@@ -109,6 +126,8 @@
       ws = new WebSocket(WS_URL);
 
       ws.onopen = async () => {
+        console.log("[DELAY WS] ✅ Connected");
+        lastWsMessageTime = Date.now();
         reconnectDelay = 1000;
         await fetchDelayStatus();
       };
@@ -117,24 +136,49 @@
         try { 
           handleServerMessage(JSON.parse(evt.data)); 
         } catch (e) { 
-          console.error("Bad WS message", e); 
+          console.error("[DELAY WS] Bad message", e); 
         }
       };
       
       ws.onerror = (e) => { 
+        console.warn("[DELAY WS] ⚠️ Error - will reconnect");
         try { ws.close(); } catch {} 
       };
       
       ws.onclose = () => {
+        console.log("[DELAY WS] ❌ Closed - reconnecting in", Math.ceil(reconnectDelay/1000), "s");
         const wait = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 1.8, 15000);
         setTimeout(connectWS, wait);
       };
     }
 
-    // Initial connection and periodic status check
+    // Initial connection
     connectWS();
-    setInterval(fetchDelayStatus, 5000); // Check every 5 seconds as backup
+    
+    // Smart HTTP polling fallback - checks every 5 seconds
+    setInterval(checkDelayStatus, 5000);
+
+    // OBS Browser Source Visibility Detection
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        console.log("[DELAY OBS] 👁️ Overlay visible - reconnecting");
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          connectWS();
+        } else {
+          fetchDelayStatus();
+        }
+      }
+    });
+
+    // OBS-specific activation event
+    window.addEventListener("obsSourceActiveChanged", (event) => {
+      if (event.detail?.active) {
+        console.log("[DELAY OBS] 🎬 Source activated - reconnecting");
+        connectWS();
+        fetchDelayStatus();
+      }
+    });
   </script>
 </body>
 </html>
