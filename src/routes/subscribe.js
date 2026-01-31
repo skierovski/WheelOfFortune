@@ -6,6 +6,33 @@ import { watchdogState } from "../services/watchdogs.js";
 
 const router = Router();
 
+// GET /subscribe - Check current subscription status
+router.get("/subscribe", async (req, res) => {
+  try {
+    const broadcasterId = await getBroadcasterId();
+    const subs = await listSubscriptions(broadcasterId);
+    
+    const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
+    const host  = (req.headers["x-forwarded-host"]  || req.get("host")).split(",")[0].trim();
+    const callback = `${proto}://${host}/webhook`;
+    
+    const hasGifts = subs.some(s => s?.name === "channel.subscription.gifts");
+    const giftsSub = subs.find(s => s?.name === "channel.subscription.gifts");
+    
+    return res.json({ 
+      ok: true, 
+      subscribed: hasGifts,
+      callbackUrl: callback,
+      subscription: giftsSub || null,
+      allSubscriptions: subs
+    });
+  } catch (e) {
+    console.error("[GET /subscribe] error:", e);
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// POST /subscribe - Manually create subscription
 router.post("/subscribe", async (req, res) => {
   try {
     const hasAdminKey = env.ADMIN_KEY && req.get("X-Admin-Key") === env.ADMIN_KEY;
@@ -16,12 +43,32 @@ router.post("/subscribe", async (req, res) => {
     const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
     const host  = (req.headers["x-forwarded-host"]  || req.get("host")).split(",")[0].trim();
     const callback = `${proto}://${host}/webhook`;
+    
+    // Set callback URL for watchdog
+    watchdogState.setLastCallbackUrl(callback);
 
     const resp = await subscribeToEvents(broadcasterId, callback);
     return res.json({ ok:true, data: resp });
   } catch (e) {
-    console.error("[/subscribe] error:", e);
+    console.error("[POST /subscribe] error:", e);
     return res.status(400).json({ ok:false, error:String(e?.message||e) });
+  }
+});
+
+// POST /subscribe/check - Manually trigger subscription check (runs watchdog immediately)
+router.post("/subscribe/check", async (req, res) => {
+  try {
+    const hasAdminKey = env.ADMIN_KEY && req.get("X-Admin-Key") === env.ADMIN_KEY;
+    const hasSession = !!getSessionBroadcasterId(req);
+    if (!hasAdminKey && !hasSession) return res.status(401).json({ ok:false, error:"Unauthorized" });
+
+    console.log("[/subscribe/check] Manual watchdog trigger");
+    await watchdogState.ensureSubscribed();
+    
+    return res.json({ ok: true, message: "Subscription check completed" });
+  } catch (e) {
+    console.error("[POST /subscribe/check] error:", e);
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
@@ -50,14 +97,24 @@ router.get("/setup", async (req, res) => {
       <p>Status tokenów: ${hasTokens ? '<b class="ok">OK (?)</b>' : '<b class="warn">brak – zaloguj</b>'}</p>
       <p>Subskrypcja eventów: ${subLine}</p>
       <hr>
-      <h2>OBS</h2>
+      <h2>OBS Browser Sources</h2>
       <ol>
-        <li>W OBS dodaj <b>Browser Source</b>: <code>${base}/?overlay=1</code></li>
-        <li>Tło jest przezroczyste.</li>
+        <li><b>Wheel overlay:</b> <code>${base}/index.html</code></li>
+        <li><b>Delay timer overlay:</b> <code>${base}/delay.html</code></li>
+        <li>Set background to transparent in OBS</li>
         <li>Webhook callback: <code>${cb}</code></li>
       </ol>
-      <p>Panel: <a class="btn" href="/home">🏠 /home</a></p>
-      <p>Test koła: <a class="btn" href="/test/1">▶️ /test/1</a></p>
+      <hr>
+      <h2>Test Spins</h2>
+      <p><a class="btn" href="/test">🎯 Open Test Panel</a> <span style="color:#22c55e;">(Recommended!)</span></p>
+      <p>Or use direct URLs:</p>
+      <ul>
+        <li><a href="/test/1">Test 1 spin</a></li>
+        <li><a href="/test/3">Test 3 spins</a></li>
+        <li><a href="/test/5">Test 5 spins</a></li>
+      </ul>
+      <hr>
+      <p><a class="btn" href="/home">🏠 Back to Home</a></p>
     </body></html>
   `);
 });

@@ -7,11 +7,58 @@ const router = Router();
 
 router.get("/webhook", (req, res) => {
   console.log("[WEBHOOK][GET] ping", { ip: req.ip, ua: req.get("user-agent")||null, q: req.query });
-  res.status(200).send("webhook-get-ok");
+  res.status(200).send("webhook-get-ok - Kick can reach this endpoint ✅");
 });
+
 router.head("/webhook", (req, res) => {
   console.log("[WEBHOOK][HEAD] ping", { ip: req.ip, ua: req.get("user-agent")||null });
   res.status(200).end();
+});
+
+// Webhook test/debug endpoint
+router.get("/webhook/status", (req, res) => {
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
+  const host  = (req.headers["x-forwarded-host"]  || req.get("host")).split(",")[0].trim();
+  const callback = `${proto}://${host}/webhook`;
+  
+  res.type("html").send(`
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"><title>Webhook Status</title>
+    <style>
+      body { font-family: system-ui; margin: 40px; }
+      .status { padding: 12px; border-radius: 8px; margin: 10px 0; }
+      .ok { background: #dcfce7; border: 1px solid #16a34a; color: #15803d; }
+      .warn { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; }
+      code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }
+      pre { background: #f6f8fa; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    </style>
+    </head><body>
+      <h1>🪝 Webhook Status</h1>
+      
+      <div class="status ok">
+        <strong>✅ Webhook endpoint is accessible</strong><br>
+        Kick can reach: <code>${callback}</code>
+      </div>
+      
+      <h2>Check Subscription:</h2>
+      <p>Visit <a href="/subscribe"><code>/subscribe</code></a> to see current subscription status</p>
+      
+      <h2>Recent Activity:</h2>
+      <p>Check server logs for:</p>
+      <ul>
+        <li><code>[WEBHOOK] ⇢ Incoming</code> - webhook received</li>
+        <li><code>[WEBHOOK] ✅ OK type: channel.subscription.gifts</code> - event processed</li>
+        <li><code>[SPIN] Broadcasting X spin(s)</code> - spins triggered</li>
+      </ul>
+      
+      <h2>Test Webhook:</h2>
+      <pre>curl -X POST ${callback} \\
+  -H "Content-Type: application/json" \\
+  -d '{"test": true}'</pre>
+  
+      <p><a href="/home">← Back to Home</a></p>
+    </body></html>
+  `);
 });
 
 const SEEN_IDS = new Set();
