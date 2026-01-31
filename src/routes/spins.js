@@ -124,7 +124,15 @@ Open these to see the results:
 Trigger more: /test/${n}`);
 });
 
-// No longer needed - removed server-side queue system
+// Endpoint for delay.html to check pending spins
+router.get("/spins/pending", (_req, res) => {
+  const timeUntilNext = spins.getTimeUntilNextSpin();
+  res.json({ 
+    ok: true, 
+    count: spins.getPending(),
+    timeUntilNext: Math.ceil(timeUntilNext / 1000)
+  });
+});
 
 router.get("/trigger/spin", (req, res) => {
   try {
