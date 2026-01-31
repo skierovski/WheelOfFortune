@@ -134,6 +134,12 @@ router.get("/spins/pending", (_req, res) => {
   });
 });
 
+// Called by wheel overlay when a spin finishes (to start 5-min delay timer)
+router.post("/spins/complete", (_req, res) => {
+  spins.markSpinComplete();
+  res.json({ ok: true });
+});
+
 router.get("/trigger/spin", (req, res) => {
   try {
     const key = String(req.query.key || "");
