@@ -20,15 +20,20 @@ app.set("trust proxy", 1);
 // middleware
 app.use(accessLog);
 app.use(csp);
-app.use(bodyParser.json());
 
 // statyki
 app.use(express.static(path.join(process.cwd(), "public")));
 
-// routes
+// IMPORTANT: Webhook route MUST come before bodyParser.json()
+// because it needs raw body for signature verification
+app.use(webhookRoutes);
+
+// JSON body parser for other routes
+app.use(bodyParser.json());
+
+// Other routes
 app.use(indexRoutes);
 app.use(authRoutes);
 app.use(configRoutes);
 app.use(subscribeRoutes);
-app.use(webhookRoutes);
 app.use(spinsRoutes);

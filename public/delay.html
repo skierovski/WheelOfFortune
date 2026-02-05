@@ -110,14 +110,22 @@
       }
     }
 
-    // Smart polling - only poll if WebSocket seems dead
+    // Simple wake-up check for delay overlay
     async function checkDelayStatus() {
-      const timeSinceLastMessage = Date.now() - lastWsMessageTime;
-      const wsConnected = ws && ws.readyState === WebSocket.OPEN;
-      
-      if (!wsConnected || timeSinceLastMessage > 10000) {
-        console.log("[DELAY POLL] Checking server (WS inactive)...");
-        await fetchDelayStatus();
+      try {
+        const r = await fetch('/spins/pending', { cache: 'no-store' });
+        const j = await r.json();
+        const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
+        const pending = Math.max(0, Number(j?.count || 0));
+        
+        if (timeUntilNext > 0 || pending > 0) {
+          startDelayCountdown(timeUntilNext, pending);
+        } else {
+          currentDelaySeconds = 0;
+          updateDelayDisplay();
+        }
+      } catch (e) {
+        console.error("[DELAY] Failed to check:", e);
       }
     }
 
@@ -125,58 +133,47 @@
       try { if (ws) ws.close(); } catch {}
       ws = new WebSocket(WS_URL);
 
-      ws.onopen = async () => {
-        console.log("[DELAY WS] ✅ Connected");
-        lastWsMessageTime = Date.now();
+      ws.onopen = () => {
+        console.log("[DELAY WS] ✅ Connected (nice-to-have for instant updates)");
         reconnectDelay = 1000;
-        await fetchDelayStatus();
       };
       
-      ws.onmessage = async (evt) => {
-        try { 
-          handleServerMessage(JSON.parse(evt.data)); 
-        } catch (e) { 
-          console.error("[DELAY WS] Bad message", e); 
-        }
+      ws.onmessage = (evt) => {
+        console.log("[DELAY WS] 📥 Got update:", evt.data);
+        try { handleServerMessage(JSON.parse(evt.data)); } 
+        catch (e) { console.error("[DELAY WS] Bad message", e); }
       };
       
-      ws.onerror = (e) => { 
-        console.warn("[DELAY WS] ⚠️ Error - will reconnect");
+      ws.onerror = () => { 
+        console.log("[DELAY WS] ⚠️ Error (no problem, we have wake-up check)");
         try { ws.close(); } catch {} 
       };
       
       ws.onclose = () => {
-        console.log("[DELAY WS] ❌ Closed - reconnecting in", Math.ceil(reconnectDelay/1000), "s");
-        const wait = reconnectDelay;
-        reconnectDelay = Math.min(reconnectDelay * 1.8, 15000);
-        setTimeout(connectWS, wait);
+        console.log("[DELAY WS] ❌ Disconnected (no problem)");
+        setTimeout(connectWS, 10000); // Try again in 10 seconds
       };
     }
 
-    // Initial connection
+    // Connect once
     connectWS();
     
-    // Smart HTTP polling fallback - checks every 5 seconds
+    // Check every 5 seconds while visible (simple periodic update for countdown)
     setInterval(checkDelayStatus, 5000);
 
-    // OBS Browser Source Visibility Detection
+    // === SIMPLE WAKE-UP SYSTEM ===
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
-        console.log("[DELAY OBS] 👁️ Overlay visible - reconnecting");
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          connectWS();
-        } else {
-          fetchDelayStatus();
-        }
+        console.log("[DELAY OBS] 👁️ Overlay visible - checking for updates");
+        checkDelayStatus(); // Simple: ask server once
       }
     });
 
-    // OBS-specific activation event
+    // OBS-specific event
     window.addEventListener("obsSourceActiveChanged", (event) => {
       if (event.detail?.active) {
-        console.log("[DELAY OBS] 🎬 Source activated - reconnecting");
-        connectWS();
-        fetchDelayStatus();
+        console.log("[DELAY OBS] 🎬 Source activated - checking for updates");
+        checkDelayStatus(); // Simple: ask server once
       }
     });
   </script>
