@@ -1,25 +1,56 @@
+import fs from "fs";
+import path from "path";
 import { ensureAccessToken, tokenStore } from "./tokens.js";
 import { getBroadcasterId, listSubscriptions, subscribeToEvents } from "./kick.js";
 import { env } from "../utils/env.js";
 
-let LAST_CALLBACK_URL = null; // ustawiane w /setup
+let LAST_CALLBACK_URL = null;
 
-export function setLastCallbackUrl(url) { LAST_CALLBACK_URL = url; }
+const CALLBACK_URL_PATH = process.env.CALLBACK_URL_FILE || path.join(path.dirname(env.TOK_PATH), ".callback_url");
 
-// Auto-detect callback URL from environment or config
+function loadPersistedCallbackUrl() {
+  try {
+    const s = fs.readFileSync(CALLBACK_URL_PATH, "utf8").trim();
+    if (s) return s;
+  } catch {}
+  return null;
+}
+
+function saveCallbackUrl(url) {
+  if (!url?.trim()) return;
+  try {
+    fs.mkdirSync(path.dirname(CALLBACK_URL_PATH), { recursive: true });
+    fs.writeFileSync(CALLBACK_URL_PATH, url.trim(), "utf8");
+  } catch (e) {
+    console.warn("[WATCHDOG] Could not persist callback URL:", e?.message);
+  }
+}
+
+export function setLastCallbackUrl(url) {
+  LAST_CALLBACK_URL = url;
+  if (url) saveCallbackUrl(url);
+}
+
+// Callback URL: memory → persisted file → PUBLIC_BASE_URL → KICK_REDIRECT_URI derived
 function getCallbackUrl() {
   if (LAST_CALLBACK_URL) return LAST_CALLBACK_URL;
-  
-  // Try to construct from KICK_REDIRECT_URI (same domain usually)
+
+  const fromFile = loadPersistedCallbackUrl();
+  if (fromFile) return fromFile;
+
+  if (env.PUBLIC_BASE_URL) {
+    const base = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const callback = base.includes("/webhook") ? base : `${base}/webhook`;
+    return callback;
+  }
+
   if (env.KICK_REDIRECT_URI) {
     try {
-      const url = new URL(env.KICK_REDIRECT_URI);
-      const callback = `${url.protocol}//${url.host}/webhook`;
-      console.log("[WATCHDOG] Auto-detected callback URL:", callback);
-      return callback;
+      const u = new URL(env.KICK_REDIRECT_URI);
+      return `${u.protocol}//${u.host}/webhook`;
     } catch {}
   }
-  
+
   return null;
 }
 
@@ -68,16 +99,13 @@ async function refreshIfSoon() {
 export function startWatchdogs() {
   console.log("[WATCHDOG] 🚀 Starting watchdogs...");
   
-  // Run subscription check immediately on startup
-  setTimeout(ensureSubscribed, 5000); // 5 seconds after server starts
-  
-  // Then check every 5 minutes (was 10 minutes)
+  // Re-subscribe soon after startup (tokens + callback URL from disk/env)
+  setTimeout(ensureSubscribed, 2000);
+
   setInterval(ensureSubscribed, 5 * 60 * 1000);
-  
-  // Token refresh watchdog - every 2 minutes
   setInterval(refreshIfSoon, 2 * 60 * 1000);
-  
-  console.log("[WATCHDOG] ✅ Watchdogs started (subscription check in 5s, then every 5min)");
+
+  console.log("[WATCHDOG] ✅ Watchdogs started (subscription in 2s, then every 5min)");
 }
 
 export const watchdogState = { 

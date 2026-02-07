@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { env } from "../utils/env.js";
 import { getSessionBroadcasterId } from "../utils/cookies.js";
-import { getBroadcasterId, subscribeToEvents } from "../services/kick.js";
+import { getBroadcasterId, listSubscriptions, subscribeToEvents } from "../services/kick.js";
 import { watchdogState } from "../services/watchdogs.js";
 
 const router = Router();

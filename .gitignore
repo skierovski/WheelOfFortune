@@ -11,6 +11,11 @@ yarn-error.log*
 *.bat
 *.sh
 
+# Auth / deploy persistence (do not commit)
+tokens.json
+.session_secret
+.callback_url
+
 # Logs
 logs
 *.log
