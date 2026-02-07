@@ -35,6 +35,11 @@
   </style>
 </head>
 <body>
+  <div id="debugIndicator" class="debug-indicator">
+    <div>WS: <span id="wsStatus">connecting...</span></div>
+    <div>Queue: <span id="debugPending">0</span></div>
+  </div>
+  
   <div id="resultBanner" class="result-banner" aria-hidden="true"></div>
   <div id="overlay" class="overlay">
     <canvas id="wheel" width="1000" height="1000"></canvas>
@@ -624,6 +629,7 @@
 
     // ====== WebSocket & watchdog ======
     const OBS_EDIT_MODE = new URLSearchParams(location.search).get("edit") === "1";
+    const DEBUG_MODE = new URLSearchParams(location.search).get("debug") === "1";
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
 
     let ws = null;
@@ -631,6 +637,19 @@
     let lastSignalAt = Date.now();
     const staleKickMs = 60_000;
     const hardReloadEveryMs = 30 * 60_000;
+
+    // Debug indicator
+    const debugIndicator = document.getElementById("debugIndicator");
+    const wsStatusEl = document.getElementById("wsStatus");
+    const debugPendingEl = document.getElementById("debugPending");
+    if (DEBUG_MODE) debugIndicator?.classList.add("show");
+    
+    function updateDebugStatus(wsState, pending = null) {
+      if (!DEBUG_MODE || !wsStatusEl) return;
+      wsStatusEl.textContent = wsState;
+      debugIndicator.className = "debug-indicator show " + (wsState === "connected" ? "connected" : "disconnected");
+      if (pending !== null) debugPendingEl.textContent = pending;
+    }
 
     function handleServerMessage(data) {
       if (data.type === "config" && Array.isArray(data.items)) {
