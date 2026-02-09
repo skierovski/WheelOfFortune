@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Panel - Wheel of Fortune</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0c10; color: #c9d1d9; min-height: 100vh; }
+
+    .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    .header h1 { font-size: 18px; color: #f0f6fc; }
+    .header .badge { background: #da3633; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 768px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+    .card h2 { font-size: 15px; color: #f0f6fc; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .card h2 .icon { font-size: 18px; }
+
+    .btn { padding: 8px 16px; border: 1px solid #30363d; border-radius: 8px; background: #21262d; color: #c9d1d9;
+      cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn:hover { background: #30363d; border-color: #484f58; }
+    .btn:active { background: #282e36; }
+    .btn-primary { background: #238636; border-color: #2ea043; color: white; }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-danger { background: #da3633; border-color: #f85149; color: white; }
+    .btn-danger:hover { background: #f85149; }
+    .btn-blue { background: #1f6feb; border-color: #388bfd; color: white; }
+    .btn-blue:hover { background: #388bfd; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+    input, select { padding: 8px 12px; border: 1px solid #30363d; border-radius: 8px; background: #0d1117;
+      color: #c9d1d9; font-size: 13px; font-family: inherit; }
+    input:focus, select:focus { outline: none; border-color: #388bfd; box-shadow: 0 0 0 3px rgba(56,139,253,0.15); }
+    input[type="number"] { width: 100px; }
+
+    .input-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+    .input-row label { font-size: 13px; color: #8b949e; min-width: 80px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px; color: #8b949e; border-bottom: 1px solid #30363d; font-weight: 500; }
+    td { padding: 8px; border-bottom: 1px solid #21262d; }
+    tr:hover td { background: rgba(56,139,253,0.04); }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, 'Cascadia Code', Menlo, monospace; font-size: 12px; }
+    .badge-ok { background: #238636; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+    .badge-warn { background: #9e6a03; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+    .badge-info { background: #1f6feb; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+
+    .url-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px;
+      font-family: monospace; font-size: 12px; cursor: pointer; position: relative; word-break: break-all; margin: 4px 0; }
+    .url-box:hover { border-color: #388bfd; }
+    .url-box::after { content: "click to copy"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      font-size: 10px; color: #484f58; }
+
+    .toast { position: fixed; bottom: 20px; right: 20px; background: #238636; color: white; padding: 10px 20px;
+      border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
+    .toast.show { opacity: 1; }
+
+    .env-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 13px; }
+    .env-grid .key { color: #8b949e; }
+    .env-grid .val { color: #c9d1d9; font-family: monospace; }
+
+    .empty { color: #484f58; font-style: italic; font-size: 13px; padding: 16px 0; }
+
+    #log { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px;
+      font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: #8b949e; }
+
+    .streamer-card { border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 12px; background: #0d1117; }
+    .streamer-card h3 { font-size: 14px; color: #f0f6fc; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .streamer-card .details { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 13px; margin-bottom: 10px; }
+    .streamer-card .details .key { color: #8b949e; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Admin Panel</h1>
+  <span class="badge">MASTER</span>
+  <span style="margin-left:auto; font-size:13px; color:#8b949e;" id="envBadge"></span>
+</div>
+
+<div class="container">
+  <div class="grid grid-2" style="margin-bottom:16px;">
+
+    <!-- ENVIRONMENT -->
+    <div class="card">
+      <h2><span class="icon">&#9881;</span> Environment</h2>
+      <div id="envInfo" class="env-grid"></div>
+    </div>
+
+    <!-- QUICK ACTIONS -->
+    <div class="card">
+      <h2><span class="icon">&#9889;</span> Quick Actions</h2>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="quickSetup()">Quick Setup (create dev streamer)</button>
+        <button class="btn" onclick="refreshAll()">Refresh All</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-blue" onclick="generateInvites()">Generate Invite Codes</button>
+        <input type="number" id="inviteCount" value="3" min="1" max="50" style="width:60px;" />
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-danger" onclick="resetDb()">Reset Database</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVITE CODES -->
+  <div class="card" style="margin-bottom:16px;">
+    <h2><span class="icon">&#127903;</span> Invite Codes</h2>
+    <div id="invitesBox"></div>
+  </div>
+
+  <!-- CREATE STREAMER -->
+  <div class="card" style="margin-bottom:16px;">
+    <h2><span class="icon">&#10133;</span> Create Streamer</h2>
+    <div class="input-row">
+      <label>Broadcaster ID:</label>
+      <input type="number" id="newBid" placeholder="e.g. 12345" />
+      <label>Username:</label>
+      <input type="text" id="newUsername" placeholder="e.g. streamer1" />
+      <button class="btn btn-primary" onclick="createStreamer()">Create</button>
+    </div>
+  </div>
+
+  <!-- STREAMERS LIST -->
+  <div class="card" style="margin-bottom:16px;">
+    <h2><span class="icon">&#128101;</span> Streamers</h2>
+    <div id="streamersBox"><div class="empty">Loading...</div></div>
+  </div>
+
+  <!-- ACTIVITY LOG -->
+  <div class="card">
+    <h2><span class="icon">&#128196;</span> Activity Log</h2>
+    <div id="log">Admin panel loaded.\n</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const KEY = new URLSearchParams(location.search).get("admin_key") || "";
+  const BASE = "";
+
+  // ── Helpers ────────────────────────────────────────────────────
+
+  function headers(extra = {}) {
+    const h = { "Content-Type": "application/json", ...extra };
+    if (KEY) h["X-Admin-Key"] = KEY;
+    return h;
+  }
+
+  async function api(method, path, body = null) {
+    const opts = { method, headers: headers() };
+    if (body) opts.body = JSON.stringify(body);
+    const url = KEY ? `${path}${path.includes("?") ? "&" : "?"}admin_key=${KEY}` : path;
+    const r = await fetch(url, opts);
+    const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
+    if (!j.ok) throw new Error(j.error || "Request failed");
+    return j;
+  }
+
+  function log(msg) {
+    const el = document.getElementById("log");
+    const ts = new Date().toLocaleTimeString();
+    el.textContent += `[${ts}] ${msg}\n`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  }
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => toast("Copied!")).catch(() => {});
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return "never";
+    const d = new Date(ts * 1000);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return `${Math.round(diff)}s ago`;
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+    return d.toLocaleDateString();
+  }
+
+  // ── Load Overview ──────────────────────────────────────────────
+
+  async function loadOverview() {
+    try {
+      const data = await api("GET", "/admin/overview");
+
+      // Env info
+      const envEl = document.getElementById("envInfo");
+      envEl.innerHTML = Object.entries(data.env).map(([k, v]) =>
+        `<div class="key">${k}</div><div class="val">${v}</div>`
+      ).join("");
+      document.getElementById("envBadge").textContent = `${data.env.NODE_ENV} | ${data.streamers.length} streamer(s)`;
+
+      // Streamers
+      renderStreamers(data.streamers);
+
+      // Invites
+      loadInvites();
+    } catch (e) {
+      log("Error loading overview: " + e.message);
+      document.getElementById("envInfo").innerHTML = `<div class="val" style="grid-column:span 2;color:#f85149;">Error: ${e.message}</div>`;
+    }
+  }
+
+  function renderStreamers(streamers) {
+    const box = document.getElementById("streamersBox");
+    if (!streamers.length) {
+      box.innerHTML = '<div class="empty">No streamers yet. Use "Quick Setup" or "Create Streamer".</div>';
+      return;
+    }
+
+    box.innerHTML = streamers.map(s => {
+      const base = location.origin;
+      return `
+      <div class="streamer-card" id="sc-${s.broadcaster_id}">
+        <h3>
+          ${s.kick_username || "unknown"}
+          <span class="badge-info">bid: ${s.broadcaster_id}</span>
+          ${s.has_tokens ? '<span class="badge-ok">tokens</span>' : '<span class="badge-warn">no tokens</span>'}
+          ${s.spins.pending > 0 ? `<span class="badge-warn">${s.spins.pending} pending</span>` : ''}
+        </h3>
+        <div class="details">
+          <div class="key">Overlay key:</div><div class="mono">${s.overlay_key}</div>
+          <div class="key">Config:</div><div>${s.config.items_count} items, theme: ${s.config.theme}</div>
+          <div class="key">Spins:</div><div>pending=${s.spins.pending}, in_progress=${s.spins.in_progress}</div>
+          <div class="key">Goals:</div><div>${s.goals_count} goal(s)</div>
+          <div class="key">Subs:</div><div>${s.subscriptions_count} active</div>
+          <div class="key">Created:</div><div>${timeAgo(s.created_at)}</div>
+        </div>
+        <div class="url-box" onclick="copyText('${base}/overlay/${s.overlay_key}')">
+          Wheel: ${base}/overlay/${s.overlay_key}
+        </div>
+        <div class="url-box" onclick="copyText('${base}/delay/${s.overlay_key}')">
+          Delay: ${base}/delay/${s.overlay_key}
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-blue btn-sm" onclick="triggerSpin(${s.broadcaster_id}, 1)">1 Spin</button>
+          <button class="btn btn-blue btn-sm" onclick="triggerSpin(${s.broadcaster_id}, 3)">3 Spins</button>
+          <button class="btn btn-blue btn-sm" onclick="triggerSpin(${s.broadcaster_id}, 5)">5 Spins</button>
+          <button class="btn btn-sm" onclick="simulateGift(${s.broadcaster_id})">Simulate 5 Gifts</button>
+          <button class="btn btn-sm" onclick="simulateGift(${s.broadcaster_id}, 15)">Simulate 15 Gifts</button>
+          <button class="btn btn-sm" onclick="resetSpins(${s.broadcaster_id})">Reset Spins</button>
+          <button class="btn btn-sm" onclick="skipDelay(${s.broadcaster_id})">Skip Delay</button>
+          <button class="btn btn-sm" onclick="devLogin(${s.broadcaster_id})">Login as</button>
+          <a class="btn btn-sm" href="/overlay/${s.overlay_key}" target="_blank">Open Overlay</a>
+          <a class="btn btn-sm" href="/delay/${s.overlay_key}" target="_blank">Open Delay</a>
+          <button class="btn btn-danger btn-sm" onclick="deleteStreamer(${s.broadcaster_id})">Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // ── Invite Codes ───────────────────────────────────────────────
+
+  async function loadInvites() {
+    try {
+      const data = await api("GET", "/admin/invites");
+      const box = document.getElementById("invitesBox");
+      if (!data.codes.length) {
+        box.innerHTML = '<div class="empty">No unused invite codes. Generate some above.</div>';
+        return;
+      }
+      box.innerHTML = `<table>
+        <thead><tr><th>Code</th><th>Created</th><th></th></tr></thead>
+        <tbody>${data.codes.map(c => `
+          <tr>
+            <td class="mono">${c.code}</td>
+            <td>${timeAgo(c.created_at)}</td>
+            <td>
+              <button class="btn btn-sm" onclick="copyText('${c.code}')">Copy</button>
+              <button class="btn btn-sm" onclick="copyText('${location.origin}/auth/login?invite=${c.code}')">Copy Login URL</button>
+            </td>
+          </tr>`).join("")}
+        </tbody></table>`;
+    } catch (e) {
+      log("Error loading invites: " + e.message);
+    }
+  }
+
+  async function generateInvites() {
+    try {
+      const count = Number(document.getElementById("inviteCount").value) || 3;
+      const data = await api("POST", "/admin/invites", { count });
+      log(`Generated ${data.codes.length} invite code(s): ${data.codes.join(", ")}`);
+      toast(`${data.codes.length} invite code(s) generated`);
+      loadInvites();
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  // ── Streamer Actions ───────────────────────────────────────────
+
+  async function createStreamer() {
+    const bid = Number(document.getElementById("newBid").value);
+    const username = document.getElementById("newUsername").value.trim();
+    if (!bid) { toast("Enter a broadcaster ID"); return; }
+    try {
+      const data = await api("POST", "/admin/streamers", {
+        broadcaster_id: bid,
+        kick_username: username || `dev_${bid}`,
+      });
+      log(`Created streamer: bid=${bid} username=${data.streamer.kick_username} key=${data.streamer.overlay_key}`);
+      toast("Streamer created");
+      document.getElementById("newBid").value = "";
+      document.getElementById("newUsername").value = "";
+      refreshAll();
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function deleteStreamer(bid) {
+    if (!confirm(`Delete streamer bid=${bid} and ALL their data?`)) return;
+    try {
+      await api("DELETE", `/admin/streamers/${bid}`);
+      log(`Deleted streamer bid=${bid}`);
+      toast("Streamer deleted");
+      refreshAll();
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function triggerSpin(bid, count) {
+    try {
+      const data = await api("POST", `/admin/streamers/${bid}/spin`, { count });
+      log(`Spin bid=${bid}: requested=${data.requested}, delivered=${data.delivered}, pending=${data.pending}`);
+      toast(`${count} spin(s) -> ${data.delivered} delivered`);
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function simulateGift(bid, count = 5) {
+    try {
+      const data = await api("POST", `/admin/streamers/${bid}/simulate-gift`, { gift_count: count });
+      log(`Gift sim bid=${bid}: ${data.message}`);
+      toast(data.message);
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function resetSpins(bid) {
+    try {
+      await api("POST", `/admin/streamers/${bid}/spin/reset`);
+      log(`Reset spins for bid=${bid}`);
+      toast("Spins reset");
+      refreshAll();
+    } catch (e) {
+      log("Error: " + e.message);
+    }
+  }
+
+  async function skipDelay(bid) {
+    try {
+      await api("POST", `/admin/streamers/${bid}/spin/complete`);
+      log(`Skipped delay for bid=${bid}`);
+      toast("Delay skipped");
+    } catch (e) {
+      log("Error: " + e.message);
+    }
+  }
+
+  function devLogin(bid) {
+    const url = `/auth/dev-login?bid=${bid}&ret=/dashboard`;
+    window.open(url, "_blank");
+    log(`Opened dev login for bid=${bid}`);
+  }
+
+  // ── Quick Setup ────────────────────────────────────────────────
+
+  async function quickSetup() {
+    try {
+      const data = await api("POST", "/admin/quick-setup", {});
+      log(`Quick setup: bid=${data.streamer.broadcaster_id} key=${data.streamer.overlay_key} invite=${data.invite_code}`);
+      log(`  Overlay: ${data.urls.overlay}`);
+      log(`  Delay:   ${data.urls.delay}`);
+      log(`  Login:   ${data.urls.dev_login}`);
+      toast("Dev streamer created");
+      refreshAll();
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  // ── Reset DB ───────────────────────────────────────────────────
+
+  async function resetDb() {
+    if (!confirm("This will DELETE ALL DATA. Are you sure?")) return;
+    if (!confirm("Really? Everything will be gone.")) return;
+    try {
+      await api("POST", "/admin/reset-db");
+      log("Database reset - all data cleared");
+      toast("Database reset");
+      refreshAll();
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  // ── Refresh ────────────────────────────────────────────────────
+
+  async function refreshAll() {
+    await loadOverview();
+  }
+
+  // ── Boot ───────────────────────────────────────────────────────
+
+  loadOverview();
+
+  // Auto-refresh every 10s
+  setInterval(loadOverview, 10000);
+</script>
+
+</body>
+</html>
