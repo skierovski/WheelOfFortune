@@ -78,8 +78,15 @@
       }, 1000);
     }
 
+    // ====== Multi-tenant: extract overlay key from URL ======
+    const OVERLAY_KEY = (() => {
+      const m = location.pathname.match(/^\/delay\/([A-Za-z0-9_-]+)/);
+      return m ? m[1] : new URLSearchParams(location.search).get("key") || "";
+    })();
+    const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
+
     // ====== WebSocket connection ======
-    const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
+    const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws?key=' + encodeURIComponent(OVERLAY_KEY);
     let ws = null;
     let reconnectDelay = 1000;
     let lastWsMessageTime = Date.now();
@@ -94,7 +101,7 @@
 
     async function fetchDelayStatus() {
       try {
-        const r = await fetch('/spins/pending', { cache: 'no-store' });
+        const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
         const pending = Math.max(0, Number(j?.count || 0));
@@ -113,7 +120,7 @@
     // Simple wake-up check for delay overlay
     async function checkDelayStatus() {
       try {
-        const r = await fetch('/spins/pending', { cache: 'no-store' });
+        const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
         const pending = Math.max(0, Number(j?.count || 0));

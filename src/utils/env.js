@@ -2,12 +2,11 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
-const TOK_PATH = process.env.TOK_PATH || `${process.cwd()}/tokens.json`;
+const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data", "wheeloffortune.db");
 
-function getPersistentSessionSecret() {
-  if (process.env.SESSION_SECRET?.trim()) return process.env.SESSION_SECRET.trim();
-  if (process.env.ADMIN_KEY?.trim()) return process.env.ADMIN_KEY.trim();
-  const secretPath = process.env.SESSION_SECRET_FILE || path.join(path.dirname(TOK_PATH), ".session_secret");
+function getPersistentSecret(envKey, envFileKey, defaultFileName) {
+  if (process.env[envKey]?.trim()) return process.env[envKey].trim();
+  const secretPath = process.env[envFileKey] || path.join(path.dirname(DB_PATH), defaultFileName);
   try {
     const s = fs.readFileSync(secretPath, "utf8").trim();
     if (s) return s;
@@ -16,8 +15,9 @@ function getPersistentSessionSecret() {
   try {
     fs.mkdirSync(path.dirname(secretPath), { recursive: true });
     fs.writeFileSync(secretPath, generated, { mode: 0o600 });
+    console.log(`[env] Generated ${defaultFileName} -> ${secretPath}`);
   } catch (e) {
-    console.warn("[env] Could not persist SESSION_SECRET to", secretPath, e.message);
+    console.warn(`[env] Could not persist ${defaultFileName} to`, secretPath, e.message);
   }
   return generated;
 }
@@ -35,25 +35,35 @@ export const env = {
 
   ADMIN_KEY: process.env.ADMIN_KEY || "",
   get SESSION_SECRET() {
-    return (this._sessionSecret ??= getPersistentSessionSecret());
+    return (this._sessionSecret ??= getPersistentSecret("SESSION_SECRET", "SESSION_SECRET_FILE", ".session_secret"));
+  },
+  get ENCRYPTION_KEY() {
+    return (this._encryptionKey ??= getPersistentSecret("ENCRYPTION_KEY", "ENCRYPTION_KEY_FILE", ".encryption_key"));
   },
   TRIGGER_KEY: process.env.TRIGGER_KEY || process.env.ADMIN_KEY || "",
 
   WEBHOOK_SECRET: process.env.KICK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || "dev_webhook_secret",
 
-  TOK_PATH,
+  /** Path to the SQLite database file */
+  DB_PATH,
+
+  // Legacy paths (kept for migration script, will be removed after migration)
+  TOK_PATH: process.env.TOK_PATH || path.join(process.cwd(), "tokens.json"),
   CFG_PATH: process.env.CFG_PATH || "/data/wheel.json",
   GOALS_PATH: process.env.GOALS_PATH || "/data/goals.json",
   PENDING_PATH: process.env.PENDING_PATH || "/data/pending.json",
 
+  /** Require invite code for new registrations (beta gate) */
+  REQUIRE_INVITE: (process.env.REQUIRE_INVITE ?? "true") !== "false",
+
   DEV_BYPASS_AUTH: process.env.DEV_BYPASS_AUTH === "1",
   DEV_FAKE_BID: Number(process.env.DEV_FAKE_BID || 999999),
   DEV_BYPASS_KEY: process.env.DEV_BYPASS_KEY || "",
-  DEV_BYPASS_IPS: (process.env.DEV_BYPASS_IPS || "").split(",").map(s=>s.trim()).filter(Boolean),
+  DEV_BYPASS_IPS: (process.env.DEV_BYPASS_IPS || "").split(",").map(s => s.trim()).filter(Boolean),
 
   mask(v) {
     if (!v || typeof v !== "string") return v;
     if (v.length <= 8) return v;
-    return v.slice(0,4)+"..."+v.slice(-4);
+    return v.slice(0, 4) + "..." + v.slice(-4);
   }
 };

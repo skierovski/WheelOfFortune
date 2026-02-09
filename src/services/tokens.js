@@ -1,31 +1,32 @@
-import fs from "fs";
 import { env } from "../utils/env.js";
+import { encrypt, decrypt } from "../utils/crypto.js";
+import { getDb } from "../db.js";
 
-function loadTokens() {
-  try { return JSON.parse(fs.readFileSync(env.TOK_PATH, "utf8")); } catch { return null; }
-}
-function saveTokens(t) {
-  fs.writeFileSync(env.TOK_PATH, JSON.stringify(t, null, 2));
-  console.log("[tokens] saved:", {
-    access_token: env.mask(t.access_token),
-    refresh_token: env.mask(t.refresh_token),
-    expires_at: t.expires_at,
-    scope: t.scope,
-  });
-}
+const SKEW_MS = 60_000 * 15; // 15-minute safety margin
+
+/**
+ * Compute expires_at from expires_in, applying a 15-minute skew.
+ */
 function withExpiresAt(tokens) {
   if (!tokens) return null;
-  const skewMs = 60_000 * 15;
   if (Number.isFinite(tokens.expires_in)) {
-    tokens.expires_at = Date.now() + (Number(tokens.expires_in) * 1000) - skewMs;
+    tokens.expires_at = Date.now() + (Number(tokens.expires_in) * 1000) - SKEW_MS;
   }
   return tokens;
 }
-function secondsUntilExpiry(t) {
-  if (!t?.expires_at) return -Infinity;
-  return Math.floor((t.expires_at - Date.now()) / 1000);
+
+/**
+ * Seconds until the token expires (negative = already expired).
+ */
+function secondsUntilExpiry(expiresAt) {
+  if (!Number.isFinite(expiresAt)) return -Infinity;
+  return Math.floor((expiresAt - Date.now()) / 1000);
 }
-async function refreshAccessTokenManual(refreshToken) {
+
+/**
+ * Refresh the access token using Kick's OAuth endpoint.
+ */
+async function refreshAccessTokenFromKick(refreshToken) {
   const body = new URLSearchParams();
   body.set("grant_type", "refresh_token");
   body.set("client_id", env.KICK_CLIENT_ID);
@@ -34,25 +35,87 @@ async function refreshAccessTokenManual(refreshToken) {
   const r = await fetch(`${env.KICK_OAUTH_HOST}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body
+    body,
   });
   const text = await r.text();
   if (!r.ok) throw new Error(`refresh failed: ${r.status} ${text}`);
   return JSON.parse(text);
 }
 
-export async function ensureAccessToken() {
-  let tokens = loadTokens();
-  if (!tokens?.access_token) throw new Error("No tokens stored. Log in via /auth/login");
-  const left = secondsUntilExpiry(tokens);
+// ── Per-streamer token operations ────────────────────────────────
+
+/**
+ * Load tokens for a streamer (decrypted).
+ * @param {number} broadcasterId
+ * @returns {{ access_token: string, refresh_token: string, expires_at: number, scope: string } | null}
+ */
+export function loadTokens(broadcasterId) {
+  const streamer = getDb().getStreamerById(broadcasterId);
+  if (!streamer?.access_token) return null;
+  try {
+    return {
+      access_token: decrypt(streamer.access_token, env.ENCRYPTION_KEY),
+      refresh_token: decrypt(streamer.refresh_token, env.ENCRYPTION_KEY),
+      expires_at: streamer.token_expires_at,
+      scope: streamer.token_scope,
+    };
+  } catch (e) {
+    console.error(`[tokens] Failed to decrypt tokens for broadcaster ${broadcasterId}:`, e.message);
+    return null;
+  }
+}
+
+/**
+ * Save tokens for a streamer (encrypted).
+ * @param {number} broadcasterId
+ * @param {{ access_token: string, refresh_token: string, expires_at?: number, expires_in?: number, scope?: string }} tokens
+ */
+export function saveTokens(broadcasterId, tokens) {
+  const withExpiry = withExpiresAt({ ...tokens });
+  getDb().updateTokens(broadcasterId, {
+    access_token: encrypt(withExpiry.access_token, env.ENCRYPTION_KEY),
+    refresh_token: encrypt(withExpiry.refresh_token, env.ENCRYPTION_KEY),
+    token_expires_at: withExpiry.expires_at ?? null,
+    token_scope: withExpiry.scope ?? null,
+  });
+  console.log(`[tokens] saved for broadcaster ${broadcasterId}:`, {
+    access_token: env.mask(tokens.access_token),
+    refresh_token: env.mask(tokens.refresh_token),
+    expires_at: withExpiry.expires_at,
+    scope: withExpiry.scope,
+  });
+}
+
+/**
+ * Ensure a valid access token is available for a streamer.
+ * Refreshes automatically if expiring within 15 minutes.
+ * @param {number} broadcasterId
+ * @returns {Promise<string>} access_token
+ */
+export async function ensureAccessToken(broadcasterId) {
+  const tokens = loadTokens(broadcasterId);
+  if (!tokens?.access_token) {
+    throw new Error(`No tokens stored for broadcaster ${broadcasterId}. Needs re-login via /auth/login`);
+  }
+  const left = secondsUntilExpiry(tokens.expires_at);
   if (!Number.isFinite(left) || left <= 15 * 60) {
-    if (!tokens.refresh_token) throw new Error("No refresh_token stored");
-    console.log(`[tokens] refreshing (left ${left}s) manual /oauth/token`);
-    const refreshed = await refreshAccessTokenManual(tokens.refresh_token);
+    if (!tokens.refresh_token) {
+      throw new Error(`No refresh_token for broadcaster ${broadcasterId}`);
+    }
+    console.log(`[tokens] refreshing for ${broadcasterId} (left ${left}s)`);
+    const refreshed = await refreshAccessTokenFromKick(tokens.refresh_token);
     const merged = withExpiresAt({ ...tokens, ...refreshed });
-    saveTokens(merged);
+    saveTokens(broadcasterId, merged);
     return merged.access_token;
   }
   return tokens.access_token;
 }
-export const tokenStore = { loadTokens, saveTokens, withExpiresAt };
+
+// ── Exported for backward compatibility and watchdog use ─────────
+
+export const tokenStore = {
+  loadTokens,
+  saveTokens,
+  withExpiresAt,
+  secondsUntilExpiry,
+};

@@ -1,114 +1,119 @@
-import fs from "fs";
-import path from "path";
-import { ensureAccessToken, tokenStore } from "./tokens.js";
-import { getBroadcasterId, listSubscriptions, subscribeToEvents } from "./kick.js";
+import { ensureAccessToken, loadTokens, tokenStore } from "./tokens.js";
+import { listSubscriptions, subscribeToEvents } from "./kick.js";
+import { getDb } from "../db.js";
 import { env } from "../utils/env.js";
 
-let LAST_CALLBACK_URL = null;
-
-const CALLBACK_URL_PATH = process.env.CALLBACK_URL_FILE || path.join(path.dirname(env.TOK_PATH), ".callback_url");
-
-function loadPersistedCallbackUrl() {
-  try {
-    const s = fs.readFileSync(CALLBACK_URL_PATH, "utf8").trim();
-    if (s) return s;
-  } catch {}
-  return null;
-}
-
-function saveCallbackUrl(url) {
-  if (!url?.trim()) return;
-  try {
-    fs.mkdirSync(path.dirname(CALLBACK_URL_PATH), { recursive: true });
-    fs.writeFileSync(CALLBACK_URL_PATH, url.trim(), "utf8");
-  } catch (e) {
-    console.warn("[WATCHDOG] Could not persist callback URL:", e?.message);
-  }
-}
-
-export function setLastCallbackUrl(url) {
-  LAST_CALLBACK_URL = url;
-  if (url) saveCallbackUrl(url);
-}
-
-// Callback URL: memory → persisted file → PUBLIC_BASE_URL → KICK_REDIRECT_URI derived
+/**
+ * Get the webhook callback URL from the environment.
+ */
 function getCallbackUrl() {
-  if (LAST_CALLBACK_URL) return LAST_CALLBACK_URL;
-
-  const fromFile = loadPersistedCallbackUrl();
-  if (fromFile) return fromFile;
-
   if (env.PUBLIC_BASE_URL) {
     const base = env.PUBLIC_BASE_URL.replace(/\/$/, "");
-    const callback = base.includes("/webhook") ? base : `${base}/webhook`;
-    return callback;
+    return base.includes("/webhook") ? base : `${base}/webhook`;
   }
-
   if (env.KICK_REDIRECT_URI) {
     try {
       const u = new URL(env.KICK_REDIRECT_URI);
       return `${u.protocol}//${u.host}/webhook`;
     } catch {}
   }
-
   return null;
 }
 
-async function ensureSubscribed() {
+/**
+ * Check and ensure subscriptions for all streamers.
+ */
+async function ensureAllSubscriptions() {
+  const callbackUrl = getCallbackUrl();
+  if (!callbackUrl) {
+    console.log("[WATCHDOG] No callback URL configured - skipping subscription check");
+    return;
+  }
+
+  let streamers;
   try {
-    const callbackUrl = getCallbackUrl();
-    if (!callbackUrl) {
-      console.log("[SUBSCRIBE][watchdog] No callback URL yet - visit /setup to configure");
-      return;
+    streamers = getDb().getAllStreamers();
+  } catch {
+    return; // DB not ready
+  }
+
+  for (const streamer of streamers) {
+    if (!streamer.access_token) continue; // no tokens, skip
+
+    try {
+      const bid = streamer.broadcaster_id;
+      const subs = await listSubscriptions(bid);
+      const hasGifts = subs.some(
+        (s) => s?.name === "channel.subscription.gifts" && s?.callback === callbackUrl
+      );
+
+      if (!hasGifts) {
+        console.log(`[WATCHDOG] bid=${bid} missing subscription -> creating`);
+        await subscribeToEvents(bid, callbackUrl);
+        
+        // Store in DB
+        const db = getDb();
+        db.deactivateSubscriptions(bid);
+        db.addSubscription(bid, {
+          subscription_id: "auto",
+          event_type: "channel.subscription.gifts",
+          callback_url: callbackUrl,
+        });
+        console.log(`[WATCHDOG] bid=${bid} subscription created`);
+      }
+    } catch (e) {
+      console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} subscription error:`, e?.message || e);
     }
-    
-    await ensureAccessToken();
-    const bid = await getBroadcasterId();
-    const subs = await listSubscriptions(bid);
-    const hasGifts = subs.some(s => s?.name === "channel.subscription.gifts" && s?.callback === callbackUrl);
-    
-    if (!hasGifts) {
-      console.log("[SUBSCRIBE][watchdog] ⚠️ Missing or outdated subscription -> creating");
-      console.log("[SUBSCRIBE][watchdog] Callback URL:", callbackUrl);
-      await subscribeToEvents(bid, callbackUrl);
-      console.log("[SUBSCRIBE][watchdog] ✅ Subscription created successfully");
-    } else {
-      console.log("[SUBSCRIBE][watchdog] ✅ OK (gifts subscription exists)");
-    }
-  } catch (e) {
-    console.warn("[SUBSCRIBE][watchdog] ❌ Error:", e?.message || e);
   }
 }
 
-/* Watchdog tokenów – co 2 min, jeśli do końca < 15 min, odśwież */
-async function refreshIfSoon() {
+/**
+ * Refresh tokens for all streamers nearing expiry.
+ */
+async function refreshAllTokens() {
+  let streamers;
   try {
-    const t = tokenStore.loadTokens();
-    if (!t?.refresh_token) return;
-    const left = Math.floor((t.expires_at - Date.now())/1000);
-    if (!Number.isFinite(left) || left <= 15*60) {
-      console.log(`[tokens] watchdog refresh (left ${left}s)`);
-      // ensureAccessToken() wykona odświeżenie
-      await ensureAccessToken();
+    streamers = getDb().getAllStreamers();
+  } catch {
+    return; // DB not ready
+  }
+
+  for (const streamer of streamers) {
+    if (!streamer.access_token) continue;
+
+    try {
+      const bid = streamer.broadcaster_id;
+      const tokens = loadTokens(bid);
+      if (!tokens?.refresh_token) continue;
+
+      const left = tokenStore.secondsUntilExpiry(tokens.expires_at);
+      if (!Number.isFinite(left) || left <= 15 * 60) {
+        console.log(`[WATCHDOG] bid=${bid} token expiring (left ${left}s) -> refreshing`);
+        await ensureAccessToken(bid);
+      }
+    } catch (e) {
+      console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} token refresh error:`, e?.message || e);
     }
-  } catch (e) {
-    console.warn("[tokens] watchdog error:", e?.message || e);
   }
 }
+
+let _subInterval = null;
+let _tokInterval = null;
 
 export function startWatchdogs() {
-  console.log("[WATCHDOG] 🚀 Starting watchdogs...");
-  
-  // Re-subscribe soon after startup (tokens + callback URL from disk/env)
-  setTimeout(ensureSubscribed, 2000);
+  console.log("[WATCHDOG] Starting watchdogs...");
 
-  setInterval(ensureSubscribed, 5 * 60 * 1000);
-  setInterval(refreshIfSoon, 2 * 60 * 1000);
+  // Check subscriptions 2s after startup, then every 5 minutes
+  setTimeout(ensureAllSubscriptions, 2000);
+  _subInterval = setInterval(ensureAllSubscriptions, 5 * 60 * 1000);
 
-  console.log("[WATCHDOG] ✅ Watchdogs started (subscription in 2s, then every 5min)");
+  // Refresh tokens every 2 minutes
+  _tokInterval = setInterval(refreshAllTokens, 2 * 60 * 1000);
+
+  console.log("[WATCHDOG] Started (subscriptions every 5min, tokens every 2min)");
 }
 
-export const watchdogState = { 
-  setLastCallbackUrl,
-  ensureSubscribed // expose for manual triggering
-};
+export function stopWatchdogs() {
+  if (_subInterval) { clearInterval(_subInterval); _subInterval = null; }
+  if (_tokInterval) { clearInterval(_tokInterval); _tokInterval = null; }
+}

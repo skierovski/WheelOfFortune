@@ -1,42 +1,50 @@
-import fs from "fs";
-import path from "path";
-import { env } from "../utils/env.js";
+import { getDb } from "../db.js";
 import { normalizeItemsInt100 } from "../utils/normalize.js";
 
-function ensureDirFor(filePath) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-function loadJsonSafe(file, fallback) {
-  try { if (!fs.existsSync(file)) return fallback; return JSON.parse(fs.readFileSync(file,"utf8")); }
-  catch { return fallback; }
+/**
+ * Load wheel config for a streamer.
+ * @param {number} broadcasterId
+ * @returns {{ items: Array, theme: string } | null}
+ */
+export function loadConfig(broadcasterId) {
+  return getDb().getConfig(broadcasterId);
 }
 
-export function loadConfig() {
-  const obj = loadJsonSafe(env.CFG_PATH, null);
-  if (!obj) return null;
-  const items = Array.isArray(obj.items) ? obj.items : null;
-  const theme = typeof obj.theme === "string" ? obj.theme : "wood";
-  return { items, theme };
-}
-export function saveConfig(items, themeMaybe) {
-  ensureDirFor(env.CFG_PATH);
+/**
+ * Save wheel config for a streamer (normalizes weights).
+ * @param {number} broadcasterId
+ * @param {Array} items
+ * @param {string} [theme]
+ * @returns {{ items: Array, theme: string }}
+ */
+export function saveConfig(broadcasterId, items, theme) {
   const normalized = normalizeItemsInt100(items);
-  const prev = loadJsonSafe(env.CFG_PATH, {});
-  const theme = typeof themeMaybe === "string" ? themeMaybe : (prev?.theme || "wood");
-  fs.writeFileSync(env.CFG_PATH, JSON.stringify({ items: normalized, theme }, null, 2));
-  console.log(`[config] saved ${normalized.length} items (int% to 100) theme=${theme} -> ${env.CFG_PATH}`);
-  return { items: normalized, theme };
+  const prev = getDb().getConfig(broadcasterId);
+  const finalTheme = typeof theme === "string" ? theme : (prev?.theme || "wood");
+
+  getDb().saveConfig(broadcasterId, normalized, finalTheme);
+  console.log(`[config] saved ${normalized.length} items for broadcaster ${broadcasterId} theme=${finalTheme}`);
+  return { items: normalized, theme: finalTheme };
 }
 
-export function loadGoals() {
-  const arr = loadJsonSafe(env.GOALS_PATH, []);
-  return Array.isArray(arr) ? arr : [];
+/**
+ * Load goals for a streamer.
+ * @param {number} broadcasterId
+ * @returns {string[]}
+ */
+export function loadGoals(broadcasterId) {
+  return getDb().getGoals(broadcasterId);
 }
-export function saveGoals(arr) {
-  ensureDirFor(env.GOALS_PATH);
+
+/**
+ * Save goals for a streamer.
+ * @param {number} broadcasterId
+ * @param {Array} arr
+ * @returns {string[]}
+ */
+export function saveGoals(broadcasterId, arr) {
   const list = Array.isArray(arr) ? arr.map(String) : [];
-  fs.writeFileSync(env.GOALS_PATH, JSON.stringify(list, null, 2));
-  console.log(`[goals] saved ${list.length} goals -> ${env.GOALS_PATH}`);
+  getDb().saveGoals(broadcasterId, list);
+  console.log(`[goals] saved ${list.length} goals for broadcaster ${broadcasterId}`);
   return list;
 }

@@ -15,6 +15,13 @@ yarn-error.log*
 tokens.json
 .session_secret
 .callback_url
+.encryption_key
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+data/
 
 # Logs
 logs

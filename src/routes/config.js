@@ -1,61 +1,69 @@
-// src/routes/config.js
 import { Router } from "express";
-import { env } from "../utils/env.js";
-import { getSessionBroadcasterId } from "../utils/cookies.js";
+import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
-import { wsBroadcast } from "../services/spins.js";
+import { validateWheelItems, validateTheme } from "../utils/validate.js";
 
 const router = Router();
 
-// GET current config (items + theme)
-router.get("/config", (_req, res) => {
-  const cfg = loadConfig();
+// ── Overlay endpoints (by overlay_key) ──────────────────────────────
+
+// GET config for an overlay (public, keyed by overlay_key)
+router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
+  const bid = req.streamer.broadcaster_id;
+  const cfg = loadConfig(bid);
+  res.json({ ok: true, items: cfg?.items ?? null, theme: cfg?.theme ?? "wood" });
+});
+
+// ── Dashboard endpoints (session-protected) ─────────────────────────
+
+// GET own config
+router.get("/dashboard/config", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const cfg = loadConfig(bid);
   res.json({ ok: true, items: cfg?.items ?? null, theme: cfg?.theme ?? "wood" });
 });
 
 // Save config and broadcast live update to overlays
-router.post("/config", (req, res) => {
-  const hasAdminKey = env.ADMIN_KEY && req.get("X-Admin-Key") === env.ADMIN_KEY;
-  const hasSession = !!getSessionBroadcasterId(req);
-  if (!hasAdminKey && !hasSession) {
-    return res.status(401).json({ ok:false, error:"Unauthorized" });
+router.post("/dashboard/config", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+
+  const validation = validateWheelItems(req.body?.items);
+  if (!validation.valid) {
+    return res.status(400).json({ ok: false, error: validation.error });
   }
 
-  const items = Array.isArray(req.body?.items) ? req.body.items : null;
-  const theme = typeof req.body?.theme === "string" ? req.body.theme : undefined;
-  if (!items) {
-    return res.status(400).json({ ok:false, error: "Missing items[]" });
-  }
+  const theme = validateTheme(req.body?.theme);
+  const saved = saveConfig(bid, validation.items, theme);
 
-  const saved = saveConfig(items, theme);
-
-  // >>> natychmiastowy push do overlayów (WS)
+  // Broadcast config update to this streamer's connected overlays
   try {
-    wsBroadcast({ type: "config", items: saved.items, theme: saved.theme });
+    const { app } = req;
+    if (app?.locals?.wss?.broadcastTo) {
+      app.locals.wss.broadcastTo(bid, { type: "config", items: saved.items, theme: saved.theme });
+    }
   } catch (e) {
-    // brak ws? nic się nie dzieje — overlay i tak dociągnie config przy starcie
-    console.warn("[/config] ws broadcast failed:", e?.message || e);
+    console.warn("[/dashboard/config] ws broadcast failed:", e?.message || e);
   }
 
   return res.json({ ok: true, items: saved.items, theme: saved.theme });
 });
 
-/* ---------- Goals (opcjonalny moduł) ---------- */
+// ── Goals ────────────────────────────────────────────────────────────
 
-router.get("/goals", (_req, res) => {
-  try { res.json({ ok: true, goals: loadGoals() }); }
-  catch { res.json({ ok: true, goals: [] }); }
+router.get("/dashboard/goals", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  try {
+    res.json({ ok: true, goals: loadGoals(bid) });
+  } catch {
+    res.json({ ok: true, goals: [] });
+  }
 });
 
-router.post("/goals", (req, res) => {
-  const hasAdminKey = env.ADMIN_KEY && req.get("X-Admin-Key") === env.ADMIN_KEY;
-  const hasSession = !!getSessionBroadcasterId(req);
-  if (!hasAdminKey && !hasSession) {
-    return res.status(401).json({ ok:false, error:"Unauthorized" });
-  }
+router.post("/dashboard/goals", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
   try {
     const goals = Array.isArray(req.body?.goals) ? req.body.goals : [];
-    const saved = saveGoals(goals);
+    const saved = saveGoals(bid, goals);
     res.json({ ok: true, goals: saved });
   } catch {
     res.status(500).json({ ok: false, error: "Save failed" });

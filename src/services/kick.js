@@ -1,63 +1,83 @@
-import { ensureAccessToken, tokenStore } from "./tokens.js";
-import { env } from "../utils/env.js";
+import { ensureAccessToken } from "./tokens.js";
 
-let CACHED_BROADCASTER_ID = null;
-
-export async function getBroadcasterId() {
-  if (CACHED_BROADCASTER_ID) return CACHED_BROADCASTER_ID;
-  const token = await ensureAccessToken();
+/**
+ * Fetch the broadcaster info (username, display name) from Kick API.
+ * @param {string} accessToken
+ * @returns {Promise<{ user_id: number, username: string, display_name: string }>}
+ */
+export async function fetchUserInfo(accessToken) {
   const r = await fetch("https://api.kick.com/public/v1/users", {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!r.ok) throw new Error(`users (self) failed: ${r.status} ${await r.text().catch(()=> "")}`);
+  if (!r.ok) throw new Error(`users (self) failed: ${r.status} ${await r.text().catch(() => "")}`);
   const data = await r.json();
-  const id = data?.data?.[0]?.user_id;
-  if (!Number.isFinite(Number(id))) throw new Error("Cannot determine broadcaster_user_id");
-  CACHED_BROADCASTER_ID = Number(id);
-  return CACHED_BROADCASTER_ID;
+  const user = data?.data?.[0];
+  if (!user?.user_id) throw new Error("Cannot determine user from Kick API response");
+  return {
+    user_id: Number(user.user_id),
+    username: user.username || null,
+    display_name: user.display_name || user.username || null,
+  };
 }
 
+/**
+ * Subscribe to events for a specific broadcaster.
+ * @param {number} broadcasterId
+ * @param {string} callbackUrl
+ */
 export async function subscribeToEvents(broadcasterId, callbackUrl) {
-  const token = await ensureAccessToken();
+  const token = await ensureAccessToken(broadcasterId);
   const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
     method: "POST",
-    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       broadcaster_user_id: Number(broadcasterId),
-      events: [ { name: "channel.subscription.gifts", version: 1 } ],
+      events: [{ name: "channel.subscription.gifts", version: 1 }],
       method: "webhook",
-      callback: callbackUrl
-    })
+      callback: callbackUrl,
+    }),
   });
   const text = await response.text();
-  console.log("[SUBSCRIBE] status:", response.status, text);
+  console.log(`[SUBSCRIBE] bid=${broadcasterId} status:`, response.status, text);
   if (!response.ok) throw new Error(`Failed to subscribe: ${response.status} ${text}`);
   return JSON.parse(text);
 }
 
+/**
+ * List active subscriptions for a broadcaster.
+ * @param {number} broadcasterId
+ */
 export async function listSubscriptions(broadcasterId) {
-  const token = await ensureAccessToken();
-  const r = await fetch(`https://api.kick.com/public/v1/events/subscriptions?broadcaster_user_id=${broadcasterId}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const token = await ensureAccessToken(broadcasterId);
+  const r = await fetch(
+    `https://api.kick.com/public/v1/events/subscriptions?broadcaster_user_id=${broadcasterId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
   if (!r.ok) return [];
-  const j = await r.json().catch(()=> ({}));
+  const j = await r.json().catch(() => ({}));
   return Array.isArray(j?.data) ? j.data : [];
 }
 
-export async function postChatMessage(content) {
+/**
+ * Post a chat message as a broadcaster.
+ * @param {number} broadcasterId
+ * @param {string} content
+ */
+export async function postChatMessage(broadcasterId, content) {
   if (!content?.trim()) return;
   try {
-    const token = await ensureAccessToken();
-    const broadcasterId = await getBroadcasterId();
+    const token = await ensureAccessToken(broadcasterId);
     const r = await fetch("https://api.kick.com/public/v1/chat", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ broadcaster_user_id: broadcasterId, content: content.slice(0,500), type: "user" })
+      body: JSON.stringify({
+        broadcaster_user_id: broadcasterId,
+        content: content.slice(0, 500),
+        type: "user",
+      }),
     });
-    if (!r.ok) console.warn(`chat send failed: ${r.status} ${await r.text().catch(()=> "")}`);
-  } catch (e) { console.warn("[chat] error:", e.message); }
+    if (!r.ok) console.warn(`chat send failed bid=${broadcasterId}: ${r.status}`);
+  } catch (e) {
+    console.warn(`[chat] error bid=${broadcasterId}:`, e.message);
+  }
 }
-
-export const tokensRaw = tokenStore;
-export { env };

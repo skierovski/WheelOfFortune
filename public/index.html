@@ -81,18 +81,27 @@
   </div>
 
   <script>
+    // ====== Multi-tenant: extract overlay key from URL ======
+    // URL pattern: /overlay/:key (served by Express, key is in the path)
+    const OVERLAY_KEY = (() => {
+      const m = location.pathname.match(/^\/overlay\/([A-Za-z0-9_-]+)/);
+      return m ? m[1] : new URLSearchParams(location.search).get("key") || "";
+    })();
+    const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
+
     // ====== Server config helpers ======
     async function fetchServerConfigFull() {
       try {
-        const r = await fetch("/config", { cache: "no-store" });
+        const r = await fetch(`${API_BASE}/config`, { cache: "no-store" });
         if (!r.ok) return null;
         const j = await r.json();
         return j?.ok ? j : null;
       } catch { return null; }
     }
     async function saveToServer(items, theme) {
+      // Save is done from dashboard, not overlay — but keep for backward compat
       const key = localStorage.getItem("ADMIN_KEY") || "";
-      const r = await fetch("/config", {
+      const r = await fetch(`${API_BASE}/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Admin-Key": key },
         body: JSON.stringify({ items, theme })
@@ -611,7 +620,7 @@
             queue.push(1);
           }
 
-          fetch('/chat/announce', {
+          fetch(`${API_BASE}/chat/announce`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ label: result.label + (result.bonus ? " (+bonus)" : "") })
           }).catch(()=>{});
@@ -621,7 +630,7 @@
         
         // Notify server after EACH spin completes (not just at the end)
         // This ensures 5-minute delay between each spin, even if multiple are queued
-        fetch('/spins/complete', { method: 'POST' }).catch(()=>{});
+        fetch(`${API_BASE}/spins/complete`, { method: 'POST' }).catch(()=>{});
       }
       spinning=false;
       hideOverlay(1000);
@@ -630,7 +639,7 @@
     // ====== WebSocket & watchdog ======
     const OBS_EDIT_MODE = new URLSearchParams(location.search).get("edit") === "1";
     const DEBUG_MODE = new URLSearchParams(location.search).get("debug") === "1";
-    const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
+    const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws?key=' + encodeURIComponent(OVERLAY_KEY);
 
     let ws = null;
     let reconnectDelay = 1000;
@@ -670,7 +679,7 @@
     async function checkForPendingSpins() {
       console.log("[WAKE UP] Checking if server has spins for me...");
       try {
-        const r = await fetch('/spins/pending', { cache: 'no-store' });
+        const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
         const pending = Math.max(0, Number(j?.count || 0));
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));

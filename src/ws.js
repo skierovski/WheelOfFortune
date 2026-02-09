@@ -1,50 +1,144 @@
 import { WebSocketServer } from "ws";
+import { getDb } from "./db.js";
 import { spins } from "./services/spins.js";
 
+/**
+ * Create the WebSocket server with per-streamer room support.
+ *
+ * Clients connect to /ws?key={overlay_key} and are grouped by broadcaster_id.
+ * Broadcasts target a specific broadcaster's connected clients only.
+ */
 export function createWSS() {
   const wss = new WebSocketServer({ noServer: true });
+
+  // Room map: broadcasterId -> Set<WebSocket>
+  const rooms = new Map();
+
+  function addToRoom(broadcasterId, ws) {
+    if (!rooms.has(broadcasterId)) rooms.set(broadcasterId, new Set());
+    rooms.get(broadcasterId).add(ws);
+  }
+
+  function removeFromRoom(broadcasterId, ws) {
+    const room = rooms.get(broadcasterId);
+    if (room) {
+      room.delete(ws);
+      if (room.size === 0) rooms.delete(broadcasterId);
+    }
+  }
+
   wss.on("connection", (ws, req) => {
-    console.log("WS client connected:", req.socket.remoteAddress);
+    const bid = ws._broadcasterId;
+    console.log(`WS client connected: bid=${bid} ip=${req.socket.remoteAddress}`);
+
     ws.isAlive = true;
     ws.on("pong", () => { ws.isAlive = true; });
-    try { 
-      const pending = spins.getPending();
-      const timeUntilNext = spins.getTimeUntilNextSpin();
-      ws.send(JSON.stringify({ 
-        action: "pending", 
+
+    // Send current state on connect
+    try {
+      const pending = spins.getPending(bid);
+      const timeUntilNext = spins.getTimeUntilNextSpin(bid);
+      ws.send(JSON.stringify({
+        action: "pending",
         count: pending,
         type: "delay",
         timeUntilNext: Math.ceil(timeUntilNext / 1000),
-        pending: pending
-      })); 
+        pending,
+      }));
     } catch {}
-    ws.on("close", () => console.log("WS closed"));
-    ws.on("error", (e) => console.error("WS client error:", e));
+
+    ws.on("close", () => {
+      removeFromRoom(bid, ws);
+      console.log(`WS closed: bid=${bid}`);
+    });
+
+    ws.on("error", (e) => {
+      console.error(`WS client error bid=${bid}:`, e);
+    });
   });
+
   wss.on("error", (err) => console.error("WS server error:", err));
 
-  // heartbeat
+  // Heartbeat
   setInterval(() => {
     for (const ws of wss.clients) {
       if (ws.isAlive === false) { ws.terminate(); continue; }
-      ws.isAlive = false; try { ws.ping(); } catch {}
+      ws.isAlive = false;
+      try { ws.ping(); } catch {}
     }
   }, 30_000);
 
-  spins.setBroadcaster(msg => {
+  // Register the broadcast function with the spins service.
+  // Signature: (broadcasterId, msg) => numberOfClientsReached
+  spins.setBroadcaster((broadcasterId, msg) => {
+    const room = rooms.get(broadcasterId);
+    if (!room) return 0;
     let sent = 0;
-    for (const client of wss.clients) {
-      if (client.readyState === 1) { try { client.send(JSON.stringify(msg)); sent++; } catch {} }
+    const data = JSON.stringify(msg);
+    for (const client of room) {
+      if (client.readyState === 1) {
+        try { client.send(data); sent++; } catch {}
+      }
     }
     return sent;
   });
+
+  /**
+   * Broadcast to a specific broadcaster's connected clients.
+   * Used by routes (e.g., config updates) outside of the spins service.
+   */
+  wss.broadcastTo = (broadcasterId, msg) => {
+    const room = rooms.get(broadcasterId);
+    if (!room) return 0;
+    let sent = 0;
+    const data = JSON.stringify(msg);
+    for (const client of room) {
+      if (client.readyState === 1) {
+        try { client.send(data); sent++; } catch {}
+      }
+    }
+    return sent;
+  };
+
+  // Store addToRoom for use in upgrade handler
+  wss._addToRoom = addToRoom;
 
   return wss;
 }
 
 export function attachUpgrade(server, wss) {
   server.on("upgrade", (req, socket, head) => {
-    if (req.url !== "/ws") { socket.destroy(); return; }
-    wss.handleUpgrade(req, socket, head, (ws) => { wss.emit("connection", ws, req); });
+    // Parse URL: /ws?key={overlay_key}
+    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    if (url.pathname !== "/ws") {
+      socket.destroy();
+      return;
+    }
+
+    const overlayKey = url.searchParams.get("key");
+    if (!overlayKey) {
+      socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    // Look up streamer by overlay key
+    let streamer;
+    try {
+      streamer = getDb().getStreamerByOverlayKey(overlayKey);
+    } catch {}
+
+    if (!streamer) {
+      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      ws._broadcasterId = streamer.broadcaster_id;
+      ws._overlayKey = overlayKey;
+      wss._addToRoom(streamer.broadcaster_id, ws);
+      wss.emit("connection", ws, req);
+    });
   });
 }
