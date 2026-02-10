@@ -2,13 +2,19 @@ import { Router } from "express";
 import path from "path";
 import fs from "fs";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
+import { getSessionBroadcasterId } from "../utils/cookies.js";
 import { getDb } from "../db.js";
 
 const router = Router();
 const publicDir = path.join(process.cwd(), "public");
 
-// Landing page
+// Landing page (redirect to dashboard if already logged in)
 router.get("/", (req, res) => {
+  const bid = getSessionBroadcasterId(req);
+  if (bid && getDb().getStreamerById(bid)) {
+    return res.redirect("/dashboard");
+  }
+
   const file = path.join(publicDir, "landing.html");
   if (!fs.existsSync(file)) {
     return res.send(`<h1>Wheel of Fortune</h1><p><a href="/auth/login">Login with Kick</a></p>`);
