@@ -83,6 +83,79 @@ describe("configStore (multi-tenant)", () => {
     });
   });
 
+  // ── saveTiers ──────────────────────────────────────────────────
+
+  describe("saveTiers", () => {
+    it("saves tiers and returns them", () => {
+      const result = saveConfig(BID, [], {
+        accent_color: "#ff0000",
+        tiers: [
+          { name: "Basic", min_gifts: 5, items: [{ label: "A", weight: 50 }, { label: "B", weight: 50 }] },
+          { name: "Premium", min_gifts: 25, items: [{ label: "C", weight: 100 }] },
+        ],
+      });
+      expect(result.tiers).toHaveLength(2);
+      expect(result.tiers[0].name).toBe("Basic");
+      expect(result.tiers[0].min_gifts).toBe(5);
+      expect(result.tiers[0].items).toHaveLength(2);
+      expect(result.tiers[1].name).toBe("Premium");
+      expect(result.tiers[1].min_gifts).toBe(25);
+    });
+
+    it("normalizes weights within each tier", () => {
+      const result = saveConfig(BID, [], {
+        tiers: [
+          { name: "T1", min_gifts: 5, items: [{ label: "A", weight: 10 }, { label: "B", weight: 30 }] },
+        ],
+      });
+      const sum = result.tiers[0].items.reduce((s, it) => s + it.weight, 0);
+      expect(sum).toBe(100);
+    });
+
+    it("sorts tiers by min_gifts ascending", () => {
+      const result = saveConfig(BID, [], {
+        tiers: [
+          { name: "High", min_gifts: 50, items: [{ label: "X", weight: 100 }] },
+          { name: "Low", min_gifts: 5, items: [{ label: "Y", weight: 100 }] },
+        ],
+      });
+      expect(result.tiers[0].min_gifts).toBe(5);
+      expect(result.tiers[1].min_gifts).toBe(50);
+    });
+
+    it("sets items_json from first tier for backward compat", () => {
+      const result = saveConfig(BID, [], {
+        tiers: [
+          { name: "T1", min_gifts: 5, items: [{ label: "First", weight: 100 }] },
+          { name: "T2", min_gifts: 25, items: [{ label: "Second", weight: 100 }] },
+        ],
+      });
+      // items (backward compat) should be from the first (lowest) tier
+      expect(result.items[0].label).toBe("First");
+    });
+
+    it("loads tiers back from DB", () => {
+      saveConfig(BID, [], {
+        accent_color: "#aabbcc",
+        tiers: [
+          { name: "A", min_gifts: 3, items: [{ label: "P1", weight: 100 }] },
+          { name: "B", min_gifts: 10, items: [{ label: "P2", weight: 50 }, { label: "P3", weight: 50 }] },
+        ],
+      });
+      const loaded = loadConfig(BID);
+      expect(loaded.tiers).toHaveLength(2);
+      expect(loaded.tiers[0].name).toBe("A");
+      expect(loaded.tiers[1].items).toHaveLength(2);
+      expect(loaded.accent_color).toBe("#aabbcc");
+    });
+
+    it("returns null tiers when none are set", () => {
+      saveConfig(BID, [{ label: "X", weight: 100 }]);
+      const loaded = loadConfig(BID);
+      expect(loaded.tiers).toBeNull();
+    });
+  });
+
   // ── loadGoals ───────────────────────────────────────────────────
 
   describe("loadGoals", () => {

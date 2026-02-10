@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateWheelItems, isValidOverlayKey, validateGiftsPerSpin, validateAccentColor } from "../../src/utils/validate.js";
+import { validateWheelItems, validateTiers, isValidOverlayKey, validateGiftsPerSpin, validateAccentColor } from "../../src/utils/validate.js";
 
 describe("validateWheelItems", () => {
   it("accepts valid items", () => {
@@ -100,6 +100,118 @@ describe("validateGiftsPerSpin", () => {
     expect(validateGiftsPerSpin(null)).toBe(5);
     expect(validateGiftsPerSpin(undefined)).toBe(5);
     expect(validateGiftsPerSpin("abc")).toBe(5);
+  });
+});
+
+describe("validateTiers", () => {
+  const validItems = [
+    { label: "Prize A", weight: 50, bonus: false },
+    { label: "Prize B", weight: 50, bonus: false },
+  ];
+
+  it("accepts valid tiers", () => {
+    const result = validateTiers([
+      { name: "Basic", min_gifts: 5, items: validItems },
+      { name: "Premium", min_gifts: 25, items: validItems },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.tiers).toHaveLength(2);
+    expect(result.tiers[0].name).toBe("Basic");
+    expect(result.tiers[1].name).toBe("Premium");
+  });
+
+  it("sorts tiers by min_gifts ascending", () => {
+    const result = validateTiers([
+      { name: "High", min_gifts: 50, items: validItems },
+      { name: "Low", min_gifts: 5, items: validItems },
+      { name: "Mid", min_gifts: 25, items: validItems },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.tiers[0].min_gifts).toBe(5);
+    expect(result.tiers[1].min_gifts).toBe(25);
+    expect(result.tiers[2].min_gifts).toBe(50);
+  });
+
+  it("rejects non-array input", () => {
+    expect(validateTiers(null).valid).toBe(false);
+    expect(validateTiers("string").valid).toBe(false);
+    expect(validateTiers(42).valid).toBe(false);
+  });
+
+  it("rejects empty array", () => {
+    expect(validateTiers([]).valid).toBe(false);
+  });
+
+  it("rejects more than 10 tiers", () => {
+    const tiers = Array.from({ length: 11 }, (_, i) => ({
+      name: `Tier ${i}`, min_gifts: i + 1, items: validItems,
+    }));
+    expect(validateTiers(tiers).valid).toBe(false);
+  });
+
+  it("rejects duplicate tier names (case insensitive)", () => {
+    const result = validateTiers([
+      { name: "Basic", min_gifts: 5, items: validItems },
+      { name: "basic", min_gifts: 25, items: validItems },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("Duplicate");
+  });
+
+  it("rejects tiers with invalid min_gifts", () => {
+    expect(validateTiers([{ name: "X", min_gifts: 0, items: validItems }]).valid).toBe(false);
+    expect(validateTiers([{ name: "X", min_gifts: -5, items: validItems }]).valid).toBe(false);
+    expect(validateTiers([{ name: "X", min_gifts: 2000, items: validItems }]).valid).toBe(false);
+    expect(validateTiers([{ name: "X", min_gifts: "abc", items: validItems }]).valid).toBe(false);
+  });
+
+  it("rejects tiers with invalid items", () => {
+    const result = validateTiers([
+      { name: "Bad", min_gifts: 5, items: [] },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("items");
+  });
+
+  it("rejects tiers with empty name", () => {
+    const result = validateTiers([
+      { name: "<b></b>", min_gifts: 5, items: validItems },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("name");
+  });
+
+  it("strips HTML from tier names", () => {
+    const result = validateTiers([
+      { name: '<script>xss</script>Basic', min_gifts: 5, items: validItems },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.tiers[0].name).toBe("xssBasic");
+  });
+
+  it("truncates tier names to 50 chars", () => {
+    const result = validateTiers([
+      { name: "A".repeat(100), min_gifts: 5, items: validItems },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.tiers[0].name.length).toBe(50);
+  });
+
+  it("defaults tier name when missing", () => {
+    const result = validateTiers([
+      { min_gifts: 5, items: validItems },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.tiers[0].name).toBe("Tier 1");
+  });
+
+  it("validates items within each tier", () => {
+    const result = validateTiers([
+      { name: "Good", min_gifts: 5, items: validItems },
+      { name: "Bad", min_gifts: 25, items: [{ label: "", weight: 50 }] },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("Bad");
   });
 });
 

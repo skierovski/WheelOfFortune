@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
-import { validateWheelItems, validateGiftsPerSpin, validateAccentColor } from "../utils/validate.js";
+import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor } from "../utils/validate.js";
 
 const router = Router();
 
@@ -14,6 +14,7 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
   res.json({
     ok: true,
     items: cfg?.items ?? null,
+    tiers: cfg?.tiers ?? null,
     accent_color: cfg?.accent_color ?? "#7c3aed",
     gifts_per_spin: cfg?.gifts_per_spin ?? 5,
   });
@@ -28,6 +29,7 @@ router.get("/dashboard/config", requireSession, (req, res) => {
   res.json({
     ok: true,
     items: cfg?.items ?? null,
+    tiers: cfg?.tiers ?? null,
     accent_color: cfg?.accent_color ?? "#7c3aed",
     gifts_per_spin: cfg?.gifts_per_spin ?? 5,
   });
@@ -36,23 +38,63 @@ router.get("/dashboard/config", requireSession, (req, res) => {
 // Save config and broadcast live update to overlays
 router.post("/dashboard/config", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
+  const accent_color = validateAccentColor(req.body?.accent_color);
 
+  // Tiers mode: save multiple prize tiers
+  if (Array.isArray(req.body?.tiers)) {
+    const tierResult = validateTiers(req.body.tiers);
+    if (!tierResult.valid) {
+      return res.status(400).json({ ok: false, error: tierResult.error });
+    }
+    // gifts_per_spin is derived from the lowest tier's min_gifts
+    const gifts_per_spin = tierResult.tiers[0].min_gifts;
+    const saved = saveConfig(bid, tierResult.tiers[0].items, {
+      accent_color,
+      gifts_per_spin,
+      tiers: tierResult.tiers,
+    });
+
+    // Broadcast to overlays
+    try {
+      const { app } = req;
+      if (app?.locals?.wss?.broadcastTo) {
+        app.locals.wss.broadcastTo(bid, {
+          type: "config",
+          items: saved.items,
+          tiers: saved.tiers,
+          accent_color: saved.accent_color,
+          gifts_per_spin: saved.gifts_per_spin,
+        });
+      }
+    } catch (e) {
+      console.warn("[/dashboard/config] ws broadcast failed:", e?.message || e);
+    }
+
+    return res.json({
+      ok: true,
+      items: saved.items,
+      tiers: saved.tiers,
+      accent_color: saved.accent_color,
+      gifts_per_spin: saved.gifts_per_spin,
+    });
+  }
+
+  // Legacy single-tier mode
   const validation = validateWheelItems(req.body?.items);
   if (!validation.valid) {
     return res.status(400).json({ ok: false, error: validation.error });
   }
 
-  const accent_color = validateAccentColor(req.body?.accent_color);
   const gifts_per_spin = validateGiftsPerSpin(req.body?.gifts_per_spin);
   const saved = saveConfig(bid, validation.items, { accent_color, gifts_per_spin });
 
-  // Broadcast config update to this streamer's connected overlays
   try {
     const { app } = req;
     if (app?.locals?.wss?.broadcastTo) {
       app.locals.wss.broadcastTo(bid, {
         type: "config",
         items: saved.items,
+        tiers: saved.tiers,
         accent_color: saved.accent_color,
         gifts_per_spin: saved.gifts_per_spin,
       });
@@ -64,6 +106,7 @@ router.post("/dashboard/config", requireSession, (req, res) => {
   return res.json({
     ok: true,
     items: saved.items,
+    tiers: saved.tiers,
     accent_color: saved.accent_color,
     gifts_per_spin: saved.gifts_per_spin,
   });

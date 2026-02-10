@@ -138,6 +138,105 @@ describe("spins service (multi-tenant)", () => {
     });
   });
 
+  // ── tier metadata ──────────────────────────────────────────────
+
+  describe("tier metadata", () => {
+    it("passes tier name in the spin broadcast", async () => {
+      const spins = await getSpins();
+      const broadcasts = [];
+      spins.setBroadcaster((bid, msg) => {
+        broadcasts.push({ bid, msg });
+        return 1;
+      });
+
+      const BID_T = 400;
+      db.upsertStreamer({ broadcaster_id: BID_T, kick_username: "tier_test", access_token: null, refresh_token: null });
+
+      spins.deliverSpinOrQueue(BID_T, 1, { tier: "Premium" });
+
+      const spinMsgs = broadcasts.filter(b => b.msg.action === "spin" && b.bid === BID_T);
+      expect(spinMsgs).toHaveLength(1);
+      expect(spinMsgs[0].msg.tier).toBe("Premium");
+    });
+
+    it("delivers spin without tier when not specified", async () => {
+      const spins = await getSpins();
+      const broadcasts = [];
+      spins.setBroadcaster((bid, msg) => {
+        broadcasts.push({ bid, msg });
+        return 1;
+      });
+
+      const BID_NT = 401;
+      db.upsertStreamer({ broadcaster_id: BID_NT, kick_username: "no_tier", access_token: null, refresh_token: null });
+
+      spins.deliverSpinOrQueue(BID_NT, 1);
+
+      const spinMsgs = broadcasts.filter(b => b.msg.action === "spin" && b.bid === BID_NT);
+      expect(spinMsgs).toHaveLength(1);
+      expect(spinMsgs[0].msg.tier).toBeUndefined();
+    });
+
+    it("preserves tier when requeued (no clients)", async () => {
+      const spins = await getSpins();
+      spins.setBroadcaster(() => 0); // no clients
+
+      const BID_RQ = 402;
+      db.upsertStreamer({ broadcaster_id: BID_RQ, kick_username: "requeue", access_token: null, refresh_token: null });
+
+      spins.deliverSpinOrQueue(BID_RQ, 1, { tier: "Legendary" });
+      expect(spins.getPending(BID_RQ)).toBe(1);
+
+      // Now connect a client and deliver
+      const broadcasts = [];
+      spins.setBroadcaster((bid, msg) => {
+        broadcasts.push({ bid, msg });
+        return 1;
+      });
+      // Reset delay and let it try again via deliverSpinOrQueue
+      spins.deliverSpinOrQueue(BID_RQ, 0); // noop but we need to trigger delivery
+
+      // Tier info should still be in the queue
+      // We can verify by calling resetDelay which tries to deliver
+      spins.resetDelay(BID_RQ);
+
+      const spinMsgs = broadcasts.filter(b => b.msg.action === "spin" && b.bid === BID_RQ);
+      expect(spinMsgs.length).toBeGreaterThanOrEqual(1);
+      expect(spinMsgs[0].msg.tier).toBe("Legendary");
+    });
+
+    it("queues multiple tiers independently", async () => {
+      const spins = await getSpins();
+      const broadcasts = [];
+      spins.setBroadcaster((bid, msg) => {
+        broadcasts.push({ bid, msg });
+        return 1;
+      });
+
+      const BID_MT = 403;
+      db.upsertStreamer({ broadcaster_id: BID_MT, kick_username: "multi_tier", access_token: null, refresh_token: null });
+
+      // First spin delivers immediately
+      spins.deliverSpinOrQueue(BID_MT, 1, { tier: "Basic" });
+      // Second queued (in progress)
+      spins.deliverSpinOrQueue(BID_MT, 1, { tier: "Premium" });
+
+      // Complete the first spin
+      spins.markSpinComplete(BID_MT);
+
+      // Advance past delay
+      vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+      // Reset to deliver the next
+      spins.resetDelay(BID_MT);
+
+      const spinMsgs = broadcasts.filter(b => b.msg.action === "spin" && b.bid === BID_MT);
+      expect(spinMsgs).toHaveLength(2);
+      expect(spinMsgs[0].msg.tier).toBe("Basic");
+      expect(spinMsgs[1].msg.tier).toBe("Premium");
+    });
+  });
+
   // ── markSpinComplete ────────────────────────────────────────────
 
   describe("markSpinComplete", () => {

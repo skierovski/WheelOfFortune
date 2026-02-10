@@ -53,6 +53,8 @@ router.get("/admin/overview", requireAdmin, (req, res) => {
       updated_at: s.updated_at,
       config: {
         items_count: config?.items?.length || 0,
+        tiers_count: Array.isArray(config?.tiers) ? config.tiers.length : 0,
+        tiers: Array.isArray(config?.tiers) ? config.tiers.map(t => ({ name: t.name, min_gifts: t.min_gifts, items_count: t.items?.length || 0 })) : null,
         accent_color: config?.accent_color || "#7c3aed",
         gifts_per_spin: config?.gifts_per_spin ?? 5,
       },
@@ -281,27 +283,44 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
   const giftCount = Math.max(1, Math.min(100, Number(req.body?.gift_count || 5)));
   const gifterName = String(req.body?.gifter_name || "TestGifter");
 
-  // Convert gifts to spins (use streamer's gifts_per_spin setting)
+  // Convert gifts to spins (tier-aware)
   const config = getDb().getConfig(bid);
-  const giftsPerSpin = config?.gifts_per_spin || 5;
-  const spinCount = Math.floor(giftCount / giftsPerSpin);
-
-  console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} giftsPerSpin=${giftsPerSpin} -> spins=${spinCount}`);
-
+  const configTiers = config?.tiers;
   let delivered = 0;
-  if (spinCount > 0) {
-    delivered = spins.deliverSpinOrQueue(bid, spinCount);
+  let spinCount = 0;
+  let tierUsed = null;
+
+  if (Array.isArray(configTiers) && configTiers.length > 0) {
+    // Tiered mode: find highest matching tier
+    for (let i = configTiers.length - 1; i >= 0; i--) {
+      if (giftCount >= configTiers[i].min_gifts) {
+        tierUsed = configTiers[i].name;
+        spinCount = 1;
+        break;
+      }
+    }
+    if (spinCount > 0) {
+      delivered = spins.deliverSpinOrQueue(bid, 1, { tier: tierUsed });
+    }
+  } else {
+    const giftsPerSpin = config?.gifts_per_spin || 5;
+    spinCount = Math.floor(giftCount / giftsPerSpin);
+    if (spinCount > 0) {
+      delivered = spins.deliverSpinOrQueue(bid, spinCount);
+    }
   }
+
+  console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} -> spins=${spinCount}${tierUsed ? ` tier="${tierUsed}"` : ""}`);
 
   res.json({
     ok: true,
     gift_count: giftCount,
-    gifts_per_spin: giftsPerSpin,
     spin_count: spinCount,
+    tier: tierUsed,
     delivered,
     pending: spins.getPending(bid),
     message: spinCount > 0
-      ? `${giftCount} gifts -> ${spinCount} spin(s) (${giftsPerSpin} per spin), ${delivered} delivered to overlay`
+      ? `${giftCount} gifts -> ${spinCount} spin(s)${tierUsed ? ` [${tierUsed}]` : ""}, ${delivered} delivered to overlay`
       : `${giftCount} gifts -> not enough for a spin (need ${giftsPerSpin})`,
   });
 });

@@ -189,6 +189,38 @@ describe("database schema and queries", () => {
       expect(db.getConfig(1).items[0].label).toBe("StreamerA");
       expect(db.getConfig(2).items[0].label).toBe("StreamerB");
     });
+
+    it("saves and loads tiers_json", () => {
+      const tiers = [
+        { name: "Basic", min_gifts: 5, items: [{ label: "P1", weight: 100 }] },
+        { name: "Premium", min_gifts: 25, items: [{ label: "P2", weight: 50 }, { label: "P3", weight: 50 }] },
+      ];
+      db.saveConfig(1, { items: tiers[0].items, tiers, accent_color: "#abcdef" });
+
+      const loaded = db.getConfig(1);
+      expect(loaded.tiers).toHaveLength(2);
+      expect(loaded.tiers[0].name).toBe("Basic");
+      expect(loaded.tiers[0].min_gifts).toBe(5);
+      expect(loaded.tiers[1].name).toBe("Premium");
+      expect(loaded.tiers[1].items).toHaveLength(2);
+    });
+
+    it("returns null tiers when not set", () => {
+      db.saveConfig(1, { items: [{ label: "A" }] });
+      const loaded = db.getConfig(1);
+      expect(loaded.tiers).toBeNull();
+    });
+
+    it("preserves tiers on update without new tiers", () => {
+      const tiers = [{ name: "T1", min_gifts: 5, items: [{ label: "X" }] }];
+      db.saveConfig(1, { items: [{ label: "X" }], tiers, accent_color: "#111111" });
+      db.saveConfig(1, { items: [{ label: "Y" }], accent_color: "#222222" }); // no tiers
+
+      const loaded = db.getConfig(1);
+      expect(loaded.tiers).toHaveLength(1);
+      expect(loaded.tiers[0].name).toBe("T1");
+      expect(loaded.accent_color).toBe("#222222");
+    });
   });
 
   // ── Goals ───────────────────────────────────────────────────────

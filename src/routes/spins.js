@@ -29,7 +29,7 @@ router.post("/overlay/:key/spins/complete", resolveOverlayKey, (req, res) => {
 
 // ── Dashboard endpoints (session-protected) ─────────────────────────
 
-// Test spin trigger from dashboard
+// Test spin trigger from dashboard (direct, no tier logic)
 router.get("/dashboard/test/:n", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const n = Math.max(1, Math.min(20, parseInt(req.params.n, 10) || 1));
@@ -38,6 +38,49 @@ router.get("/dashboard/test/:n", requireSession, (req, res) => {
     ok: true,
     message: `Sent ${n} spin(s) to ${delivered} connected client(s)`,
     pending: spins.getPending(bid),
+  });
+});
+
+// Simulate gift event (tier-aware) from dashboard
+router.post("/dashboard/simulate-gift", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const giftCount = Math.max(1, Math.min(100, Number(req.body?.gift_count) || 1));
+
+  const config = getDb().getConfig(bid);
+  const configTiers = config?.tiers;
+  let delivered = 0;
+  let spinCount = 0;
+  let tierUsed = null;
+
+  if (Array.isArray(configTiers) && configTiers.length > 0) {
+    for (let i = configTiers.length - 1; i >= 0; i--) {
+      if (giftCount >= configTiers[i].min_gifts) {
+        tierUsed = configTiers[i].name;
+        spinCount = 1;
+        break;
+      }
+    }
+    if (spinCount > 0) {
+      delivered = spins.deliverSpinOrQueue(bid, 1, { tier: tierUsed });
+    }
+  } else {
+    const giftsPerSpin = config?.gifts_per_spin || 5;
+    spinCount = Math.floor(giftCount / giftsPerSpin);
+    if (spinCount > 0) {
+      delivered = spins.deliverSpinOrQueue(bid, spinCount);
+    }
+  }
+
+  res.json({
+    ok: true,
+    gift_count: giftCount,
+    spin_count: spinCount,
+    tier: tierUsed,
+    delivered,
+    pending: spins.getPending(bid),
+    message: spinCount > 0
+      ? `${giftCount} gifts -> ${spinCount} spin(s)${tierUsed ? ` [${tierUsed}]` : ""}, ${delivered} delivered`
+      : `${giftCount} gifts below minimum tier threshold, no spin triggered`,
   });
 });
 

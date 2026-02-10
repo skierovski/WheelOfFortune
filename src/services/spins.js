@@ -9,6 +9,10 @@ let broadcastFn = null;
 // a restart means no overlay is mid-spin anyway)
 const inProgress = new Map();
 
+// In-memory tier queue per streamer: Map<broadcasterId, string[]>
+// Stores the tier name for each pending spin so we deliver the right tier
+const tierQueues = new Map();
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 function getState(broadcasterId) {
@@ -75,17 +79,25 @@ export const spins = {
    * Queue spins for a streamer and attempt to deliver one immediately.
    * @param {number} broadcasterId
    * @param {number} times  Number of spins to queue
+   * @param {{ tier?: string }} [meta]  Optional metadata (tier name)
    * @returns {number} Number of clients that received a spin broadcast (0 if queued only)
    */
-  deliverSpinOrQueue(broadcasterId, times) {
+  deliverSpinOrQueue(broadcasterId, times, meta = {}) {
     const safe = Math.max(0, Number(times) || 0);
     if (!safe) return 0;
+
+    // Queue tier info for each spin
+    if (meta.tier) {
+      const q = tierQueues.get(broadcasterId) || [];
+      for (let i = 0; i < safe; i++) q.push(meta.tier);
+      tierQueues.set(broadcasterId, q);
+    }
 
     // Add to pending
     const state = getState(broadcasterId);
     const newPending = state.pending_count + safe;
     setState(broadcasterId, { pending_count: newPending });
-    console.log(`[SPIN] bid=${broadcasterId} queued +${safe} (total pending=${newPending})`);
+    console.log(`[SPIN] bid=${broadcasterId} queued +${safe} (total pending=${newPending})${meta.tier ? ` tier="${meta.tier}"` : ""}`);
 
     // If a spin is in progress, just broadcast delay info
     if (isInProgress(broadcasterId)) {
@@ -108,16 +120,24 @@ export const spins = {
       return 0;
     }
 
-    // Deliver ONE spin
+    // Deliver ONE spin (pop tier from queue)
+    const tierName = (tierQueues.get(broadcasterId) || []).shift() || null;
     setState(broadcasterId, { pending_count: newPending - 1 });
     setInProgress(broadcasterId, true);
-    const delivered = broadcast(broadcasterId, { action: "spin", times: 1 });
+    const msg = { action: "spin", times: 1 };
+    if (tierName) msg.tier = tierName;
+    const delivered = broadcast(broadcasterId, msg);
     if (delivered > 0) {
-      console.log(`[SPIN] bid=${broadcasterId} delivered 1 spin (${newPending - 1} remaining)`);
+      console.log(`[SPIN] bid=${broadcasterId} delivered 1 spin (${newPending - 1} remaining)${tierName ? ` tier="${tierName}"` : ""}`);
     } else {
-      // No clients connected — requeue
+      // No clients connected — requeue (put tier back at front)
       setInProgress(broadcasterId, false);
       setState(broadcasterId, { pending_count: newPending });
+      if (tierName) {
+        const q = tierQueues.get(broadcasterId) || [];
+        q.unshift(tierName);
+        tierQueues.set(broadcasterId, q);
+      }
       console.log(`[SPIN] bid=${broadcasterId} no clients, requeued (pending=${newPending})`);
     }
     return delivered;
@@ -134,14 +154,22 @@ export const spins = {
     // If there are pending spins, try to deliver one right away
     const state = getState(broadcasterId);
     if (state.pending_count > 0) {
+      const tierName = (tierQueues.get(broadcasterId) || []).shift() || null;
       setState(broadcasterId, { pending_count: state.pending_count - 1 });
       setInProgress(broadcasterId, true);
-      const delivered = broadcast(broadcasterId, { action: "spin", times: 1 });
+      const msg = { action: "spin", times: 1 };
+      if (tierName) msg.tier = tierName;
+      const delivered = broadcast(broadcasterId, msg);
       if (delivered > 0) {
-        console.log(`[SPIN] bid=${broadcasterId} delivered 1 after reset (${state.pending_count - 1} remaining)`);
+        console.log(`[SPIN] bid=${broadcasterId} delivered 1 after reset (${state.pending_count - 1} remaining)${tierName ? ` tier="${tierName}"` : ""}`);
       } else {
         setInProgress(broadcasterId, false);
         setState(broadcasterId, { pending_count: state.pending_count });
+        if (tierName) {
+          const q = tierQueues.get(broadcasterId) || [];
+          q.unshift(tierName);
+          tierQueues.set(broadcasterId, q);
+        }
       }
     }
     // Notify delay overlay to clear
@@ -196,17 +224,25 @@ export function startSpinChecker() {
         });
         continue;
       }
-      // Deliver one spin
+      // Deliver one spin (pop tier from queue)
       const state = getState(bid);
       if (state.pending_count <= 0) continue;
+      const tierName = (tierQueues.get(bid) || []).shift() || null;
       setState(bid, { pending_count: state.pending_count - 1 });
       setInProgress(bid, true);
-      const delivered = broadcast(bid, { action: "spin", times: 1 });
+      const msg = { action: "spin", times: 1 };
+      if (tierName) msg.tier = tierName;
+      const delivered = broadcast(bid, msg);
       if (delivered > 0) {
-        console.log(`[SPIN][timer] bid=${bid} delivered 1 (${state.pending_count - 1} remaining)`);
+        console.log(`[SPIN][timer] bid=${bid} delivered 1 (${state.pending_count - 1} remaining)${tierName ? ` tier="${tierName}"` : ""}`);
       } else {
         setInProgress(bid, false);
         setState(bid, { pending_count: state.pending_count });
+        if (tierName) {
+          const q = tierQueues.get(bid) || [];
+          q.unshift(tierName);
+          tierQueues.set(bid, q);
+        }
       }
     }
   }, 1000);

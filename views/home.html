@@ -110,6 +110,22 @@
     .preview-wrap { display: flex; align-items: center; justify-content: center; margin-top: 16px; }
     canvas.preview { width: 180px; height: 180px; border-radius: 12px; }
 
+    .tier-tabs {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px;
+    }
+    .tier-tab {
+      padding: 8px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background .2s, border-color .2s;
+      border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+      color: #94a3b8;
+    }
+    .tier-tab:hover { background: rgba(255,255,255,0.08); }
+    .tier-tab.active {
+      background: rgba(124,58,237,0.15); border-color: var(--accent);
+      color: #e2e8f0;
+    }
+    .tier-tab .tier-gifts { font-size: 11px; color: #64748b; margin-left: 4px; }
+
     .tips-list { display: flex; flex-direction: column; gap: 8px; }
     .tips-list details {
       background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
@@ -230,27 +246,35 @@
         <div class="tips-list">
           <details>
             <summary>How to set up the wheel in OBS</summary>
-            <p>Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected.</p>
+            <p>Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.</p>
           </details>
           <details>
             <summary>Why is there no sound on the wheel?</summary>
             <p>Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you're testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.</p>
           </details>
           <details>
-            <summary>How do prizes and weights work?</summary>
-            <p>Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages.</p>
+            <summary>How do prize tiers work?</summary>
+            <p>You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes, and <b>50 gifts</b> triggers a "Legendary" wheel with ridiculous rewards. When someone gifts subs, the app picks the <b>highest tier</b> their gift count qualifies for. Each tier has its own set of prizes — fully customizable.</p>
+          </details>
+          <details>
+            <summary>How do weights work?</summary>
+            <p>Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages. Weights are normalized <b>per tier</b>, so each tier is independent.</p>
           </details>
           <details>
             <summary>What is "Bonus spin"?</summary>
-            <p>If a prize is marked as <b>bonus</b>, landing on it will trigger another spin automatically — the viewer gets a second chance! Great for keeping things exciting.</p>
+            <p>If a prize is marked as <b>bonus</b>, landing on it triggers another spin automatically — the viewer gets a second chance! The bonus spin uses the <b>same tier</b> as the original spin. Great for keeping things exciting.</p>
           </details>
           <details>
             <summary>Customizing your wheel</summary>
-            <p>Pick an <b>accent color</b> to personalize the wheel to match your brand. The color applies to the wheel pegs, pointer, segment tints, and also the delay overlay highlight. The <b>"Gifts per spin"</b> setting controls how many gifted subs trigger one wheel spin.</p>
+            <p>Pick an <b>accent color</b> to personalize the wheel to match your brand. The color applies to the wheel pegs, pointer, segment tints, and also the delay overlay highlight. The accent color is shared across all tiers.</p>
+          </details>
+          <details>
+            <summary>Testing with "Send Gifts"</summary>
+            <p>Use the <b>Send Gifts</b> action to simulate a gift event. Enter the number of gifts (e.g. 5, 25, or 50) and the app will match it to the correct tier, just like a real Kick gift event. Use <b>Send Test Spin</b> for a quick spin without tier logic.</p>
           </details>
           <details>
             <summary>What does "Reset Delay Timer" do?</summary>
-            <p>After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately.</p>
+            <p>After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately with the correct tier.</p>
           </details>
         </div>
       </div>
@@ -258,18 +282,14 @@
       <!-- WHEEL CONFIGURATION -->
       <div class="card full-width">
         <h2>Wheel Configuration</h2>
-        <div class="muted">Weights are normalized to 100% integer values (min 1%).</div>
+        <div class="muted">Create prize tiers based on gift amount. Each tier has its own set of prizes.</div>
 
-        <!-- Settings row: accent color + gifts per spin -->
+        <!-- Accent color -->
         <div class="row" style="margin:16px 0; gap:16px;">
           <div class="color-row">
             <label class="muted" for="accentPicker">Accent color:</label>
             <input type="color" id="accentPicker" value="#7c3aed" />
             <span class="color-swatch" id="accentSwatch" style="background:#7c3aed;"></span>
-          </div>
-          <div class="row" style="gap:6px;">
-            <label class="muted" for="giftsPerSpin">Gifts per spin:</label>
-            <input type="number" id="giftsPerSpin" min="1" max="100" step="1" value="5" style="width:80px;" />
           </div>
         </div>
 
@@ -278,14 +298,35 @@
           <canvas id="previewCanvas" class="preview" width="180" height="180"></canvas>
         </div>
 
-        <!-- Items table -->
-        <div id="wheelList" style="margin-top:16px;"></div>
+        <!-- Tier tabs -->
+        <div class="tier-tabs" id="tierTabs"></div>
+        <button class="btn small" id="addTierBtn" style="margin-top:8px;">+ Add Tier</button>
 
-        <div class="row" style="margin-top:10px;">
-          <input type="text" id="newLabel" placeholder="New prize..." />
-          <input type="number" id="newWeight" placeholder="Weight (%)" min="1" step="1" />
-          <label class="chk"><input type="checkbox" id="newBonus" /> Bonus spin</label>
-          <button class="btn" id="addItemBtn">Add</button>
+        <!-- Active tier editor -->
+        <div id="tierEditor" style="margin-top:16px;">
+          <div class="row" style="gap:12px; margin-bottom:12px;">
+            <div>
+              <label class="muted small" style="display:block; margin-bottom:4px;">Tier name</label>
+              <input type="text" id="tierName" placeholder="e.g. Basic" style="width:160px;" />
+            </div>
+            <div>
+              <label class="muted small" style="display:block; margin-bottom:4px;">Min. gifts to trigger</label>
+              <input type="number" id="tierMinGifts" min="1" max="1000" step="1" value="5" style="width:100px;" />
+            </div>
+            <div style="align-self:end;">
+              <button class="btn small" id="removeTierBtn" style="color:#f87171;">Remove tier</button>
+            </div>
+          </div>
+
+          <!-- Items table for active tier -->
+          <div id="wheelList"></div>
+
+          <div class="row" style="margin-top:10px;">
+            <input type="text" id="newLabel" placeholder="New prize..." />
+            <input type="number" id="newWeight" placeholder="Weight (%)" min="1" step="1" />
+            <label class="chk"><input type="checkbox" id="newBonus" /> Bonus spin</label>
+            <button class="btn" id="addItemBtn">Add</button>
+          </div>
         </div>
 
         <div class="row" style="margin-top:14px;">
@@ -347,7 +388,7 @@
       }
     }
 
-    // === CONFIG
+    // === CONFIG (Tiered)
     const defaultItems = [
       { label:"VIP 24h", weight:10, bonus:false },
       { label:"Sing 30s", weight:10, bonus:false },
@@ -358,9 +399,9 @@
       { label:"Giveaway x1", weight:10, bonus:false },
       { label:"Map choice", weight:10, bonus:false },
     ];
-    let items = [];
+    let tiers = [{ name: "Default", min_gifts: 5, items: defaultItems.slice() }];
+    let activeTierIdx = 0;
     let accentColor = "#7c3aed";
-    let giftsPerSpin = 5;
 
     function sanitizeItem(it){
       const label = String(it?.label ?? "").trim();
@@ -368,6 +409,9 @@
       const bonus  = Boolean(it?.bonus);
       return { label, weight, bonus };
     }
+
+    function getActiveItems() { return tiers[activeTierIdx]?.items || []; }
+    function setActiveItems(arr) { if (tiers[activeTierIdx]) tiers[activeTierIdx].items = arr; }
 
     function applyAccent(hex) {
       accentColor = hex;
@@ -380,17 +424,75 @@
       try {
         const r = await fetch("/dashboard/config", { cache: "no-store" });
         const j = await r.json();
-        items = Array.isArray(j?.items) && j.items.length ? j.items.map(sanitizeItem) : defaultItems.slice().map(sanitizeItem);
+        if (Array.isArray(j?.tiers) && j.tiers.length > 0) {
+          tiers = j.tiers.map(t => ({
+            name: t.name || "Default",
+            min_gifts: t.min_gifts || 5,
+            items: Array.isArray(t.items) ? t.items.map(sanitizeItem) : defaultItems.slice().map(sanitizeItem),
+          }));
+        } else if (Array.isArray(j?.items) && j.items.length) {
+          tiers = [{ name: "Default", min_gifts: j.gifts_per_spin || 5, items: j.items.map(sanitizeItem) }];
+        } else {
+          tiers = [{ name: "Default", min_gifts: 5, items: defaultItems.slice().map(sanitizeItem) }];
+        }
         if (typeof j?.accent_color === "string") applyAccent(j.accent_color);
-        if (Number.isFinite(j?.gifts_per_spin)) { giftsPerSpin = j.gifts_per_spin; el("giftsPerSpin").value = giftsPerSpin; }
       } catch {
-        items = defaultItems.slice().map(sanitizeItem);
+        tiers = [{ name: "Default", min_gifts: 5, items: defaultItems.slice().map(sanitizeItem) }];
       }
+      activeTierIdx = 0;
+      renderTierTabs();
+      renderTierEditor();
       renderWheelList();
       renderPreview();
     }
 
+    function renderTierTabs() {
+      const box = el("tierTabs");
+      box.innerHTML = "";
+      tiers.forEach((t, i) => {
+        const tab = document.createElement("div");
+        tab.className = "tier-tab" + (i === activeTierIdx ? " active" : "");
+        tab.innerHTML = `${t.name}<span class="tier-gifts">(${t.min_gifts}+ gifts)</span>`;
+        tab.onclick = () => { activeTierIdx = i; renderTierTabs(); renderTierEditor(); renderWheelList(); renderPreviewDebounced(); };
+        box.appendChild(tab);
+      });
+    }
+
+    function renderTierEditor() {
+      const t = tiers[activeTierIdx];
+      if (!t) return;
+      el("tierName").value = t.name;
+      el("tierMinGifts").value = t.min_gifts;
+    }
+
+    el("tierName").addEventListener("change", () => {
+      const v = el("tierName").value.trim();
+      if (v && tiers[activeTierIdx]) { tiers[activeTierIdx].name = v; renderTierTabs(); }
+    });
+    el("tierMinGifts").addEventListener("change", () => {
+      let v = Math.round(Number(el("tierMinGifts").value) || 5);
+      if (v < 1) v = 1; if (v > 1000) v = 1000;
+      if (tiers[activeTierIdx]) { tiers[activeTierIdx].min_gifts = v; el("tierMinGifts").value = v; renderTierTabs(); }
+    });
+
+    el("addTierBtn").onclick = () => {
+      if (tiers.length >= 10) { alert("Maximum 10 tiers."); return; }
+      const maxGifts = Math.max(...tiers.map(t => t.min_gifts));
+      tiers.push({ name: `Tier ${tiers.length + 1}`, min_gifts: maxGifts * 5, items: defaultItems.slice().map(sanitizeItem) });
+      activeTierIdx = tiers.length - 1;
+      renderTierTabs(); renderTierEditor(); renderWheelList(); renderPreviewDebounced();
+    };
+
+    el("removeTierBtn").onclick = () => {
+      if (tiers.length <= 1) { alert("You need at least one tier."); return; }
+      if (!confirm(`Remove tier "${tiers[activeTierIdx].name}"?`)) return;
+      tiers.splice(activeTierIdx, 1);
+      activeTierIdx = Math.min(activeTierIdx, tiers.length - 1);
+      renderTierTabs(); renderTierEditor(); renderWheelList(); renderPreviewDebounced();
+    };
+
     function renderWheelList(){
+      const items = getActiveItems();
       const box = el("wheelList");
       let html = `<table>
         <thead><tr><th style="width:44%;">Prize</th><th style="width:14%;">Weight (%)</th><th style="width:18%;">Bonus</th><th style="width:24%;"></th></tr></thead>
@@ -413,22 +515,23 @@
 
       box.querySelectorAll("input[data-i]").forEach(inp => {
         inp.addEventListener("change", () => {
+          const arr = getActiveItems();
           const i = Number(inp.dataset.i);
           const k = String(inp.dataset.k);
-          if (k === "weight") { let v = Math.round(Number(inp.value)||1); if (v<1) v=1; items[i][k]=v; inp.value=v; }
-          else if (k === "label") { items[i][k] = String(inp.value||"").trim(); }
-          else if (k === "bonus") { items[i][k] = inp.checked; }
+          if (k === "weight") { let v = Math.round(Number(inp.value)||1); if (v<1) v=1; arr[i][k]=v; inp.value=v; }
+          else if (k === "label") { arr[i][k] = String(inp.value||"").trim(); }
+          else if (k === "bonus") { arr[i][k] = inp.checked; }
           renderPreviewDebounced();
         });
       });
       box.querySelectorAll("button[data-del]").forEach(btn => {
-        btn.onclick = () => { items.splice(Number(btn.dataset.del),1); renderWheelList(); renderPreviewDebounced(); };
+        btn.onclick = () => { const arr = getActiveItems(); arr.splice(Number(btn.dataset.del),1); renderWheelList(); renderPreviewDebounced(); };
       });
       box.querySelectorAll("button[data-up]").forEach(btn => {
-        btn.onclick = () => { const i=Number(btn.dataset.up); if(i>0){[items[i-1],items[i]]=[items[i],items[i-1]]; renderWheelList(); renderPreviewDebounced();} };
+        btn.onclick = () => { const arr = getActiveItems(); const i=Number(btn.dataset.up); if(i>0){[arr[i-1],arr[i]]=[arr[i],arr[i-1]]; renderWheelList(); renderPreviewDebounced();} };
       });
       box.querySelectorAll("button[data-down]").forEach(btn => {
-        btn.onclick = () => { const i=Number(btn.dataset.down); if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]]; renderWheelList(); renderPreviewDebounced();} };
+        btn.onclick = () => { const arr = getActiveItems(); const i=Number(btn.dataset.down); if(i<arr.length-1){[arr[i+1],arr[i]]=[arr[i],arr[i+1]]; renderWheelList(); renderPreviewDebounced();} };
       });
     }
 
@@ -462,7 +565,7 @@
       const label = (el("newLabel").value||"").trim();
       let w = Math.round(Number(el("newWeight").value)||1); if(w<1) w=1;
       if (!label) return;
-      items.push({ label, weight: w, bonus: el("newBonus").checked });
+      getActiveItems().push({ label, weight: w, bonus: el("newBonus").checked });
       el("newLabel").value = ""; el("newWeight").value = ""; el("newBonus").checked = false;
       renderWheelList();
       renderPreviewDebounced();
@@ -473,21 +576,22 @@
       renderPreviewDebounced();
     });
 
-    el("giftsPerSpin").addEventListener("change", (e) => {
-      let v = Math.round(Number(e.target.value) || 5);
-      if (v < 1) v = 1; if (v > 100) v = 100;
-      giftsPerSpin = v;
-      e.target.value = v;
-    });
-
     el("saveCfgBtn").onclick = async () => {
       try {
-        items = normalizeWeightsTo100(items.map(sanitizeItem));
+        // Normalize all tiers
+        const normalizedTiers = tiers.map(t => ({
+          name: t.name,
+          min_gifts: t.min_gifts,
+          items: normalizeWeightsTo100(t.items.map(sanitizeItem)),
+        }));
+        // Update local state
+        tiers = normalizedTiers;
         renderWheelList();
+
         const r = await fetch("/dashboard/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items, accent_color: accentColor, gifts_per_spin: giftsPerSpin })
+          body: JSON.stringify({ tiers: normalizedTiers, accent_color: accentColor })
         });
         if (!r.ok) throw new Error(await r.text());
         alert("Configuration saved.");
@@ -498,7 +602,7 @@
     };
 
     el("normalizeBtn").onclick = () => {
-      items = normalizeWeightsTo100(items.map(sanitizeItem));
+      setActiveItems(normalizeWeightsTo100(getActiveItems().map(sanitizeItem)));
       renderWheelList();
       renderPreviewDebounced();
     };
@@ -536,7 +640,11 @@
     el("sendGiftsBtn").onclick = async () => {
       const n = Math.max(1, Math.min(100, parseInt(el("giftCount").value, 10) || 1));
       try {
-        const r = await fetch("/dashboard/test/" + n, { cache: "no-store" });
+        const r = await fetch("/dashboard/simulate-gift", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gift_count: n }),
+        });
         const j = await r.json();
         showActionResult(j.ok, j.message || `Sent ${n} gift(s).`);
       } catch {
@@ -619,7 +727,7 @@
 
     let previewTimer;
     function renderPreview(){
-      const list = items.length ? items : defaultItems;
+      const list = getActiveItems().length ? getActiveItems() : defaultItems;
       drawPreview(ctxP, list, accentColor);
     }
     function renderPreviewDebounced(){

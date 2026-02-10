@@ -121,6 +121,7 @@
     function saveItemsLocal(items){ localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(items.map(sanitizeItem))); }
 
     let ITEMS = [];
+    let TIERS = null; // Array of { name, min_gifts, items } or null
     let CONFIG_VERSION = 1;
     let ACCENT_COLOR = "#7c3aed"; // streamer-customizable accent color
 
@@ -638,24 +639,54 @@
       spinning=true;
       if (queue.length){ showOverlay(); await wait(400); }
       while (queue.length) {
+        const entry = queue[0];
+        const tierName = (typeof entry === "object" && entry !== null) ? entry.tier : null;
+
+        // If a tier is specified, temporarily swap items for this spin
+        let savedItems = null;
+        let savedBag = null;
+        let savedBagPos = null;
+        if (tierName) {
+          const tierItems = getItemsForTier(tierName);
+          if (tierItems && tierItems.length > 0) {
+            savedItems = ITEMS;
+            savedBag = spinBag;
+            savedBagPos = bagPos;
+            ITEMS = tierItems;
+            buildSpinBag();
+            if (!ACTIVE_SNAPSHOT) drawWheel(rotation);
+            console.log(`[TIER] Using tier "${tierName}" with ${tierItems.length} items`);
+          }
+        }
+
         const pickedId = nextFromBag();
         const result = await spinToId(pickedId);
         if (result.label) {
-          console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label} ${result.bonus ? '(bonus)' : ''}`);
+          const tierTag = tierName ? ` [${tierName}]` : "";
+          console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label} ${result.bonus ? '(bonus)' : ''}${tierTag}`);
           showResult(result.label, 1800, result.bonus);
           playSound();
           speak(result.label);
 
-          // BONUS: dokładamy jedno ekstra zakręcenie
+          // BONUS: add one extra spin (same tier if tiered)
           if (result.bonus) {
-            queue.push(1);
+            queue.push(tierName ? { times: 1, tier: tierName } : 1);
           }
 
           fetch(`${API_BASE}/chat/announce`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label: result.label + (result.bonus ? " (+bonus)" : "") })
+            body: JSON.stringify({ label: result.label + (result.bonus ? " (+bonus)" : "") + (tierName ? ` [${tierName}]` : "") })
           }).catch(()=>{});
         }
+
+        // Restore original items after tier spin
+        if (savedItems) {
+          ITEMS = savedItems;
+          spinBag = savedBag;
+          bagPos = savedBagPos;
+          if (!ACTIVE_SNAPSHOT) drawWheel(rotation);
+        }
+
         queue.shift();
         await wait(2000);
         
@@ -691,17 +722,28 @@
       if (pending !== null) debugPendingEl.textContent = pending;
     }
 
+    function getItemsForTier(tierName) {
+      if (!tierName || !Array.isArray(TIERS) || TIERS.length === 0) return null;
+      const t = TIERS.find(t => t.name === tierName);
+      return t ? t.items.map(sanitizeItem) : null;
+    }
+
     function handleServerMessage(data) {
-      if (data.type === "config" && Array.isArray(data.items)) {
-        ITEMS = data.items.map(sanitizeItem);
+      if (data.type === "config") {
+        if (Array.isArray(data.items)) {
+          ITEMS = data.items.map(sanitizeItem);
+        }
+        if (Array.isArray(data.tiers)) {
+          TIERS = data.tiers;
+        }
         if (typeof data.accent_color === "string") ACCENT_COLOR = data.accent_color;
         CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
         return;
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
-        // Server always sends 1 spin at a time to respect delays
-        console.log("[WS] 📥 Received spin command");
-        queue.push(1);
+        const tierName = data.tier || null;
+        console.log("[WS] 📥 Received spin command" + (tierName ? ` tier="${tierName}"` : ""));
+        queue.push({ times: 1, tier: tierName });
         showOverlay(); runQueue(); return;
       }
     }
@@ -890,6 +932,7 @@
       const cfg = await fetchServerConfigFull();
       if (cfg) {
         if (Array.isArray(cfg.items)) ITEMS = cfg.items.map(sanitizeItem); else ITEMS = loadItemsLocal();
+        if (Array.isArray(cfg.tiers)) TIERS = cfg.tiers;
         if (typeof cfg.accent_color === "string") ACCENT_COLOR = cfg.accent_color;
       } else {
         ITEMS = loadItemsLocal();

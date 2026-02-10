@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS streamers (
 CREATE TABLE IF NOT EXISTS wheel_configs (
   broadcaster_id   INTEGER PRIMARY KEY REFERENCES streamers(broadcaster_id),
   items_json       TEXT DEFAULT '[]',
+  tiers_json       TEXT DEFAULT NULL,
   accent_color     TEXT DEFAULT '#7c3aed',
   gifts_per_spin   INTEGER DEFAULT 5,
   updated_at       INTEGER DEFAULT (unixepoch())
@@ -96,6 +97,25 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("gifts_per_spin")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN gifts_per_spin INTEGER DEFAULT 5");
   }
+  if (!cols.includes("tiers_json")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN tiers_json TEXT DEFAULT NULL");
+  }
+
+  // Migrate existing single-tier configs into tiers_json format
+  const needsMigration = sqlite.prepare(
+    "SELECT broadcaster_id, items_json, gifts_per_spin FROM wheel_configs WHERE tiers_json IS NULL AND items_json != '[]'"
+  ).all();
+  if (needsMigration.length > 0) {
+    const migrateStmt = sqlite.prepare("UPDATE wheel_configs SET tiers_json = ? WHERE broadcaster_id = ?");
+    for (const row of needsMigration) {
+      const items = JSON.parse(row.items_json || "[]");
+      if (items.length > 0) {
+        const tiers = [{ name: "Default", min_gifts: row.gifts_per_spin || 5, items }];
+        migrateStmt.run(JSON.stringify(tiers), row.broadcaster_id);
+        console.log(`[migrate] Converted single config to tier for bid=${row.broadcaster_id}`);
+      }
+    }
+  }
 
   // ── Prepared statements ─────────────────────────────────────────
 
@@ -128,10 +148,11 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, items_json, accent_color, gifts_per_spin, updated_at)
-      VALUES (@broadcaster_id, @items_json, @accent_color, @gifts_per_spin, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, gifts_per_spin, updated_at)
+      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @gifts_per_spin, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
         items_json     = excluded.items_json,
+        tiers_json     = excluded.tiers_json,
         accent_color   = excluded.accent_color,
         gifts_per_spin = excluded.gifts_per_spin,
         updated_at     = unixepoch()
@@ -249,18 +270,21 @@ export function openDatabase(dbPath = ":memory:") {
     getConfig(broadcasterId) {
       const row = stmts.getConfig.get(broadcasterId);
       if (!row) return null;
+      const tiers = row.tiers_json ? JSON.parse(row.tiers_json) : null;
       return {
         items: JSON.parse(row.items_json),
+        tiers: Array.isArray(tiers) ? tiers : null,
         accent_color: row.accent_color || "#7c3aed",
         gifts_per_spin: row.gifts_per_spin ?? 5,
       };
     },
 
-    saveConfig(broadcasterId, { items, accent_color, gifts_per_spin }) {
+    saveConfig(broadcasterId, { items, tiers, accent_color, gifts_per_spin }) {
       const prev = stmts.getConfig.get(broadcasterId);
       stmts.upsertConfig.run({
         broadcaster_id: broadcasterId,
         items_json: JSON.stringify(items),
+        tiers_json: tiers ? JSON.stringify(tiers) : (prev?.tiers_json ?? null),
         accent_color: accent_color ?? prev?.accent_color ?? "#7c3aed",
         gifts_per_spin: gifts_per_spin ?? prev?.gifts_per_spin ?? 5,
       });
