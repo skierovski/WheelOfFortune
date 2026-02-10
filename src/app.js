@@ -69,7 +69,8 @@ const overlayLimiter = rateLimit({
 });
 
 // ── Static files ────────────────────────────────────────────────────
-app.use(express.static(path.join(process.cwd(), "public")));
+// Disable automatic index.html serving so our "/" route handles the landing page
+app.use(express.static(path.join(process.cwd(), "public"), { index: false }));
 
 // ── Routes ──────────────────────────────────────────────────────────
 
