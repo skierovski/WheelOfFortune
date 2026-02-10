@@ -145,6 +145,10 @@ export function openDatabase(dbPath = ":memory:") {
       UPDATE streamers SET overlay_key = @overlay_key, updated_at = unixepoch()
       WHERE broadcaster_id = @broadcaster_id
     `),
+    updateDisplayName: sqlite.prepare(`
+      UPDATE streamers SET display_name = @display_name, updated_at = unixepoch()
+      WHERE broadcaster_id = @broadcaster_id
+    `),
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
@@ -249,6 +253,10 @@ export function openDatabase(dbPath = ":memory:") {
 
     getAllStreamers() {
       return stmts.getAllStreamers.all();
+    },
+
+    updateDisplayName(broadcasterId, displayName) {
+      return stmts.updateDisplayName.run({ broadcaster_id: broadcasterId, display_name: displayName });
     },
 
     updateTokens(broadcasterId, { access_token, refresh_token, token_expires_at, token_scope }) {

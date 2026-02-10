@@ -159,28 +159,46 @@
       text-decoration: none;
     }
     .logout-btn:hover { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.4); color: #f87171; }
+
+    .lang-toggle {
+      display: flex; gap: 0; border-radius: 8px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.10); margin-right: 12px;
+    }
+    .lang-btn {
+      padding: 6px 12px; background: rgba(255,255,255,0.04); color: #94a3b8;
+      border: none; cursor: pointer; font-size: 12px; font-weight: 600;
+      letter-spacing: 0.5px; transition: all 0.2s;
+    }
+    .lang-btn:hover { background: rgba(255,255,255,0.08); color: #e2e8f0; }
+    .lang-btn.active { background: var(--accent); color: #fff; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="header-row">
       <div class="titles">
-        <h1>Wheel of Fortune</h1>
-        <p class="subtitle">Streamer Dashboard</p>
+        <h1 data-i18n="title">Wheel of Fortune</h1>
+        <p class="subtitle" data-i18n="subtitle">Streamer Dashboard</p>
       </div>
-      <a class="logout-btn" href="/auth/logout">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Logout
-      </a>
+      <div style="display:flex; align-items:center;">
+        <div class="lang-toggle">
+          <button class="lang-btn active" id="langEN" onclick="setLang('en')">EN</button>
+          <button class="lang-btn" id="langPL" onclick="setLang('pl')">PL</button>
+        </div>
+        <a class="logout-btn" href="/auth/logout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span data-i18n="logout">Logout</span>
+        </a>
+      </div>
     </div>
 
     <div class="grid">
       <!-- OVERLAY URLS -->
       <div class="card">
-        <h2>OBS Overlay URLs</h2>
-        <div class="muted">Copy into OBS as Browser Sources (transparent background).</div>
+        <h2 data-i18n="urls_title">OBS Overlay URLs</h2>
+        <div class="muted" data-i18n="urls_desc">Copy into OBS as Browser Sources (transparent background).</div>
         <div style="margin-top:10px;">
-          <div class="muted small">Wheel overlay:</div>
+          <div class="muted small" data-i18n="urls_wheel">Wheel overlay:</div>
           <div class="url-row">
             <div class="overlay-url masked" id="wheelUrl" onclick="copyUrl(this)">
               <span class="copy-hint">click to copy</span>
@@ -190,7 +208,7 @@
               <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
-          <div class="muted small" style="margin-top:8px;">Delay timer overlay:</div>
+          <div class="muted small" style="margin-top:8px;" data-i18n="urls_delay">Delay timer overlay:</div>
           <div class="url-row">
             <div class="overlay-url masked" id="delayUrl" onclick="copyUrl(this)">
               <span class="copy-hint">click to copy</span>
@@ -200,7 +218,7 @@
               <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
-          <div class="muted small" style="margin-top:8px;">WebSocket (custom integrations):</div>
+          <div class="muted small" style="margin-top:8px;" data-i18n="urls_ws">WebSocket (custom integrations):</div>
           <div class="url-row">
             <div class="overlay-url masked" id="wsUrl" onclick="copyUrl(this)">
               <span class="copy-hint">click to copy</span>
@@ -215,26 +233,26 @@
 
       <!-- ACTIONS -->
       <div class="card">
-        <h2>Actions</h2>
+        <h2 data-i18n="actions_title">Actions</h2>
         <div style="display:flex; flex-direction:column; gap:14px;">
           <button class="btn btn-accent" id="testSpinBtn" style="padding:12px 20px; font-size:15px; font-weight:700; width:100%;">
             <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Send Test Spin
+              <span data-i18n="actions_test_spin">Send Test Spin</span>
             </span>
           </button>
           <button class="btn" id="resetDelayBtn" style="padding:12px 20px; font-size:15px; font-weight:600; width:100%;">
             <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Reset Delay Timer
+              <span data-i18n="actions_reset_delay">Reset Delay Timer</span>
             </span>
           </button>
           <div style="display:flex; gap:10px; align-items:end;">
             <div style="flex:1;">
-              <label class="muted" style="font-size:13px; display:block; margin-bottom:5px;">Simulate gifted subs</label>
+              <label class="muted" style="font-size:13px; display:block; margin-bottom:5px;" data-i18n="actions_sim_label">Simulate gifted subs</label>
               <input type="number" id="giftCount" min="1" max="100" value="1" style="width:100%; font-size:15px; padding:10px 14px;" />
             </div>
-            <button class="btn" id="sendGiftsBtn" style="padding:12px 20px; font-size:15px; font-weight:600; white-space:nowrap;">Send Gifts</button>
+            <button class="btn" id="sendGiftsBtn" style="padding:12px 20px; font-size:15px; font-weight:600; white-space:nowrap;" data-i18n="actions_send_gifts">Send Gifts</button>
           </div>
           <div id="actionResult" style="display:none; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:600; text-align:center;"></div>
         </div>
@@ -242,52 +260,52 @@
 
       <!-- TIPS & TRICKS -->
       <div class="card full-width">
-        <h2>Tips &amp; Tricks</h2>
+        <h2 data-i18n="tips_title">Tips &amp; Tricks</h2>
         <div class="tips-list">
           <details>
-            <summary>How to set up the wheel in OBS</summary>
-            <p>Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.</p>
+            <summary data-i18n="tip1_q">How to set up the wheel in OBS</summary>
+            <p data-i18n-html="tip1_a">Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.</p>
           </details>
           <details>
-            <summary>Why is there no sound on the wheel?</summary>
-            <p>Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you're testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.</p>
+            <summary data-i18n="tip2_q">Why is there no sound on the wheel?</summary>
+            <p data-i18n-html="tip2_a">Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you're testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.</p>
           </details>
           <details>
-            <summary>How do prize tiers work?</summary>
-            <p>You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes, and <b>50 gifts</b> triggers a "Legendary" wheel with ridiculous rewards. When someone gifts subs, the app picks the <b>highest tier</b> their gift count qualifies for. Each tier has its own set of prizes — fully customizable.</p>
+            <summary data-i18n="tip3_q">How do prize tiers work?</summary>
+            <p data-i18n-html="tip3_a">You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes, and <b>50 gifts</b> triggers a "Legendary" wheel with ridiculous rewards. When someone gifts subs, the app picks the <b>highest tier</b> their gift count qualifies for. Each tier has its own set of prizes — fully customizable.</p>
           </details>
           <details>
-            <summary>How do weights work?</summary>
-            <p>Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages. Weights are normalized <b>per tier</b>, so each tier is independent.</p>
+            <summary data-i18n="tip4_q">How do weights work?</summary>
+            <p data-i18n-html="tip4_a">Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages. Weights are normalized <b>per tier</b>, so each tier is independent.</p>
           </details>
           <details>
-            <summary>What is "Bonus spin"?</summary>
-            <p>If a prize is marked as <b>bonus</b>, landing on it triggers another spin automatically — the viewer gets a second chance! The bonus spin uses the <b>same tier</b> as the original spin. Great for keeping things exciting.</p>
+            <summary data-i18n="tip5_q">What is "Bonus spin"?</summary>
+            <p data-i18n-html="tip5_a">If a prize is marked as <b>bonus</b>, landing on it triggers another spin automatically — the viewer gets a second chance! The bonus spin uses the <b>same tier</b> as the original spin. Great for keeping things exciting.</p>
           </details>
           <details>
-            <summary>Customizing your wheel</summary>
-            <p>Pick an <b>accent color</b> to personalize the wheel to match your brand. The color applies to the wheel pegs, pointer, segment tints, and also the delay overlay highlight. The accent color is shared across all tiers.</p>
+            <summary data-i18n="tip6_q">Customizing your wheel</summary>
+            <p data-i18n-html="tip6_a">Pick an <b>accent color</b> to personalize the wheel to match your brand. The color applies to the wheel pegs, pointer, segment tints, and also the delay overlay highlight. The accent color is shared across all tiers.</p>
           </details>
           <details>
-            <summary>Testing with "Send Gifts"</summary>
-            <p>Use the <b>Send Gifts</b> action to simulate a gift event. Enter the number of gifts (e.g. 5, 25, or 50) and the app will match it to the correct tier, just like a real Kick gift event. Use <b>Send Test Spin</b> for a quick spin without tier logic.</p>
+            <summary data-i18n="tip7_q">Testing with "Send Gifts"</summary>
+            <p data-i18n-html="tip7_a">Use the <b>Send Gifts</b> action to simulate a gift event. Enter the number of gifts (e.g. 5, 25, or 50) and the app will match it to the correct tier, just like a real Kick gift event. Use <b>Send Test Spin</b> for a quick spin without tier logic.</p>
           </details>
           <details>
-            <summary>What does "Reset Delay Timer" do?</summary>
-            <p>After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately with the correct tier.</p>
+            <summary data-i18n="tip8_q">What does "Reset Delay Timer" do?</summary>
+            <p data-i18n-html="tip8_a">After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately with the correct tier.</p>
           </details>
         </div>
       </div>
 
       <!-- WHEEL CONFIGURATION -->
       <div class="card full-width">
-        <h2>Wheel Configuration</h2>
-        <div class="muted">Create prize tiers based on gift amount. Each tier has its own set of prizes.</div>
+        <h2 data-i18n="cfg_title">Wheel Configuration</h2>
+        <div class="muted" data-i18n="cfg_desc">Create prize tiers based on gift amount. Each tier has its own set of prizes.</div>
 
         <!-- Accent color -->
         <div class="row" style="margin:16px 0; gap:16px;">
           <div class="color-row">
-            <label class="muted" for="accentPicker">Accent color:</label>
+            <label class="muted" for="accentPicker" data-i18n="cfg_accent">Accent color:</label>
             <input type="color" id="accentPicker" value="#7c3aed" />
             <span class="color-swatch" id="accentSwatch" style="background:#7c3aed;"></span>
           </div>
@@ -300,21 +318,21 @@
 
         <!-- Tier tabs -->
         <div class="tier-tabs" id="tierTabs"></div>
-        <button class="btn small" id="addTierBtn" style="margin-top:8px;">+ Add Tier</button>
+        <button class="btn small" id="addTierBtn" style="margin-top:8px;" data-i18n="cfg_add_tier">+ Add Tier</button>
 
         <!-- Active tier editor -->
         <div id="tierEditor" style="margin-top:16px;">
           <div class="row" style="gap:12px; margin-bottom:12px;">
             <div>
-              <label class="muted small" style="display:block; margin-bottom:4px;">Tier name</label>
+              <label class="muted small" style="display:block; margin-bottom:4px;" data-i18n="cfg_tier_name">Tier name</label>
               <input type="text" id="tierName" placeholder="e.g. Basic" style="width:160px;" />
             </div>
             <div>
-              <label class="muted small" style="display:block; margin-bottom:4px;">Min. gifts to trigger</label>
+              <label class="muted small" style="display:block; margin-bottom:4px;" data-i18n="cfg_min_gifts">Min. gifts to trigger</label>
               <input type="number" id="tierMinGifts" min="1" max="1000" step="1" value="5" style="width:100px;" />
             </div>
             <div style="align-self:end;">
-              <button class="btn small" id="removeTierBtn" style="color:#f87171;">Remove tier</button>
+              <button class="btn small" id="removeTierBtn" style="color:#f87171;" data-i18n="cfg_remove_tier">Remove tier</button>
             </div>
           </div>
 
@@ -322,30 +340,141 @@
           <div id="wheelList"></div>
 
           <div class="row" style="margin-top:10px;">
-            <input type="text" id="newLabel" placeholder="New prize..." />
-            <input type="number" id="newWeight" placeholder="Weight (%)" min="1" step="1" />
-            <label class="chk"><input type="checkbox" id="newBonus" /> Bonus spin</label>
-            <button class="btn" id="addItemBtn">Add</button>
+            <input type="text" id="newLabel" data-i18n-placeholder="cfg_new_prize_ph" placeholder="New prize..." />
+            <input type="number" id="newWeight" data-i18n-placeholder="cfg_weight_ph" placeholder="Weight (%)" min="1" step="1" />
+            <label class="chk"><input type="checkbox" id="newBonus" /> <span data-i18n="cfg_bonus_spin">Bonus spin</span></label>
+            <button class="btn" id="addItemBtn" data-i18n="cfg_add">Add</button>
           </div>
         </div>
 
         <div class="row" style="margin-top:14px;">
-          <button class="btn" id="normalizeBtn">Normalize to 100%</button>
-          <button class="btn btn-accent" id="saveCfgBtn">Save Configuration</button>
+          <button class="btn" id="normalizeBtn" data-i18n="cfg_normalize">Normalize to 100%</button>
+          <button class="btn btn-accent" id="saveCfgBtn" data-i18n="cfg_save">Save Configuration</button>
         </div>
       </div>
     </div>
   </div>
 
   <script>
+    // ── i18n ────────────────────────────────────────────────────
+    const T = {
+      en: {
+        title: "Wheel of Fortune", subtitle: "Streamer Dashboard", logout: "Logout",
+        urls_title: "OBS Overlay URLs", urls_desc: "Copy into OBS as Browser Sources (transparent background).",
+        urls_wheel: "Wheel overlay:", urls_delay: "Delay timer overlay:", urls_ws: "WebSocket (custom integrations):",
+        actions_title: "Actions", actions_test_spin: "Send Test Spin", actions_reset_delay: "Reset Delay Timer",
+        actions_sim_label: "Simulate gifted subs", actions_send_gifts: "Send Gifts",
+        tips_title: "Tips & Tricks",
+        tip1_q: "How to set up the wheel in OBS",
+        tip1_a: 'Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.',
+        tip2_q: "Why is there no sound on the wheel?",
+        tip2_a: 'Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you\'re testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.',
+        tip3_q: "How do prize tiers work?",
+        tip3_a: 'You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes, and <b>50 gifts</b> triggers a "Legendary" wheel with ridiculous rewards. When someone gifts subs, the app picks the <b>highest tier</b> their gift count qualifies for. Each tier has its own set of prizes \u2014 fully customizable.',
+        tip4_q: "How do weights work?",
+        tip4_a: 'Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages. Weights are normalized <b>per tier</b>, so each tier is independent.',
+        tip5_q: 'What is "Bonus spin"?',
+        tip5_a: 'If a prize is marked as <b>bonus</b>, landing on it triggers another spin automatically \u2014 the viewer gets a second chance! The bonus spin uses the <b>same tier</b> as the original spin. Great for keeping things exciting.',
+        tip6_q: "Customizing your wheel",
+        tip6_a: 'Pick an <b>accent color</b> to personalize the wheel to match your brand. The color applies to the wheel pegs, pointer, segment tints, and also the delay overlay highlight. The accent color is shared across all tiers.',
+        tip7_q: 'Testing with "Send Gifts"',
+        tip7_a: 'Use the <b>Send Gifts</b> action to simulate a gift event. Enter the number of gifts (e.g. 5, 25, or 50) and the app will match it to the correct tier, just like a real Kick gift event. Use <b>Send Test Spin</b> for a quick spin without tier logic.',
+        tip8_q: 'What does "Reset Delay Timer" do?',
+        tip8_a: 'After each spin, there\'s a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately with the correct tier.',
+        cfg_title: "Wheel Configuration", cfg_desc: "Create prize tiers based on gift amount. Each tier has its own set of prizes.",
+        cfg_accent: "Accent color:", cfg_add_tier: "+ Add Tier",
+        cfg_tier_name: "Tier name", cfg_min_gifts: "Min. gifts to trigger", cfg_remove_tier: "Remove tier",
+        cfg_new_prize_ph: "New prize...", cfg_weight_ph: "Weight (%)",
+        cfg_bonus_spin: "Bonus spin", cfg_add: "Add",
+        cfg_normalize: "Normalize to 100%", cfg_save: "Save Configuration",
+        cfg_saved: "Configuration saved.", cfg_save_err: "Save error: ",
+        tbl_prize: "Prize", tbl_weight: "Weight (%)", tbl_bonus: "Bonus", tbl_extra: "extra spin",
+        max_tiers: "Maximum 10 tiers.", min_tier: "You need at least one tier.",
+        confirm_remove_tier: "Remove tier",
+        click_copy: "click to copy", copied: "copied!",
+      },
+      pl: {
+        title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
+        urls_title: "Adresy nakladek OBS", urls_desc: "Skopiuj do OBS jako Browser Source (przezroczyste tlo).",
+        urls_wheel: "Nakladka kola:", urls_delay: "Nakladka timera:", urls_ws: "WebSocket (integracje):",
+        actions_title: "Akcje", actions_test_spin: "Testowe losowanie", actions_reset_delay: "Resetuj timer",
+        actions_sim_label: "Symuluj podarowane suby", actions_send_gifts: "Wyslij gifty",
+        tips_title: "Porady i wskazowki",
+        tip1_q: "Jak skonfigurowac kolo w OBS",
+        tip1_a: 'Skopiuj adres <b>nakladki kola</b> i dodaj go jako <b>Browser Source</b> w OBS. Ustaw wymiary na <code>600x600</code> (lub inny preferowany rozmiar). Upewnij sie, ze opcja <em>"Shutdown source when not visible"</em> jest <b>odznaczona</b>, aby kolo bylo caly czas polaczone. Zrob to samo dla <b>nakladki timera</b>, jesli chcesz wyswietlac odliczanie.',
+        tip2_q: "Dlaczego nie slychac dzwieku kola?",
+        tip2_a: 'Przegladarki blokuja dzwiek do momentu interakcji uzytkownika ze strona. W <b>OBS Browser Sources</b> dzwiek gra automatycznie. Jesli testujesz w zwyklej przegladarce, kliknij gdziekolwiek na stronie, aby odblokowac dzwiek. Mozesz tez wlaczyc <em>"Control audio via OBS"</em> we wlasciwosciach zrodla.',
+        tip3_q: "Jak dzialaja zestawy nagrod?",
+        tip3_a: 'Mozesz utworzyc <b>wiele zestawow nagrod</b> na podstawie liczby giftow. Np. <b>5 giftow</b> uruchamia zestaw "Podstawowy", <b>25 giftow</b> \u2014 "Premium" z lepszymi nagrodami, a <b>50 giftow</b> \u2014 "Legendarny" z szalonymi nagrodami. Aplikacja wybiera <b>najwyzszy zestaw</b>, do ktorego kwalifikuje sie liczba giftow. Kazdy zestaw ma wlasne nagrody \u2014 w pelni konfigurowalne.',
+        tip4_q: "Jak dzialaja wagi?",
+        tip4_a: 'Kazda nagroda ma <b>wage</b> okreslajaca jej prawdopodobienstwo. Wagi sa normalizowane do procentow (zawsze sumuja sie do 100%). Nagroda z waga 50 w liscie o sumie 200 ma 25% szans. Uzyj przycisku <b>"Normalizuj do 100%"</b>, aby zobaczyc rzeczywiste procenty. Wagi sa normalizowane <b>dla kazdego zestawu osobno</b>.',
+        tip5_q: 'Co to "Bonus spin"?',
+        tip5_a: 'Jesli nagroda ma oznaczenie <b>bonus</b>, trafienie na nia automatycznie uruchamia kolejne losowanie \u2014 widz dostaje druga szanse! Bonus spin uzywa <b>tego samego zestawu</b> co oryginalne losowanie. Swietne do podkrecania emocji.',
+        tip6_q: "Personalizacja kola",
+        tip6_a: 'Wybierz <b>kolor akcentu</b>, aby spersonalizowac kolo pod swoja marke. Kolor jest stosowany do kolek, wskaznika, odcieni segmentow i podswietlenia nakladki timera. Kolor akcentu jest wspolny dla wszystkich zestawow.',
+        tip7_q: 'Testowanie przyciskiem "Wyslij gifty"',
+        tip7_a: 'Uzyj akcji <b>Wyslij gifty</b>, aby zasymulowac zdarzenie gifta. Wpisz liczbe giftow (np. 5, 25 lub 50), a aplikacja dopasuje odpowiedni zestaw nagrod, tak jak przy prawdziwym gifcie z Kicka. Uzyj <b>Testowe losowanie</b> dla szybkiego spinu bez logiki zestawow.',
+        tip8_q: 'Co robi "Resetuj timer"?',
+        tip8_a: 'Po kazdym losowaniu nastepuje <b>5-minutowa przerwa</b> zanim nastapi kolejne losowanie. Jesli chcesz pominac czekanie (np. podczas testow), kliknij <b>Resetuj timer</b>. Jesli sa oczekujace losowania, jedno uruchomi sie natychmiast z prawidlowym zestawem.',
+        cfg_title: "Konfiguracja kola", cfg_desc: "Tworzenie zestawow nagrod na podstawie liczby giftow. Kazdy zestaw ma wlasne nagrody.",
+        cfg_accent: "Kolor akcentu:", cfg_add_tier: "+ Dodaj zestaw",
+        cfg_tier_name: "Nazwa zestawu", cfg_min_gifts: "Min. giftow", cfg_remove_tier: "Usun zestaw",
+        cfg_new_prize_ph: "Nowa nagroda...", cfg_weight_ph: "Waga (%)",
+        cfg_bonus_spin: "Bonus spin", cfg_add: "Dodaj",
+        cfg_normalize: "Normalizuj do 100%", cfg_save: "Zapisz konfiguracje",
+        cfg_saved: "Konfiguracja zapisana.", cfg_save_err: "Blad zapisu: ",
+        tbl_prize: "Nagroda", tbl_weight: "Waga (%)", tbl_bonus: "Bonus", tbl_extra: "dodatkowy spin",
+        max_tiers: "Maksymalnie 10 zestawow.", min_tier: "Potrzebujesz przynajmniej jednego zestawu.",
+        confirm_remove_tier: "Usunac zestaw",
+        click_copy: "kliknij aby skopiowac", copied: "skopiowano!",
+      }
+    };
+
+    let currentLang = localStorage.getItem("wof_lang") || "en";
+
+    function t(key) { return (T[currentLang] || T.en)[key] || (T.en)[key] || key; }
+
+    function setLang(lang) {
+      currentLang = lang;
+      localStorage.setItem("wof_lang", lang);
+      applyLang();
+    }
+
+    function applyLang() {
+      document.documentElement.lang = currentLang;
+      document.getElementById("langEN").classList.toggle("active", currentLang === "en");
+      document.getElementById("langPL").classList.toggle("active", currentLang === "pl");
+
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        const val = t(key);
+        if (val) el.textContent = val;
+      });
+      document.querySelectorAll("[data-i18n-html]").forEach(el => {
+        const key = el.getAttribute("data-i18n-html");
+        const val = t(key);
+        if (val) el.innerHTML = val;
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        const val = t(key);
+        if (val) el.placeholder = val;
+      });
+
+      // Re-render dynamic elements that use translated strings
+      if (typeof renderWheelList === "function") renderWheelList();
+      // Update copy hints
+      document.querySelectorAll(".copy-hint").forEach(h => h.textContent = t("click_copy"));
+    }
+
     function el(id){ return document.getElementById(id); }
     function msgHTML(ok, text) { return ok ? `<span class="ok">${text}</span>` : `<span class="bad">${text}</span>`; }
 
     function copyUrl(elem) {
-      const text = (elem._rawUrl || elem.textContent).replace('click to copy', '').trim();
+      const text = (elem._rawUrl || elem.textContent).replace(t("click_copy"), '').replace('click to copy', '').trim();
       navigator.clipboard.writeText(text).then(() => {
         const hint = elem.querySelector('.copy-hint');
-        if (hint) { hint.textContent = 'copied!'; setTimeout(() => hint.textContent = 'click to copy', 2000); }
+        if (hint) { hint.textContent = t("copied"); setTimeout(() => hint.textContent = t("click_copy"), 2000); }
       }).catch(() => {});
     }
 
@@ -380,7 +509,7 @@
         for (const [id, url] of Object.entries(urls)) {
           const box = el(id);
           box._rawUrl = url;
-          box.innerHTML = `${url}<span class="copy-hint">click to copy</span>`;
+          box.innerHTML = `${url}<span class="copy-hint">${t("click_copy")}</span>`;
         }
 
       } catch (e) {
@@ -476,7 +605,7 @@
     });
 
     el("addTierBtn").onclick = () => {
-      if (tiers.length >= 10) { alert("Maximum 10 tiers."); return; }
+      if (tiers.length >= 10) { alert(t("max_tiers")); return; }
       const maxGifts = Math.max(...tiers.map(t => t.min_gifts));
       tiers.push({ name: `Tier ${tiers.length + 1}`, min_gifts: maxGifts * 5, items: defaultItems.slice().map(sanitizeItem) });
       activeTierIdx = tiers.length - 1;
@@ -484,8 +613,8 @@
     };
 
     el("removeTierBtn").onclick = () => {
-      if (tiers.length <= 1) { alert("You need at least one tier."); return; }
-      if (!confirm(`Remove tier "${tiers[activeTierIdx].name}"?`)) return;
+      if (tiers.length <= 1) { alert(t("min_tier")); return; }
+      if (!confirm(`${t("confirm_remove_tier")} "${tiers[activeTierIdx].name}"?`)) return;
       tiers.splice(activeTierIdx, 1);
       activeTierIdx = Math.min(activeTierIdx, tiers.length - 1);
       renderTierTabs(); renderTierEditor(); renderWheelList(); renderPreviewDebounced();
@@ -495,14 +624,14 @@
       const items = getActiveItems();
       const box = el("wheelList");
       let html = `<table>
-        <thead><tr><th style="width:44%;">Prize</th><th style="width:14%;">Weight (%)</th><th style="width:18%;">Bonus</th><th style="width:24%;"></th></tr></thead>
+        <thead><tr><th style="width:44%;">${t("tbl_prize")}</th><th style="width:14%;">${t("tbl_weight")}</th><th style="width:18%;">${t("tbl_bonus")}</th><th style="width:24%;"></th></tr></thead>
         <tbody>`;
       items.forEach((it, idx) => {
         const safeLabel = (it.label??"").replaceAll('"','&quot;');
         html += `<tr>
           <td><input data-i="${idx}" data-k="label" type="text" value="${safeLabel}" style="width:100%;"></td>
           <td><input data-i="${idx}" data-k="weight" type="number" min="1" step="1" value="${Math.max(1, Math.round(Number(it.weight)||1))}" style="width:70px;"></td>
-          <td><label class="chk"><input type="checkbox" data-i="${idx}" data-k="bonus" ${it.bonus ? "checked":""} /><span class="small muted">extra spin</span></label></td>
+          <td><label class="chk"><input type="checkbox" data-i="${idx}" data-k="bonus" ${it.bonus ? "checked":""} /><span class="small muted">${t("tbl_extra")}</span></label></td>
           <td>
             <button class="btn small" data-up="${idx}">&#9650;</button>
             <button class="btn small" data-down="${idx}">&#9660;</button>
@@ -594,10 +723,10 @@
           body: JSON.stringify({ tiers: normalizedTiers, accent_color: accentColor })
         });
         if (!r.ok) throw new Error(await r.text());
-        alert("Configuration saved.");
+        alert(t("cfg_saved"));
         renderPreview();
       } catch (e) {
-        alert("Save error: " + e.message);
+        alert(t("cfg_save_err") + e.message);
       }
     };
 
@@ -737,6 +866,7 @@
 
     // BOOT
     (async function(){
+      applyLang();
       await loadStatus();
       await loadWheel();
     })();

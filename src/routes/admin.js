@@ -160,6 +160,29 @@ router.post("/admin/streamers", requireAdmin, (req, res) => {
   });
 });
 
+// Rename a streamer (update display_name)
+router.patch("/admin/streamers/:bid", requireAdmin, (req, res) => {
+  const bid = Number(req.params.bid);
+  const streamer = getDb().getStreamerById(bid);
+  if (!streamer) {
+    return res.status(404).json({ ok: false, error: "Streamer not found" });
+  }
+
+  const newName = String(req.body?.display_name || "").trim().slice(0, 100);
+  if (!newName) {
+    return res.status(400).json({ ok: false, error: "display_name is required (non-empty string, max 100 chars)" });
+  }
+
+  getDb().updateDisplayName(bid, newName);
+  console.log(`[ADMIN] Renamed streamer bid=${bid} -> "${newName}"`);
+
+  res.json({
+    ok: true,
+    broadcaster_id: bid,
+    display_name: newName,
+  });
+});
+
 // Delete a streamer
 router.delete("/admin/streamers/:bid", requireAdmin, (req, res) => {
   const bid = Number(req.params.bid);

@@ -17,6 +17,33 @@
       justify-content: center;
       padding: 24px;
     }
+    .lang-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      gap: 0;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.12);
+      z-index: 100;
+    }
+    .lang-btn {
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.06);
+      color: #94a3b8;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+    }
+    .lang-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    .lang-btn.active {
+      background: linear-gradient(135deg, #7c3aed, #3b82f6);
+      color: white;
+    }
     .card {
       background: rgba(255,255,255,0.06);
       backdrop-filter: blur(20px);
@@ -169,14 +196,20 @@
   </style>
 </head>
 <body>
+
+  <div class="lang-toggle">
+    <button class="lang-btn active" id="langEN" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" id="langPL" onclick="setLang('pl')">PL</button>
+  </div>
+
   <div class="card">
     <span class="wheel-icon">&#127905;</span>
-    <h1>Wheel of Fortune</h1>
-    <p class="subtitle">Interactive spin wheel overlay for Kick streamers</p>
+    <h1 data-i18n="title">Wheel of Fortune</h1>
+    <p class="subtitle" data-i18n="subtitle">Interactive spin wheel overlay for Kick streamers</p>
 
     <div id="inviteSection">
       <div class="invite-group">
-        <input type="password" id="inviteCode" placeholder="Enter invite code" maxlength="16" autocomplete="off">
+        <input type="password" id="inviteCode" data-i18n-placeholder="invite_placeholder" placeholder="Enter invite code" maxlength="16" autocomplete="off">
         <button type="button" class="toggle-visibility" id="toggleVisibility" aria-label="Toggle code visibility">
           <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -185,37 +218,104 @@
         </button>
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">
-        Login with Kick
+        <span data-i18n="login_btn">Login with Kick</span>
       </button>
       <p class="error" id="error"></p>
     </div>
 
     <div class="features">
-      <h3>How it works</h3>
+      <h3 data-i18n="how_title">How it works</h3>
       <ul>
-        <li>Viewers gift subscriptions on your Kick channel</li>
-        <li>Every 5 gifted subs triggers a wheel spin</li>
-        <li>Add the overlay to OBS as a browser source</li>
-        <li>Customize prizes, weights, and themes</li>
-        <li>5-minute cooldown between spins</li>
+        <li data-i18n="how_1">Viewers gift subscriptions on your Kick channel</li>
+        <li data-i18n="how_2">Gifted subs trigger a wheel spin with prize tiers</li>
+        <li data-i18n="how_3">Add the overlay to OBS as a browser source</li>
+        <li data-i18n="how_4">Customize prizes, weights, tiers, and colors</li>
+        <li data-i18n="how_5">Built-in cooldown between spins</li>
       </ul>
     </div>
   </div>
 
   <p class="footer">
-    Already logged in? <a href="/dashboard">Go to Dashboard</a>
+    <span data-i18n="footer_text">Already logged in?</span> <a href="/dashboard" data-i18n="footer_link">Go to Dashboard</a>
   </p>
 
   <script>
+    // ── i18n ───────────────────────────────────────────────────
+    const TRANSLATIONS = {
+      en: {
+        title: "Wheel of Fortune",
+        subtitle: "Interactive spin wheel overlay for Kick streamers",
+        invite_placeholder: "Enter invite code",
+        login_btn: "Login with Kick",
+        how_title: "How it works",
+        how_1: "Viewers gift subscriptions on your Kick channel",
+        how_2: "Gifted subs trigger a wheel spin with prize tiers",
+        how_3: "Add the overlay to OBS as a browser source",
+        how_4: "Customize prizes, weights, tiers, and colors",
+        how_5: "Built-in cooldown between spins",
+        footer_text: "Already logged in?",
+        footer_link: "Go to Dashboard",
+        error_empty: "Please enter an invite code",
+        redirecting: "Redirecting..."
+      },
+      pl: {
+        title: "Kolo Fortuny",
+        subtitle: "Interaktywna nakladka z kolem fortuny dla streamerow na Kick",
+        invite_placeholder: "Wpisz kod zaproszenia",
+        login_btn: "Zaloguj sie przez Kick",
+        how_title: "Jak to dziala",
+        how_1: "Widzowie podarowuja subskrypcje na Twoim kanale Kick",
+        how_2: "Podarowane suby uruchamiaja losowanie z zestawami nagrod",
+        how_3: "Dodaj nakladke do OBS jako zrodlo przegladarki",
+        how_4: "Dostosuj nagrody, wagi, zestawy i kolory",
+        how_5: "Wbudowany czas przerwy miedzy losowaniami",
+        footer_text: "Juz zalogowany?",
+        footer_link: "Przejdz do Panelu",
+        error_empty: "Wpisz kod zaproszenia",
+        redirecting: "Przekierowywanie..."
+      }
+    };
+
+    let currentLang = localStorage.getItem("wof_lang") || "en";
+
+    function setLang(lang) {
+      currentLang = lang;
+      localStorage.setItem("wof_lang", lang);
+      applyLang();
+    }
+
+    function applyLang() {
+      const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+      document.documentElement.lang = currentLang;
+
+      // Update all data-i18n elements
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        if (t[key]) el.textContent = t[key];
+      });
+
+      // Update placeholders
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        if (t[key]) el.placeholder = t[key];
+      });
+
+      // Update active button
+      document.getElementById("langEN").classList.toggle("active", currentLang === "en");
+      document.getElementById("langPL").classList.toggle("active", currentLang === "pl");
+    }
+
+    // Apply saved language on load
+    applyLang();
+
+    // ── Invite code eye toggle ────────────────────────────────
     const input = document.getElementById('inviteCode');
     const btn = document.getElementById('loginBtn');
     const errorEl = document.getElementById('error');
     const toggleBtn = document.getElementById('toggleVisibility');
     const eyeIcon = document.getElementById('eyeIcon');
 
-    // Eye open SVG path
     const EYE_OPEN = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
-    // Eye closed SVG path (with slash line)
     const EYE_CLOSED = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
 
     toggleBtn.addEventListener('click', () => {
@@ -230,15 +330,16 @@
     });
 
     function doLogin() {
+      const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
       const code = input.value.trim();
       if (!code) {
-        errorEl.textContent = 'Please enter an invite code';
+        errorEl.textContent = t.error_empty;
         errorEl.classList.add('show');
         return;
       }
       errorEl.classList.remove('show');
       btn.disabled = true;
-      btn.textContent = 'Redirecting...';
+      btn.querySelector("[data-i18n]").textContent = t.redirecting;
       window.location.href = '/auth/login?invite=' + encodeURIComponent(code);
     }
   </script>

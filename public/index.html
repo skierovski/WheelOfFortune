@@ -4,12 +4,13 @@
   <meta charset="UTF-8" />
   <title>Wheel of Fortune</title>
   <style>
-    html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
+    html, body { margin:0; padding:0; background:transparent; overflow:hidden; width:100vw; height:100vh; }
     .overlay { position: fixed; left:50%; top:50%; transform: translate(-50%, -40%) scale(0.94);
-      opacity: 0; transition: opacity .95s ease, transform .95s ease; pointer-events:none; width:700px; height:700px;
+      opacity: 0; transition: opacity .95s ease, transform .95s ease; pointer-events:none;
+      width: calc(100vmin - 80px); height: calc(100vmin - 80px);
       display:flex; align-items:center; justify-content:center; z-index:10; }
     .overlay.show { opacity:1; transform: translate(-50%, -50%) scale(1); pointer-events:auto; }
-    canvas { width:1000px; height:1000px; display:block; }
+    canvas { width: calc(100vmin - 80px); height: calc(100vmin - 80px); display:block; }
 
     .editor { position:fixed; right:16px; top:16px; width:460px; max-height:92vh; overflow:auto; background:rgba(20,20,20,.95); color:#fff;
       font-family:system-ui,sans-serif; border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.08);
@@ -136,7 +137,7 @@
     const ctx = canvas.getContext("2d");
     const dpr = Math.max(1, Math.floor(window.devicePixelRatio||1));
     (function setupCanvas(){ const cssW=1000, cssH=1000; canvas.width=cssW*dpr; canvas.height=cssH*dpr; canvas.style.width=cssW+"px"; canvas.style.height=cssH+"px"; ctx.setTransform(dpr,0,0,dpr,0,0); })();
-    const W=1000,H=1000,CX=W/2,CY=H/2,R=Math.min(W,H)*0.45;
+    const W=1000,H=1000,CX=W/2,CY=H/2,R=Math.min(W,H)*0.36;
     let rotation = 0;
     let ACTIVE_SNAPSHOT = null;
 
