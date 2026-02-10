@@ -49,10 +49,11 @@
       display: flex;
       gap: 8px;
       margin-bottom: 16px;
+      position: relative;
     }
     .invite-group input {
       flex: 1;
-      padding: 14px 16px;
+      padding: 14px 44px 14px 16px;
       border: 1px solid rgba(255,255,255,0.15);
       border-radius: 12px;
       background: rgba(255,255,255,0.08);
@@ -71,6 +72,28 @@
       color: #64748b;
       text-transform: none;
       letter-spacing: normal;
+    }
+    .toggle-visibility {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: #64748b;
+      transition: color 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .toggle-visibility:hover {
+      color: #a78bfa;
+    }
+    .toggle-visibility svg {
+      width: 20px;
+      height: 20px;
     }
     .btn {
       display: block;
@@ -153,7 +176,13 @@
 
     <div id="inviteSection">
       <div class="invite-group">
-        <input type="text" id="inviteCode" placeholder="Enter invite code" maxlength="16" autocomplete="off">
+        <input type="password" id="inviteCode" placeholder="Enter invite code" maxlength="16" autocomplete="off">
+        <button type="button" class="toggle-visibility" id="toggleVisibility" aria-label="Toggle code visibility">
+          <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">
         Login with Kick
@@ -181,6 +210,20 @@
     const input = document.getElementById('inviteCode');
     const btn = document.getElementById('loginBtn');
     const errorEl = document.getElementById('error');
+    const toggleBtn = document.getElementById('toggleVisibility');
+    const eyeIcon = document.getElementById('eyeIcon');
+
+    // Eye open SVG path
+    const EYE_OPEN = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    // Eye closed SVG path (with slash line)
+    const EYE_CLOSED = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+
+    toggleBtn.addEventListener('click', () => {
+      const isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      eyeIcon.innerHTML = isHidden ? EYE_CLOSED : EYE_OPEN;
+      toggleBtn.setAttribute('aria-label', isHidden ? 'Hide code' : 'Show code');
+    });
 
     input.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') doLogin();
