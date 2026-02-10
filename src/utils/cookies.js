@@ -27,6 +27,16 @@ export function setSessionCookie(res, broadcasterId) {
   if (env.NODE_ENV === "production") parts.push("Secure");
   res.setHeader("Set-Cookie", parts.join("; "));
 }
+export function clearSessionCookie(res) {
+  const parts = [
+    "wheel_sess=",
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ];
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
 export function getSessionBroadcasterId(req) {
   const { wheel_sess } = parseCookies(req);
   if (!wheel_sess) return null;

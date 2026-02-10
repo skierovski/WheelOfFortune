@@ -124,6 +124,31 @@ export const spins = {
   },
 
   /**
+   * Reset the delay timer for a streamer so the next spin fires immediately.
+   */
+  resetDelay(broadcasterId) {
+    setState(broadcasterId, { last_spin_time: 0 });
+    setInProgress(broadcasterId, false);
+    console.log(`[SPIN] bid=${broadcasterId} delay reset`);
+
+    // If there are pending spins, try to deliver one right away
+    const state = getState(broadcasterId);
+    if (state.pending_count > 0) {
+      setState(broadcasterId, { pending_count: state.pending_count - 1 });
+      setInProgress(broadcasterId, true);
+      const delivered = broadcast(broadcasterId, { action: "spin", times: 1 });
+      if (delivered > 0) {
+        console.log(`[SPIN] bid=${broadcasterId} delivered 1 after reset (${state.pending_count - 1} remaining)`);
+      } else {
+        setInProgress(broadcasterId, false);
+        setState(broadcasterId, { pending_count: state.pending_count });
+      }
+    }
+    // Notify delay overlay to clear
+    broadcast(broadcasterId, { type: "delay", timeUntilNext: 0, pending: getState(broadcasterId).pending_count });
+  },
+
+  /**
    * Mark a spin as completed for a streamer. Starts the 5-minute delay.
    */
   markSpinComplete(broadcasterId) {

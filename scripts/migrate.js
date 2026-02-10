@@ -79,8 +79,8 @@ if (tokens?.access_token) {
 console.log("--- Wheel Config ---");
 const config = loadJsonSafe(env.CFG_PATH, null);
 if (config?.items) {
-  db.saveConfig(broadcasterId, config.items, config.theme || "wood");
-  console.log(`  Imported ${config.items.length} items, theme=${config.theme || "wood"}`);
+  db.saveConfig(broadcasterId, { items: config.items });
+  console.log(`  Imported ${config.items.length} items`);
 } else {
   console.log(`  No config found at ${env.CFG_PATH}`);
 }

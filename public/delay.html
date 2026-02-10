@@ -12,11 +12,11 @@
       box-shadow: 0 10px 40px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.1);
       backdrop-filter: blur(8px); }
     .delay-overlay.show { opacity: 1; }
-    .delay-overlay h3 { margin: 0 0 12px 0; font-size: 24px; font-weight: 700; color: #fbbf24; }
+    .delay-overlay h3 { margin: 0 0 12px 0; font-size: 24px; font-weight: 700; color: var(--accent, #7c3aed); }
     .delay-overlay .time { font-size: 48px; font-weight: 800; margin: 8px 0; color: #fff; 
       font-variant-numeric: tabular-nums; letter-spacing: 2px; }
     .delay-overlay .pending { font-size: 14px; color: #9ca3af; margin-top: 8px; }
-    .delay-overlay .pending strong { color: #fbbf24; }
+    .delay-overlay .pending strong { color: var(--accent, #7c3aed); }
   </style>
 </head>
 <body>
@@ -91,10 +91,21 @@
     let reconnectDelay = 1000;
     let lastWsMessageTime = Date.now();
 
+    function applyAccentColor(hex) {
+      if (typeof hex === "string" && /^#[0-9a-fA-F]{6}$/.test(hex)) {
+        document.documentElement.style.setProperty("--accent", hex);
+      }
+    }
+
     function handleServerMessage(data) {
       lastWsMessageTime = Date.now();
       if (data.type === "delay" && Number.isFinite(data.timeUntilNext)) {
         startDelayCountdown(data.timeUntilNext, data.pending || 0);
+        return;
+      }
+      // Config update may carry accent_color
+      if (data.type === "config" && typeof data.accent_color === "string") {
+        applyAccentColor(data.accent_color);
         return;
       }
     }
@@ -161,6 +172,17 @@
         setTimeout(connectWS, 10000); // Try again in 10 seconds
       };
     }
+
+    // Fetch accent color from config on startup
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/config`, { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          if (j?.ok && j.accent_color) applyAccentColor(j.accent_color);
+        }
+      } catch {}
+    })();
 
     // Connect once
     connectWS();

@@ -65,7 +65,6 @@
     <div class="list" id="list"></div>
     <div class="bar">
       <button class="btn" id="normalizeBtn">Normalize to 100%</button>
-      <button class="btn" id="saveBtn">Save (server)</button>
       <button class="btn" id="resetBtn">Reset</button>
       <button class="btn" id="hideBtn">Close</button>
       <button class="btn" id="exportBtn">Export</button>
@@ -73,11 +72,6 @@
     </div>
     <textarea id="importArea" placeholder='Paste JSON here (from "Export") and click "Import".'></textarea>
 
-    <div class="row" style="margin-top:10px;">
-      <input id="adminKey" type="text" placeholder="X-Admin-Key (only for editor owner)">
-      <button id="saveKeyBtn" class="btn">Save Key</button>
-      <button id="loadCfgBtn" class="btn">Load</button>
-    </div>
   </div>
 
   <script>
@@ -97,16 +91,6 @@
         const j = await r.json();
         return j?.ok ? j : null;
       } catch { return null; }
-    }
-    async function saveToServer(items, theme) {
-      // Save is done from dashboard, not overlay — but keep for backward compat
-      const key = localStorage.getItem("ADMIN_KEY") || "";
-      const r = await fetch(`${API_BASE}/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Key": key },
-        body: JSON.stringify({ items, theme })
-      });
-      return r.ok;
     }
 
     // ====== Data / persistence (local cache only) ======
@@ -138,11 +122,10 @@
 
     let ITEMS = [];
     let CONFIG_VERSION = 1;
-    let THEME = "wood"; // default theme; can be overridden by server/URL
+    let ACCENT_COLOR = "#7c3aed"; // streamer-customizable accent color
 
     // ====== Drawing etc. ======
-    const COLORS = ["#FF4D4F","#40A9FF","#73D13D","#FAAD14","#9254DE","#13C2C2","#EB2F96","#A0D911","#FFD666","#5CDBD3","#FF7A45","#597EF7"];
-    const FULL_ROUNDS_MIN = 5, FULL_ROUNDS_MAX = 7;
+    const FULL_ROUNDS_MIN = 8, FULL_ROUNDS_MAX = 12;
     const BAG_SIZE = 50;
     const NO_REPEAT_BACK_TO_BACK = true;
     const AT_LEAST_ONE_THRESHOLD = 1;
@@ -206,61 +189,83 @@
       return s + ell;
     }
 
-    // ===== Theme router =====
-    function drawWheel(angle = 0) {
-      if (THEME === "classic") return drawWheelClassic(angle);
-      return drawWheelWood(angle);
+    // ===== Modern wheel (dark + accent color) =====
+    function hexToRgb(hex) {
+      const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+      return { r, g, b };
+    }
+    function rgbLighten(ac, amt) {
+      return { r: Math.min(255, ac.r + amt), g: Math.min(255, ac.g + amt), b: Math.min(255, ac.b + amt) };
     }
 
-    // ===== Wood theme (as-is) =====
-    function drawWheelWood(angle = 0) {
+    function drawWheel(angle = 0) {
       const items = ACTIVE_SNAPSHOT || ITEMS;
+      const ac = hexToRgb(ACCENT_COLOR);
+      const acL = rgbLighten(ac, 80);
       ctx.clearRect(0, 0, W, H);
+      const TAU = 2 * Math.PI;
+      const rimW = 28;
+      const rimOuter = R + rimW;
+      const rimMid = R + rimW / 2;
 
-      // ring
-      ctx.beginPath();
-      ctx.arc(CX, CY, R + 44, 0, 2 * Math.PI);
-      ctx.fillStyle = "#deb887";
+      // ── Outer rim: dark glassmorphism band ──
+      // Base dark fill with accent glow
+      ctx.save();
+      ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.3)`;
+      ctx.shadowBlur = 24;
+      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
+      ctx.arc(CX, CY, R, 0, TAU, true);
+      ctx.fillStyle = "rgba(10, 10, 24, 0.85)";
       ctx.fill();
-      ctx.lineWidth = 10;
-      ctx.strokeStyle = "#8b5a2b";
+      ctx.restore();
+
+      // Glass refraction: subtle radial light on the rim band
+      const rimGrad = ctx.createRadialGradient(CX, CY - rimOuter * 0.4, rimW, CX, CY, rimOuter);
+      rimGrad.addColorStop(0, "rgba(255,255,255,0.08)");
+      rimGrad.addColorStop(0.5, "rgba(255,255,255,0.02)");
+      rimGrad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
+      ctx.arc(CX, CY, R, 0, TAU, true);
+      ctx.fillStyle = rimGrad;
+      ctx.fill();
+
+      // Inner glow along the rim inner edge (frosted light leak)
+      const innerGlow = ctx.createRadialGradient(CX, CY, R, CX, CY, R + rimW * 0.45);
+      innerGlow.addColorStop(0, `rgba(${ac.r},${ac.g},${ac.b},0.08)`);
+      innerGlow.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
+      ctx.arc(CX, CY, R, 0, TAU, true);
+      ctx.fillStyle = innerGlow;
+      ctx.fill();
+
+      // Rim outer edge (accent stroke)
+      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
+      ctx.strokeStyle = `rgba(${ac.r},${ac.g},${ac.b},0.5)`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Rim inner edge (subtle light)
+      ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU);
+      ctx.strokeStyle = `rgba(255,255,255,0.08)`;
+      ctx.lineWidth = 1;
       ctx.stroke();
 
       if (!items || items.length === 0) {
-        const hubR0 = Math.max(22, R * 0.42);
-        ctx.beginPath();
-        ctx.arc(CX, CY, hubR0, 0, 2 * Math.PI);
-        const hubGrad0 = ctx.createRadialGradient(CX, CY, 4, CX, CY, hubR0);
-        hubGrad0.addColorStop(0, "#f1c27d");
-        hubGrad0.addColorStop(1, "#8b5a2b");
-        ctx.fillStyle = hubGrad0;
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = "#5e3d1e";
-        ctx.stroke();
-
-        ctx.fillStyle = "#000";
-        ctx.beginPath();
-        ctx.moveTo(CX, CY - R - 16);
-        ctx.lineTo(CX - 18, CY - R + 14);
-        ctx.lineTo(CX + 18, CY - R + 14);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(CX, CY, R + 6, 0, 2 * Math.PI);
-        ctx.strokeStyle = "rgba(255,255,255,.35)";
-        ctx.lineWidth = 4;
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU);
+        ctx.fillStyle = "#141420"; ctx.fill();
+        ctx.beginPath(); ctx.arc(CX, CY, 8, 0, TAU);
+        ctx.fillStyle = ACCENT_COLOR; ctx.fill();
+        drawPointer(ac, rimOuter);
         return;
       }
 
       const sectors = buildSectors(items);
 
+      // ── Glassmorphism segments ──
       for (let i = 0; i < sectors.length; i++) {
         const s = sectors[i];
         const start = angle + s.start;
-        const end   = angle + s.end;
+        const end = angle + s.end;
         const arcAngle = end - start;
 
         ctx.beginPath();
@@ -268,22 +273,47 @@
         ctx.arc(CX, CY, R, start, end);
         ctx.closePath();
 
-        const grad = ctx.createRadialGradient(CX, CY, R * 0.08, CX, CY, R);
-        grad.addColorStop(0, COLORS[i % COLORS.length]);
-        grad.addColorStop(1, COLORS[(i + 1) % COLORS.length]);
+        // Base fill: alternating dark / accent-tinted
+        if (i % 2 === 0) {
+          ctx.fillStyle = "rgba(18, 18, 40, 0.92)";
+        } else {
+          ctx.fillStyle = `rgba(${ac.r},${ac.g},${ac.b},0.18)`;
+        }
+        ctx.fill();
+
+        // Glass highlight: bright edge along the outer arc of each segment
+        const highlightR = R * 0.92;
+        const midA = start + arcAngle / 2;
+        const grad = ctx.createRadialGradient(CX, CY, highlightR, CX, CY, R);
+        grad.addColorStop(0, "rgba(255,255,255,0)");
+        grad.addColorStop(1, "rgba(255,255,255,0.07)");
+        ctx.beginPath();
+        ctx.moveTo(CX, CY);
+        ctx.arc(CX, CY, R, start, end);
+        ctx.closePath();
         ctx.fillStyle = grad;
         ctx.fill();
 
-        ctx.strokeStyle = "rgba(255,255,255,.6)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        // Inner light refraction (subtle top-light shine on each segment)
+        const shineX = CX + Math.cos(midA) * R * 0.35;
+        const shineY = CY + Math.sin(midA) * R * 0.35;
+        const shine = ctx.createRadialGradient(shineX, shineY, 0, shineX, shineY, R * 0.4);
+        shine.addColorStop(0, "rgba(255,255,255,0.06)");
+        shine.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.beginPath();
+        ctx.moveTo(CX, CY);
+        ctx.arc(CX, CY, R, start, end);
+        ctx.closePath();
+        ctx.fillStyle = shine;
+        ctx.fill();
 
+        // ── Text ──
         const mid = start + arcAngle / 2;
-        const rText = R * 0.72;
+        const rText = R * 0.66;
         const rawLabel = String(s.label || "");
-        const fontPx = fitFontForArc(ctx, rawLabel, rText, arcAngle, 42, 10);
-        ctx.font = `700 ${fontPx}px system-ui, sans-serif`;
-        const maxLen = rText * arcAngle * 0.9;
+        const fontPx = fitFontForArc(ctx, rawLabel, rText, arcAngle, 36, 10);
+        ctx.font = `600 ${fontPx}px system-ui, sans-serif`;
+        const maxLen = rText * arcAngle * 0.85;
         const label = ellipsize(ctx, rawLabel, maxLen);
 
         const tx = CX + Math.cos(mid) * rText;
@@ -293,171 +323,91 @@
         ctx.rotate(mid + Math.PI / 2);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.12));
-        ctx.strokeStyle = "rgba(0,0,0,0.55)";
-        ctx.fillStyle = "#fff";
-        ctx.shadowColor = "rgba(0,0,0,0.25)";
-        ctx.shadowBlur = fontPx * 0.35;
+        ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.1));
+        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 4;
         ctx.strokeText(label, 0, 0);
+        ctx.shadowBlur = 0;
         ctx.fillText(label, 0, 0);
         ctx.restore();
       }
 
-      const hubR = Math.max(22, R * 0.42);
-      ctx.beginPath();
-      ctx.arc(CX, CY, hubR, 0, 2 * Math.PI);
-      const hubGrad = ctx.createRadialGradient(CX, CY, 4, CX, CY, hubR);
-      hubGrad.addColorStop(0, "#f1c27d");
-      hubGrad.addColorStop(1, "#8b5a2b");
-      ctx.fillStyle = hubGrad;
-      ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#5e3d1e";
-      ctx.stroke();
-
-      ctx.fillStyle = "#000";
-      ctx.beginPath();
-      ctx.moveTo(CX, CY - R - 16);
-      ctx.lineTo(CX - 18, CY - R + 14);
-      ctx.lineTo(CX + 18, CY - R + 14);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(CX, CY, R + 6, 0, 2 * Math.PI);
-      ctx.strokeStyle = "rgba(255,255,255,.35)";
-      ctx.lineWidth = 4;
-      ctx.stroke();
-
-      ctx.fillStyle = "#8B5A2B";
-      ctx.fillRect(CX - 55, CY + R + 12, 110, 115);
-      ctx.fillStyle = "#6f451d";
-      ctx.fillRect(CX - 130, CY + R + 120, 260, 28);
-    }
-
-    // ===== Classic theme (metal/rivets/glass) — bez halo poza kołem =====
-    function drawWheelClassic(angle = 0) {
-      const items = ACTIVE_SNAPSHOT || ITEMS;
-      ctx.clearRect(0, 0, W, H);
-
-      const rimOuter = R + 42;
-      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, 2*Math.PI);
-      const metal = ctx.createRadialGradient(CX, CY, R, CX, CY, rimOuter);
-      metal.addColorStop(0, "#d9dee5");
-      metal.addColorStop(0.5, "#8f99a8");
-      metal.addColorStop(1, "#e9eef5");
-      ctx.fillStyle = metal; ctx.fill();
-
-      const rimInnerOut = R + 22, rimInnerIn = R + 6;
-      ctx.beginPath(); ctx.arc(CX, CY, rimInnerOut, 0, 2*Math.PI);
-      ctx.arc(CX, CY, rimInnerIn, 0, 2*Math.PI, true);
-      const metal2 = ctx.createLinearGradient(CX-R, CY-R, CX+R, CY+R);
-      metal2.addColorStop(0, "#cfd6df");
-      metal2.addColorStop(0.5, "#7c8798");
-      metal2.addColorStop(1, "#dfe6ef");
-      ctx.fillStyle = metal2; ctx.fill();
-
-      const rivets = Math.max(12, Math.floor((R*2*Math.PI)/90));
-      for (let i=0;i<rivets;i++){
-        const a = (i/rivets)*2*Math.PI;
-        const rx = CX + Math.cos(a)*(R+14);
-        const ry = CY + Math.sin(a)*(R+14);
+      // ── Segment divider lines (glass edge effect) ──
+      for (let i = 0; i < sectors.length; i++) {
+        const a = angle + sectors[i].start;
         ctx.beginPath();
-        const rg = ctx.createRadialGradient(rx, ry, 1, rx, ry, 6);
-        rg.addColorStop(0, "#ffffff");
-        rg.addColorStop(1, "#4b5563");
-        ctx.fillStyle = rg;
-        ctx.arc(rx, ry, 6, 0, 2*Math.PI);
+        ctx.moveTo(CX, CY);
+        ctx.lineTo(CX + Math.cos(a) * R, CY + Math.sin(a) * R);
+        ctx.strokeStyle = "rgba(255,255,255,0.15)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // ── Bright accent pegs on the dark rim ──
+      for (let i = 0; i < sectors.length; i++) {
+        const a = angle + sectors[i].start;
+        const px = CX + Math.cos(a) * rimMid;
+        const py = CY + Math.sin(a) * rimMid;
+
+        ctx.save();
+        ctx.shadowColor = `rgba(${acL.r},${acL.g},${acL.b},0.7)`;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, TAU);
+        ctx.fillStyle = ACCENT_COLOR;
+        ctx.fill();
+        ctx.restore();
+
+        // Bright highlight center
+        ctx.beginPath();
+        ctx.arc(px, py, 2.5, 0, TAU);
+        ctx.fillStyle = `rgba(${acL.r},${acL.g},${acL.b},0.9)`;
         ctx.fill();
       }
 
-      if (!items || items.length === 0) {
-        const hubR0 = Math.max(22, R * 0.42);
-        ctx.beginPath(); ctx.arc(CX, CY, hubR0, 0, 2*Math.PI);
-        const glass = ctx.createRadialGradient(CX-8, CY-8, 4, CX, CY, hubR0);
-        glass.addColorStop(0, "#ffffff");
-        glass.addColorStop(1, "#90a4c4");
-        ctx.fillStyle = glass; ctx.fill();
-        ctx.lineWidth = 3; ctx.strokeStyle = "#6b7280"; ctx.stroke();
+      // ── Center hub: small frosted circle ──
+      const hubR = 16;
+      ctx.save();
+      ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.35)`;
+      ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, TAU);
+      ctx.fillStyle = "rgba(14,14,26,0.9)";
+      ctx.fill();
+      ctx.restore();
 
-        ctx.fillStyle = "#d1d5db";
-        ctx.beginPath();
-        ctx.moveTo(CX, CY - R - 18);
-        ctx.lineTo(CX - 20, CY - R + 10);
-        ctx.lineTo(CX + 20, CY - R + 10);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = "#6b7280"; ctx.lineWidth = 2; ctx.stroke();
+      // Hub glass highlight
+      ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, TAU);
+      ctx.strokeStyle = `rgba(255,255,255,0.12)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-        ctx.beginPath(); ctx.arc(CX, CY, R + 6, 0, 2*Math.PI);
-        ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 3; ctx.stroke();
-        return;
-      }
+      // Accent dot
+      ctx.beginPath(); ctx.arc(CX, CY, 5, 0, TAU);
+      ctx.fillStyle = ACCENT_COLOR; ctx.fill();
 
-      const sectors = buildSectors(items);
-      const baseColors = ["#FF3B3B","#1E90FF","#2ED573","#FFC107","#A55EEA","#17A2B8","#FF6B6B","#7bed9f","#FFD166","#74C0FC","#FFA94D","#748FFC"];
+      // ── Pointer ──
+      drawPointer(ac, rimOuter);
+    }
 
-      for (let i=0;i<sectors.length;i++){
-        const s = sectors[i];
-        const start = angle + s.start, end = angle + s.end;
-        const arcAngle = end - start;
-
-        ctx.beginPath();
-        ctx.moveTo(CX, CY);
-        ctx.arc(CX, CY, R, start, end);
-        ctx.closePath();
-
-        const segGrad = ctx.createRadialGradient(CX, CY, R*0.2, CX, CY, R);
-        segGrad.addColorStop(0, baseColors[i % baseColors.length]);
-        segGrad.addColorStop(1, "#1f2937");
-        ctx.fillStyle = segGrad; ctx.fill();
-
-        ctx.strokeStyle = "rgba(255,255,255,.65)";
-        ctx.lineWidth = 1.5; ctx.stroke();
-
-        const mid = start + arcAngle/2, rText = R*0.72;
-        const raw = String(s.label||"");
-        const fontPx = fitFontForArc(ctx, raw, rText, arcAngle, 40, 10);
-        ctx.font = `800 ${fontPx}px system-ui, sans-serif`;
-        const maxLen = rText * arcAngle * 0.9;
-        const label = ellipsize(ctx, raw, maxLen);
-
-        const tx = CX + Math.cos(mid)*rText;
-        const ty = CY + Math.sin(mid)*rText;
-        ctx.save();
-        ctx.translate(tx, ty);
-        ctx.rotate(mid + Math.PI/2);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.12));
-        ctx.strokeStyle = "rgba(0,0,0,0.55)";
-        ctx.fillStyle = "#fff";
-        ctx.shadowBlur = 0;
-        ctx.strokeText(label, 0, 0);
-        ctx.fillText(label, 0, 0);
-        ctx.restore();
-      }
-
-      const hubR = Math.max(22, R * 0.42);
-      ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, 2*Math.PI);
-      const glass2 = ctx.createRadialGradient(CX-10, CY-12, 6, CX, CY, hubR);
-      glass2.addColorStop(0, "#ffffff");
-      glass2.addColorStop(1, "#90a4c4");
-      ctx.fillStyle = glass2; ctx.fill();
-      ctx.lineWidth = 2.5; ctx.strokeStyle = "#9aa3b2"; ctx.stroke();
-
-      ctx.fillStyle = "#d1d5db";
+    function drawPointer(ac, rimOuter) {
+      const ptrTip = CY - rimOuter - 4;
+      const ptrBase = CY - R + 6;
+      ctx.save();
+      ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.5)`;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = ACCENT_COLOR;
       ctx.beginPath();
-      ctx.moveTo(CX, CY - R - 18);
-      ctx.lineTo(CX - 20, CY - R + 10);
-      ctx.lineTo(CX + 20, CY - R + 10);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = "#6b7280"; ctx.lineWidth = 2; ctx.stroke();
-
-      ctx.beginPath(); ctx.arc(CX, CY, R + 6, 0, 2*Math.PI);
-      ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 3; ctx.stroke();
-
-      ctx.fillStyle = "#0f1115";
-      ctx.fillRect(CX - 55, CY + R + 12, 110, 12);
+      ctx.moveTo(CX, ptrTip);
+      ctx.lineTo(CX - 14, ptrBase);
+      ctx.lineTo(CX + 14, ptrBase);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
     }
 
     function getNormalizedWeights(){ return getNormalizedWeightsFrom(ITEMS); }
@@ -517,6 +467,80 @@
     }
 
     function easeOutQuint(t){ return 1 - Math.pow(1 - t, 5); }
+    function easeOutSeptic(t){ return 1 - Math.pow(1 - t, 7); }
+
+    // ====== Tick sound (Web Audio) ======
+    // OBS Browser Sources allow autoplay — this works with zero interaction in OBS.
+    // Regular Chrome blocks AudioContext until user gesture; the code self-recovers.
+    let audioCtx = null;
+
+    function ensureAudioCtx() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
+      }
+      // Always attempt resume — harmless if already running, required if suspended
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+      return audioCtx;
+    }
+
+    // Eagerly create on load — in OBS this immediately transitions to "running"
+    ensureAudioCtx();
+
+    // Also try to unlock on any interaction (covers Chrome browser testing)
+    function unlockAudio() {
+      const ctx = ensureAudioCtx();
+      if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+    }
+    document.addEventListener("click", unlockAudio, { once: true });
+    document.addEventListener("touchstart", unlockAudio, { once: true });
+    document.addEventListener("keydown", unlockAudio, { once: true });
+    window.addEventListener("obsSourceActiveChanged", (e) => { if (e.detail?.active) unlockAudio(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) unlockAudio(); });
+
+    // Short percussive "click" — like a peg hitting a flapper
+    let lastTickTime = 0;
+    const TICK_COOLDOWN_MS = 40; // max ~25 ticks/sec to prevent machine-gun bursts
+
+    function playTick() {
+      try {
+        const now = performance.now();
+        if (now - lastTickTime < TICK_COOLDOWN_MS) return; // throttle fast spins
+        lastTickTime = now;
+
+        const ctx = ensureAudioCtx();
+        if (!ctx || ctx.state !== "running") return;
+        const t = ctx.currentTime;
+
+        // Short burst of shaped noise for a natural "click"
+        const bufLen = Math.round(ctx.sampleRate * 0.012); // 12ms
+        const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufLen; i++) {
+          // Noise with a sharp exponential decay
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufLen * 0.15));
+        }
+
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+
+        // Bandpass filter to shape the click (removes muddiness)
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 3200;
+        filter.Q.value = 1.2;
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.35, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
+
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(t);
+        src.stop(t + 0.015);
+      } catch {}
+    }
+    let lastTickSegment = -1;
 
     async function spinToId(pickedId){
       if (!pickedId) return { index:-1, snap:null, label:"", bonus:false };
@@ -533,14 +557,21 @@
       const roundsInt = Math.floor(FULL_ROUNDS_MIN + Math.random()*(FULL_ROUNDS_MAX - FULL_ROUNDS_MIN + 1));
       const targetAngle = baseTarget + Math.max(FULL_ROUNDS_MIN, roundsInt) * TAU;
 
-      const totalDuration = 5200; const t0 = performance.now();
+      const totalDuration = 9000; const t0 = performance.now();
 
+      lastTickSegment = -1;
       return new Promise(resolve=>{
         function frame(t){
           const p = Math.min(1, (t - t0) / totalDuration);
-          const eased = easeOutQuint(p);
+          const eased = easeOutSeptic(p);
           rotation = startAngle + (targetAngle - startAngle) * eased;
           drawWheel(rotation);
+
+          // Tick sound on segment boundary cross
+          const curSeg = sectorUnderPointer(rotation, sectors);
+          if (curSeg !== lastTickSegment && lastTickSegment !== -1) playTick();
+          lastTickSegment = curSeg;
+
           if (p < 1) requestAnimationFrame(frame);
           else {
             rotation = targetAngle;
@@ -663,7 +694,7 @@
     function handleServerMessage(data) {
       if (data.type === "config" && Array.isArray(data.items)) {
         ITEMS = data.items.map(sanitizeItem);
-        if (typeof data.theme === "string") THEME = data.theme;
+        if (typeof data.accent_color === "string") ACCENT_COLOR = data.accent_color;
         CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
         return;
       }
@@ -764,7 +795,6 @@
     const newWeight=document.getElementById("newWeight");
     const newBonus=document.getElementById("newBonus");
     const addBtn=document.getElementById("addBtn");
-    const saveBtn=document.getElementById("saveBtn");
     const resetBtn=document.getElementById("resetBtn");
     const hideBtn=document.getElementById("hideBtn");
     const normalizeBtn=document.getElementById("normalizeBtn");
@@ -772,29 +802,13 @@
     const importBtn=document.getElementById("importBtn");
     const importArea=document.getElementById("importArea");
     const sumInfo=document.getElementById("sumInfo");
-    const adminKeyInput=document.getElementById("adminKey");
-    const saveKeyBtn=document.getElementById("saveKeyBtn");
-    const loadCfgBtn=document.getElementById("loadCfgBtn");
-
-    saveKeyBtn.onclick = ()=>{ localStorage.setItem("ADMIN_KEY", adminKeyInput.value.trim()); alert("Admin key saved locally."); };
-    loadCfgBtn.onclick = async ()=> {
-      const cfg = await fetchServerConfigFull();
-      if (cfg) {
-        ITEMS = Array.isArray(cfg.items) ? cfg.items.map(sanitizeItem) : loadItemsLocal();
-        if (typeof cfg.theme === "string") THEME = cfg.theme;
-        CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
-        alert("Loaded from server.");
-      } else {
-        alert("No server config (using local/default).");
-      }
-    };
 
     function totalWeight(){ return ITEMS.reduce((s,x)=> s + Math.max(0, Number(x.weight)||0), 0); }
     function sumWeights(){ return totalWeight(); }
 
     function renderList(){
       listEl.innerHTML="";
-      sumInfo.textContent=`Sum of weights: ${sumWeights().toFixed(2)}%  |  Theme: ${THEME}`;
+      sumInfo.textContent=`Sum of weights: ${sumWeights().toFixed(2)}%`;
       ITEMS.forEach((it,i)=>{
         const row=document.createElement("div"); row.className="item";
 
@@ -845,13 +859,6 @@
       ITEMS.push({id:genId(), label, weight:w, bonus: !!newBonus.checked}); CONFIG_VERSION++; newLabel.value=""; newBonus.checked=false;
       renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); };
 
-    saveBtn.onclick=async ()=>{ // zapisuje także THEME i bonus
-      const ok = await saveToServer(ITEMS, THEME);
-      if (ok){ saveItemsLocal(ITEMS); alert("Saved to server."); }
-      else { alert("Server save failed (check X-Admin-Key)."); }
-      CONFIG_VERSION++; buildSpinBag();
-    };
-
     resetBtn.onclick=()=>{ if(confirm("Restore defaults?")){
       ITEMS=DEFAULT_ITEMS.map(sanitizeItem); CONFIG_VERSION++; renderList();
       if(!ACTIVE_SNAPSHOT) drawWheel(rotation); saveItemsLocal(ITEMS); buildSpinBag(); } };
@@ -883,15 +890,10 @@
       const cfg = await fetchServerConfigFull();
       if (cfg) {
         if (Array.isArray(cfg.items)) ITEMS = cfg.items.map(sanitizeItem); else ITEMS = loadItemsLocal();
-        if (typeof cfg.theme === "string") THEME = cfg.theme;
+        if (typeof cfg.accent_color === "string") ACCENT_COLOR = cfg.accent_color;
       } else {
         ITEMS = loadItemsLocal();
       }
-
-      const themeParam = p.get("theme");
-      if (themeParam) THEME = themeParam;
-
-      adminKeyInput.value = localStorage.getItem("ADMIN_KEY") || "";
 
       CONFIG_VERSION++; renderList(); buildSpinBag(); drawWheel(0);
     })();

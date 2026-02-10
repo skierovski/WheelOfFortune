@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Wheel of Fortune – Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root { color-scheme: dark; --accent: #7c3aed; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #1a1147, #0f0c29);
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1020px; margin: 0 auto; padding: 32px 20px 48px; }
+
+    h1 {
+      font-size: 28px; font-weight: 800; margin-bottom: 6px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 28px; }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    @media (min-width: 860px){ .grid { grid-template-columns: 1fr 1fr; } }
+
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .card h2 { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #f1f5f9; }
+    .full-width { grid-column: 1 / -1; }
+
+    .btn {
+      padding: 9px 16px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06);
+      color: #e2e8f0; cursor: pointer; font-size: 13px;
+      transition: background .2s, border-color .2s;
+      text-decoration: none; display: inline-block;
+    }
+    .btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-accent:hover { filter: brightness(1.15); }
+
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .ok { color: #34d399; }
+    .bad { color: #f87171; }
+    .muted { color: #94a3b8; font-size: 13px; }
+    .small { font-size: 12px; }
+
+    input[type="text"], input[type="number"], input[type="color"], select {
+      padding: 9px 12px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06);
+      color: #e2e8f0; font-size: 14px;
+      outline: none; transition: border-color .2s;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    input[type="number"] { width: 110px; }
+    input[type="color"] {
+      width: 44px; height: 38px; padding: 2px; cursor: pointer;
+      border-radius: 10px;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    td, th {
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 8px; text-align: left; vertical-align: middle;
+    }
+    th { color: #94a3b8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+    label.chk { display: inline-flex; align-items: center; gap: 8px; user-select: none; }
+    input[type="checkbox"] { accent-color: var(--accent); transform: scale(1.15); }
+
+    .url-row { display: flex; align-items: center; gap: 8px; }
+    .overlay-url {
+      flex: 1; min-width: 0;
+      background: rgba(255,255,255,0.04); padding: 10px 14px; border-radius: 10px;
+      font-family: monospace; font-size: 13px;
+      border: 1px solid rgba(255,255,255,0.08); position: relative; cursor: pointer;
+      transition: background .2s; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    .overlay-url.masked { color: transparent; text-shadow: 0 0 8px rgba(255,255,255,0.5); user-select: none; }
+    .overlay-url:hover { background: rgba(255,255,255,0.08); }
+    .copy-hint { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: #64748b; }
+    .eye-btn {
+      flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+      color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background .2s, color .2s;
+    }
+    .eye-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+
+    .color-row { display: flex; align-items: center; gap: 12px; }
+    .color-swatch {
+      width: 32px; height: 32px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15);
+      display: inline-block;
+    }
+
+    .preview-wrap { display: flex; align-items: center; justify-content: center; margin-top: 16px; }
+    canvas.preview { width: 180px; height: 180px; border-radius: 12px; }
+
+    .tips-list { display: flex; flex-direction: column; gap: 8px; }
+    .tips-list details {
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px; overflow: hidden;
+    }
+    .tips-list summary {
+      padding: 12px 16px; cursor: pointer; font-size: 15px; font-weight: 600;
+      color: #cbd5e1; list-style: none; display: flex; align-items: center; gap: 8px;
+      transition: background .2s;
+    }
+    .tips-list summary:hover { background: rgba(255,255,255,0.04); }
+    .tips-list summary::before { content: "▸"; font-size: 12px; color: var(--accent); transition: transform .2s; }
+    .tips-list details[open] summary::before { transform: rotate(90deg); }
+    .tips-list details p {
+      padding: 0 16px 14px; margin: 0; font-size: 14px; line-height: 1.7;
+      color: #94a3b8;
+    }
+    .tips-list details p b { color: #e2e8f0; }
+    .tips-list details p code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; }
+
+    .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .header-row .titles { text-align: left; }
+    .header-row h1 { margin: 0; }
+    .header-row .subtitle { margin: 4px 0 0; }
+    .logout-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+      color: #e2e8f0; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      cursor: pointer; transition: background .2s, border-color .2s;
+      text-decoration: none;
+    }
+    .logout-btn:hover { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.4); color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header-row">
+      <div class="titles">
+        <h1>Wheel of Fortune</h1>
+        <p class="subtitle">Streamer Dashboard</p>
+      </div>
+      <a class="logout-btn" href="/auth/logout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Logout
+      </a>
+    </div>
+
+    <div class="grid">
+      <!-- OVERLAY URLS -->
+      <div class="card">
+        <h2>OBS Overlay URLs</h2>
+        <div class="muted">Copy into OBS as Browser Sources (transparent background).</div>
+        <div style="margin-top:10px;">
+          <div class="muted small">Wheel overlay:</div>
+          <div class="url-row">
+            <div class="overlay-url masked" id="wheelUrl" onclick="copyUrl(this)">
+              <span class="copy-hint">click to copy</span>
+            </div>
+            <button class="eye-btn" data-target="wheelUrl" onclick="toggleUrlVisibility(this)" title="Show / hide">
+              <svg class="ico-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <div class="muted small" style="margin-top:8px;">Delay timer overlay:</div>
+          <div class="url-row">
+            <div class="overlay-url masked" id="delayUrl" onclick="copyUrl(this)">
+              <span class="copy-hint">click to copy</span>
+            </div>
+            <button class="eye-btn" data-target="delayUrl" onclick="toggleUrlVisibility(this)" title="Show / hide">
+              <svg class="ico-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <div class="muted small" style="margin-top:8px;">WebSocket (custom integrations):</div>
+          <div class="url-row">
+            <div class="overlay-url masked" id="wsUrl" onclick="copyUrl(this)">
+              <span class="copy-hint">click to copy</span>
+            </div>
+            <button class="eye-btn" data-target="wsUrl" onclick="toggleUrlVisibility(this)" title="Show / hide">
+              <svg class="ico-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="card">
+        <h2>Actions</h2>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <button class="btn btn-accent" id="testSpinBtn" style="padding:12px 20px; font-size:15px; font-weight:700; width:100%;">
+            <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Send Test Spin
+            </span>
+          </button>
+          <button class="btn" id="resetDelayBtn" style="padding:12px 20px; font-size:15px; font-weight:600; width:100%;">
+            <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Reset Delay Timer
+            </span>
+          </button>
+          <div style="display:flex; gap:10px; align-items:end;">
+            <div style="flex:1;">
+              <label class="muted" style="font-size:13px; display:block; margin-bottom:5px;">Simulate gifted subs</label>
+              <input type="number" id="giftCount" min="1" max="100" value="1" style="width:100%; font-size:15px; padding:10px 14px;" />
+            </div>
+            <button class="btn" id="sendGiftsBtn" style="padding:12px 20px; font-size:15px; font-weight:600; white-space:nowrap;">Send Gifts</button>
+          </div>
+          <div id="actionResult" style="display:none; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:600; text-align:center;"></div>
+        </div>
+      </div>
+
+      <!-- TIPS & TRICKS -->
+      <div class="card full-width">
+        <h2>Tips &amp; Tricks</h2>
+        <div class="tips-list">
+          <details>
+            <summary>How to set up the wheel in OBS</summary>
+            <p>Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected.</p>
+          </details>
+          <details>
+            <summary>Why is there no sound on the wheel?</summary>
+            <p>Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you're testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.</p>
+          </details>
+          <details>
+            <summary>How do prizes and weights work?</summary>
+            <p>Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages.</p>
+          </details>
+          <details>
+            <summary>What is "Bonus spin"?</summary>
+            <p>If a prize is marked as <b>bonus</b>, landing on it will trigger another spin automatically — the viewer gets a second chance! Great for keeping things exciting.</p>
+          </details>
+          <details>
+            <summary>Customizing your wheel</summary>
+            <p>Pick an <b>accent color</b> to personalize the wheel to match your brand. The color applies to the wheel pegs, pointer, segment tints, and also the delay overlay highlight. The <b>"Gifts per spin"</b> setting controls how many gifted subs trigger one wheel spin.</p>
+          </details>
+          <details>
+            <summary>What does "Reset Delay Timer" do?</summary>
+            <p>After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately.</p>
+          </details>
+        </div>
+      </div>
+
+      <!-- WHEEL CONFIGURATION -->
+      <div class="card full-width">
+        <h2>Wheel Configuration</h2>
+        <div class="muted">Weights are normalized to 100% integer values (min 1%).</div>
+
+        <!-- Settings row: accent color + gifts per spin -->
+        <div class="row" style="margin:16px 0; gap:16px;">
+          <div class="color-row">
+            <label class="muted" for="accentPicker">Accent color:</label>
+            <input type="color" id="accentPicker" value="#7c3aed" />
+            <span class="color-swatch" id="accentSwatch" style="background:#7c3aed;"></span>
+          </div>
+          <div class="row" style="gap:6px;">
+            <label class="muted" for="giftsPerSpin">Gifts per spin:</label>
+            <input type="number" id="giftsPerSpin" min="1" max="100" step="1" value="5" style="width:80px;" />
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="preview-wrap">
+          <canvas id="previewCanvas" class="preview" width="180" height="180"></canvas>
+        </div>
+
+        <!-- Items table -->
+        <div id="wheelList" style="margin-top:16px;"></div>
+
+        <div class="row" style="margin-top:10px;">
+          <input type="text" id="newLabel" placeholder="New prize..." />
+          <input type="number" id="newWeight" placeholder="Weight (%)" min="1" step="1" />
+          <label class="chk"><input type="checkbox" id="newBonus" /> Bonus spin</label>
+          <button class="btn" id="addItemBtn">Add</button>
+        </div>
+
+        <div class="row" style="margin-top:14px;">
+          <button class="btn" id="normalizeBtn">Normalize to 100%</button>
+          <button class="btn btn-accent" id="saveCfgBtn">Save Configuration</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function el(id){ return document.getElementById(id); }
+    function msgHTML(ok, text) { return ok ? `<span class="ok">${text}</span>` : `<span class="bad">${text}</span>`; }
+
+    function copyUrl(elem) {
+      const text = (elem._rawUrl || elem.textContent).replace('click to copy', '').trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const hint = elem.querySelector('.copy-hint');
+        if (hint) { hint.textContent = 'copied!'; setTimeout(() => hint.textContent = 'click to copy', 2000); }
+      }).catch(() => {});
+    }
+
+    function toggleUrlVisibility(btn) {
+      const target = el(btn.dataset.target);
+      const icoEye = btn.querySelector('.ico-eye');
+      const icoOff = btn.querySelector('.ico-eye-off');
+      target.classList.toggle('masked');
+      const hidden = target.classList.contains('masked');
+      icoEye.style.display = hidden ? 'block' : 'none';
+      icoOff.style.display = hidden ? 'none' : 'block';
+    }
+
+    // === STATUS
+    let overlayKey = "";
+
+    async function loadStatus(){
+      try {
+        const r = await fetch("/dashboard/status", { cache: "no-store" });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error || "Error");
+        overlayKey = j.overlay_key || "";
+
+        // Update overlay URLs
+        const base = location.origin;
+        const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const urls = {
+          wheelUrl: `${base}/overlay/${overlayKey}`,
+          delayUrl: `${base}/delay/${overlayKey}`,
+          wsUrl: `${wsProto}://${location.host}/ws?key=${overlayKey}`,
+        };
+        for (const [id, url] of Object.entries(urls)) {
+          const box = el(id);
+          box._rawUrl = url;
+          box.innerHTML = `${url}<span class="copy-hint">click to copy</span>`;
+        }
+
+      } catch (e) {
+        console.error("Failed to load status:", e.message);
+      }
+    }
+
+    // === CONFIG
+    const defaultItems = [
+      { label:"VIP 24h", weight:10, bonus:false },
+      { label:"Sing 30s", weight:10, bonus:false },
+      { label:"Meme on IG", weight:10, bonus:false },
+      { label:"Reroll", weight:10, bonus:true },
+      { label:"Chat's choice", weight:10, bonus:false },
+      { label:"Shot (18+)", weight:10, bonus:false },
+      { label:"Giveaway x1", weight:10, bonus:false },
+      { label:"Map choice", weight:10, bonus:false },
+    ];
+    let items = [];
+    let accentColor = "#7c3aed";
+    let giftsPerSpin = 5;
+
+    function sanitizeItem(it){
+      const label = String(it?.label ?? "").trim();
+      const weight = Math.max(1, Math.round(Number(it?.weight) || 0));
+      const bonus  = Boolean(it?.bonus);
+      return { label, weight, bonus };
+    }
+
+    function applyAccent(hex) {
+      accentColor = hex;
+      document.documentElement.style.setProperty("--accent", hex);
+      el("accentPicker").value = hex;
+      el("accentSwatch").style.background = hex;
+    }
+
+    async function loadWheel(){
+      try {
+        const r = await fetch("/dashboard/config", { cache: "no-store" });
+        const j = await r.json();
+        items = Array.isArray(j?.items) && j.items.length ? j.items.map(sanitizeItem) : defaultItems.slice().map(sanitizeItem);
+        if (typeof j?.accent_color === "string") applyAccent(j.accent_color);
+        if (Number.isFinite(j?.gifts_per_spin)) { giftsPerSpin = j.gifts_per_spin; el("giftsPerSpin").value = giftsPerSpin; }
+      } catch {
+        items = defaultItems.slice().map(sanitizeItem);
+      }
+      renderWheelList();
+      renderPreview();
+    }
+
+    function renderWheelList(){
+      const box = el("wheelList");
+      let html = `<table>
+        <thead><tr><th style="width:44%;">Prize</th><th style="width:14%;">Weight (%)</th><th style="width:18%;">Bonus</th><th style="width:24%;"></th></tr></thead>
+        <tbody>`;
+      items.forEach((it, idx) => {
+        const safeLabel = (it.label??"").replaceAll('"','&quot;');
+        html += `<tr>
+          <td><input data-i="${idx}" data-k="label" type="text" value="${safeLabel}" style="width:100%;"></td>
+          <td><input data-i="${idx}" data-k="weight" type="number" min="1" step="1" value="${Math.max(1, Math.round(Number(it.weight)||1))}" style="width:70px;"></td>
+          <td><label class="chk"><input type="checkbox" data-i="${idx}" data-k="bonus" ${it.bonus ? "checked":""} /><span class="small muted">extra spin</span></label></td>
+          <td>
+            <button class="btn small" data-up="${idx}">&#9650;</button>
+            <button class="btn small" data-down="${idx}">&#9660;</button>
+            <button class="btn small" data-del="${idx}" style="color:#f87171;">&#10005;</button>
+          </td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      box.innerHTML = html;
+
+      box.querySelectorAll("input[data-i]").forEach(inp => {
+        inp.addEventListener("change", () => {
+          const i = Number(inp.dataset.i);
+          const k = String(inp.dataset.k);
+          if (k === "weight") { let v = Math.round(Number(inp.value)||1); if (v<1) v=1; items[i][k]=v; inp.value=v; }
+          else if (k === "label") { items[i][k] = String(inp.value||"").trim(); }
+          else if (k === "bonus") { items[i][k] = inp.checked; }
+          renderPreviewDebounced();
+        });
+      });
+      box.querySelectorAll("button[data-del]").forEach(btn => {
+        btn.onclick = () => { items.splice(Number(btn.dataset.del),1); renderWheelList(); renderPreviewDebounced(); };
+      });
+      box.querySelectorAll("button[data-up]").forEach(btn => {
+        btn.onclick = () => { const i=Number(btn.dataset.up); if(i>0){[items[i-1],items[i]]=[items[i],items[i-1]]; renderWheelList(); renderPreviewDebounced();} };
+      });
+      box.querySelectorAll("button[data-down]").forEach(btn => {
+        btn.onclick = () => { const i=Number(btn.dataset.down); if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]]; renderWheelList(); renderPreviewDebounced();} };
+      });
+    }
+
+    function normalizeWeightsTo100(list) {
+      const n = list.length;
+      if (!n) return [];
+      const sumRaw = list.reduce((s, it) => s + Math.max(0, Number(it.weight)||0), 0);
+      if (sumRaw <= 0) {
+        const base = Math.floor(100 / n);
+        let rest = 100 - base * n;
+        return list.map((it, i) => ({ ...it, weight: base + (i < rest ? 1 : 0) }));
+      }
+      const scaled = list.map((it) => ({ ...it, _val: (Math.max(0, Number(it.weight)||0) / sumRaw) * 100 }));
+      const floored = scaled.map((it) => ({ ...it, weight: Math.floor(it._val), _frac: it._val - Math.floor(it._val) }));
+      let total = floored.reduce((s, it) => s + it.weight, 0);
+      let remain = 100 - total;
+      floored.sort((a, b) => b._frac - a._frac);
+      for (let i = 0; i < floored.length && remain > 0; i++, remain--) floored[i].weight += 1;
+      let debt = 0;
+      for (const it of floored) { if (it.weight < 1) { debt += (1 - it.weight); it.weight = 1; } }
+      if (debt > 0) {
+        floored.sort((a, b) => (a._frac - b._frac) || (a.weight - b.weight));
+        for (let i = 0; i < floored.length && debt > 0; i++) {
+          if (floored[i].weight > 1) { floored[i].weight -= 1; debt--; i = -1; }
+        }
+      }
+      return floored.map(({ _val, _frac, ...rest }) => rest);
+    }
+
+    el("addItemBtn").onclick = () => {
+      const label = (el("newLabel").value||"").trim();
+      let w = Math.round(Number(el("newWeight").value)||1); if(w<1) w=1;
+      if (!label) return;
+      items.push({ label, weight: w, bonus: el("newBonus").checked });
+      el("newLabel").value = ""; el("newWeight").value = ""; el("newBonus").checked = false;
+      renderWheelList();
+      renderPreviewDebounced();
+    };
+
+    el("accentPicker").addEventListener("input", (e) => {
+      applyAccent(e.target.value);
+      renderPreviewDebounced();
+    });
+
+    el("giftsPerSpin").addEventListener("change", (e) => {
+      let v = Math.round(Number(e.target.value) || 5);
+      if (v < 1) v = 1; if (v > 100) v = 100;
+      giftsPerSpin = v;
+      e.target.value = v;
+    });
+
+    el("saveCfgBtn").onclick = async () => {
+      try {
+        items = normalizeWeightsTo100(items.map(sanitizeItem));
+        renderWheelList();
+        const r = await fetch("/dashboard/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items, accent_color: accentColor, gifts_per_spin: giftsPerSpin })
+        });
+        if (!r.ok) throw new Error(await r.text());
+        alert("Configuration saved.");
+        renderPreview();
+      } catch (e) {
+        alert("Save error: " + e.message);
+      }
+    };
+
+    el("normalizeBtn").onclick = () => {
+      items = normalizeWeightsTo100(items.map(sanitizeItem));
+      renderWheelList();
+      renderPreviewDebounced();
+    };
+
+    function showActionResult(ok, msg) {
+      const box = el("actionResult");
+      box.style.display = "block";
+      box.textContent = msg;
+      box.style.background = ok ? "rgba(34,197,94,0.12)" : "rgba(248,113,113,0.12)";
+      box.style.color = ok ? "#4ade80" : "#f87171";
+      clearTimeout(box._timer);
+      box._timer = setTimeout(() => { box.style.display = "none"; }, 4000);
+    }
+
+    el("testSpinBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/test/1", { cache: "no-store" });
+        const j = await r.json();
+        showActionResult(j.ok, j.message || "Test spin sent.");
+      } catch {
+        showActionResult(false, "Failed to send test spin.");
+      }
+    };
+
+    el("resetDelayBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/reset-delay", { method: "POST", cache: "no-store" });
+        const j = await r.json();
+        showActionResult(j.ok, j.message || "Delay reset.");
+      } catch {
+        showActionResult(false, "Failed to reset delay.");
+      }
+    };
+
+    el("sendGiftsBtn").onclick = async () => {
+      const n = Math.max(1, Math.min(100, parseInt(el("giftCount").value, 10) || 1));
+      try {
+        const r = await fetch("/dashboard/test/" + n, { cache: "no-store" });
+        const j = await r.json();
+        showActionResult(j.ok, j.message || `Sent ${n} gift(s).`);
+      } catch {
+        showActionResult(false, "Failed to send gifts.");
+      }
+    };
+
+    // ==== Preview (glassmorphism mini wheel) ====
+    const prevCanvas = el("previewCanvas");
+    const ctxP = prevCanvas.getContext("2d");
+
+    function hexToRgb(hex) {
+      return { r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) };
+    }
+
+    function drawPreview(ctx, list, accent){
+      const W=180, H=180, CX=W/2, CY=H/2, R=58, rimW=12, rimOuter=R+rimW, rimMid=R+rimW/2;
+      const ac = hexToRgb(accent);
+      const TAU = 2*Math.PI;
+      ctx.clearRect(0,0,W,H);
+
+      // Dark glassmorphism rim
+      ctx.beginPath(); ctx.arc(CX,CY,rimOuter,0,TAU);
+      ctx.arc(CX,CY,R,0,TAU,true);
+      ctx.fillStyle = "rgba(10,10,24,0.85)"; ctx.fill();
+      // Glass refraction on rim
+      const rg = ctx.createRadialGradient(CX,CY-rimOuter*0.4,rimW*0.5,CX,CY,rimOuter);
+      rg.addColorStop(0,"rgba(255,255,255,0.08)"); rg.addColorStop(1,"rgba(255,255,255,0)");
+      ctx.beginPath(); ctx.arc(CX,CY,rimOuter,0,TAU); ctx.arc(CX,CY,R,0,TAU,true);
+      ctx.fillStyle = rg; ctx.fill();
+      ctx.beginPath(); ctx.arc(CX,CY,rimOuter,0,TAU);
+      ctx.strokeStyle = `rgba(${ac.r},${ac.g},${ac.b},0.5)`; ctx.lineWidth = 1; ctx.stroke();
+
+      // Glassmorphism segments
+      const sum = list.reduce((s,it)=>s+Math.max(0,Number(it.weight)||0),0) || 1;
+      let a = -Math.PI/2;
+      for (let i=0;i<list.length;i++){
+        const frac = Math.max(0, Number(list[i].weight)||0)/sum;
+        const b = a + frac*TAU;
+        ctx.beginPath(); ctx.moveTo(CX,CY); ctx.arc(CX,CY,R,a,b); ctx.closePath();
+        ctx.fillStyle = (i%2===0) ? "rgba(18,18,40,0.92)" : `rgba(${ac.r},${ac.g},${ac.b},0.18)`;
+        ctx.fill();
+        // Glass highlight
+        const grad = ctx.createRadialGradient(CX,CY,R*0.9,CX,CY,R);
+        grad.addColorStop(0,"rgba(255,255,255,0)");
+        grad.addColorStop(1,"rgba(255,255,255,0.07)");
+        ctx.beginPath(); ctx.moveTo(CX,CY); ctx.arc(CX,CY,R,a,b); ctx.closePath();
+        ctx.fillStyle = grad; ctx.fill();
+
+        // Peg on dark rim
+        const px = CX+Math.cos(a)*rimMid, py = CY+Math.sin(a)*rimMid;
+        ctx.beginPath(); ctx.arc(px,py,2.5,0,TAU);
+        ctx.fillStyle = accent; ctx.fill();
+
+        a = b;
+      }
+
+      // Divider lines
+      a = -Math.PI/2;
+      for (let i=0;i<list.length;i++){
+        ctx.beginPath(); ctx.moveTo(CX,CY);
+        ctx.lineTo(CX+Math.cos(a)*R, CY+Math.sin(a)*R);
+        ctx.strokeStyle = "rgba(255,255,255,0.15)"; ctx.lineWidth = 0.5; ctx.stroke();
+        const frac = Math.max(0, Number(list[i].weight)||0)/sum;
+        a += frac*TAU;
+      }
+
+      // Center hub (dark)
+      ctx.beginPath(); ctx.arc(CX,CY,8,0,TAU);
+      ctx.fillStyle = "rgba(14,14,26,0.9)"; ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(CX,CY,3,0,TAU);
+      ctx.fillStyle = accent; ctx.fill();
+
+      // Pointer
+      ctx.fillStyle = accent;
+      ctx.beginPath(); ctx.moveTo(CX, CY-rimOuter-2); ctx.lineTo(CX-6, CY-R+4); ctx.lineTo(CX+6, CY-R+4);
+      ctx.closePath(); ctx.fill();
+    }
+
+    let previewTimer;
+    function renderPreview(){
+      const list = items.length ? items : defaultItems;
+      drawPreview(ctxP, list, accentColor);
+    }
+    function renderPreviewDebounced(){
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(renderPreview, 60);
+    }
+
+    // BOOT
+    (async function(){
+      await loadStatus();
+      await loadWheel();
+    })();
+  </script>
+</body>
+</html>

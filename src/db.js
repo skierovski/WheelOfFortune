@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS streamers (
 CREATE TABLE IF NOT EXISTS wheel_configs (
   broadcaster_id   INTEGER PRIMARY KEY REFERENCES streamers(broadcaster_id),
   items_json       TEXT DEFAULT '[]',
-  theme            TEXT DEFAULT 'wood',
+  accent_color     TEXT DEFAULT '#7c3aed',
+  gifts_per_spin   INTEGER DEFAULT 5,
   updated_at       INTEGER DEFAULT (unixepoch())
 );
 
@@ -87,6 +88,15 @@ export function openDatabase(dbPath = ":memory:") {
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(SCHEMA_SQL);
 
+  // ── Migrations (add columns to existing tables) ─────────────────
+  const cols = sqlite.prepare("PRAGMA table_info(wheel_configs)").all().map(c => c.name);
+  if (!cols.includes("accent_color")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN accent_color TEXT DEFAULT '#7c3aed'");
+  }
+  if (!cols.includes("gifts_per_spin")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN gifts_per_spin INTEGER DEFAULT 5");
+  }
+
   // ── Prepared statements ─────────────────────────────────────────
 
   const stmts = {
@@ -118,12 +128,13 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, items_json, theme, updated_at)
-      VALUES (@broadcaster_id, @items_json, @theme, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, items_json, accent_color, gifts_per_spin, updated_at)
+      VALUES (@broadcaster_id, @items_json, @accent_color, @gifts_per_spin, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
-        items_json = excluded.items_json,
-        theme      = excluded.theme,
-        updated_at = unixepoch()
+        items_json     = excluded.items_json,
+        accent_color   = excluded.accent_color,
+        gifts_per_spin = excluded.gifts_per_spin,
+        updated_at     = unixepoch()
     `),
     getConfig: sqlite.prepare(`SELECT * FROM wheel_configs WHERE broadcaster_id = ?`),
 
@@ -240,15 +251,18 @@ export function openDatabase(dbPath = ":memory:") {
       if (!row) return null;
       return {
         items: JSON.parse(row.items_json),
-        theme: row.theme,
+        accent_color: row.accent_color || "#7c3aed",
+        gifts_per_spin: row.gifts_per_spin ?? 5,
       };
     },
 
-    saveConfig(broadcasterId, items, theme) {
+    saveConfig(broadcasterId, { items, accent_color, gifts_per_spin }) {
+      const prev = stmts.getConfig.get(broadcasterId);
       stmts.upsertConfig.run({
         broadcaster_id: broadcasterId,
         items_json: JSON.stringify(items),
-        theme: theme || "wood",
+        accent_color: accent_color ?? prev?.accent_color ?? "#7c3aed",
+        gifts_per_spin: gifts_per_spin ?? prev?.gifts_per_spin ?? 5,
       });
     },
 

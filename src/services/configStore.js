@@ -4,7 +4,7 @@ import { normalizeItemsInt100 } from "../utils/normalize.js";
 /**
  * Load wheel config for a streamer.
  * @param {number} broadcasterId
- * @returns {{ items: Array, theme: string } | null}
+ * @returns {{ items: Array, accent_color: string, gifts_per_spin: number } | null}
  */
 export function loadConfig(broadcasterId) {
   return getDb().getConfig(broadcasterId);
@@ -14,17 +14,23 @@ export function loadConfig(broadcasterId) {
  * Save wheel config for a streamer (normalizes weights).
  * @param {number} broadcasterId
  * @param {Array} items
- * @param {string} [theme]
- * @returns {{ items: Array, theme: string }}
+ * @param {{ accent_color?: string, gifts_per_spin?: number }} [opts]
+ * @returns {{ items: Array, accent_color: string, gifts_per_spin: number }}
  */
-export function saveConfig(broadcasterId, items, theme) {
+export function saveConfig(broadcasterId, items, opts = {}) {
   const normalized = normalizeItemsInt100(items);
   const prev = getDb().getConfig(broadcasterId);
-  const finalTheme = typeof theme === "string" ? theme : (prev?.theme || "wood");
 
-  getDb().saveConfig(broadcasterId, normalized, finalTheme);
-  console.log(`[config] saved ${normalized.length} items for broadcaster ${broadcasterId} theme=${finalTheme}`);
-  return { items: normalized, theme: finalTheme };
+  const finalAccent = typeof opts.accent_color === "string" ? opts.accent_color : (prev?.accent_color || "#7c3aed");
+  const finalGifts = Number.isFinite(opts.gifts_per_spin) ? opts.gifts_per_spin : (prev?.gifts_per_spin ?? 5);
+
+  getDb().saveConfig(broadcasterId, {
+    items: normalized,
+    accent_color: finalAccent,
+    gifts_per_spin: finalGifts,
+  });
+  console.log(`[config] saved ${normalized.length} items for broadcaster ${broadcasterId} accent=${finalAccent} gifts_per_spin=${finalGifts}`);
+  return { items: normalized, accent_color: finalAccent, gifts_per_spin: finalGifts };
 }
 
 /**

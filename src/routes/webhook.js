@@ -109,8 +109,10 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       const gifter = payload?.gifter || payload?.data?.gifter || {};
       console.log(`[WEBHOOK] Gifts bid=${broadcasterId}: ${gifter?.username || "Anon"} x${giftCount}`);
 
-      // 5 gifts = 1 spin
-      const spinCount = Math.floor(giftCount / 5);
+      // gifts_per_spin from streamer config (default 5)
+      const config = getDb().getConfig(broadcasterId);
+      const giftsPerSpin = config?.gifts_per_spin || 5;
+      const spinCount = Math.floor(giftCount / giftsPerSpin);
       if (spinCount > 0) {
         console.log(`[WEBHOOK] bid=${broadcasterId} ${giftCount} gifts -> ${spinCount} spin(s)`);
         spins.deliverSpinOrQueue(broadcasterId, spinCount);

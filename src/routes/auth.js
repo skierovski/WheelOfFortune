@@ -60,7 +60,19 @@ router.get("/auth/login", async (req, res) => {
       }
     }
 
-    const desiredScopes = ["user:read", "channel:read", "channel:write", "chat:write", "events:subscribe"];
+    const desiredScopes = [
+      "user:read",
+      "channel:read",
+      "channel:write",
+      "channel:rewards:read",
+      "channel:rewards:write",
+      "chat:write",
+      "streamkey:read",
+      "events:subscribe",
+      "moderation:ban",
+      "moderation:chat_message:manage",
+      "kicks:read",
+    ];
     const redirectUri = env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
     const authClient = new KickAuthClient({
       clientId: env.KICK_CLIENT_ID,
@@ -179,6 +191,14 @@ router.get("/auth/dev-login", (req, res) => {
   const ret = String(req.query.ret || "/dashboard");
   console.warn(`[AUTH][DEV] Manual dev-login bid=${bid} -> redirect ${ret}`);
   return res.redirect(ret);
+});
+
+// ── Logout ────────────────────────────────────────────────────────
+import { clearSessionCookie } from "../utils/cookies.js";
+
+router.get("/auth/logout", (req, res) => {
+  clearSessionCookie(res);
+  res.redirect("/");
 });
 
 export default router;

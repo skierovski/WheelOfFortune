@@ -163,28 +163,28 @@ describe("database schema and queries", () => {
 
     it("saves and loads config", () => {
       const items = [{ id: "itm_1", label: "Prize", weight: 50, bonus: false }];
-      db.saveConfig(1, items, "classic");
+      db.saveConfig(1, { items, accent_color: "#ff0000" });
 
       const loaded = db.getConfig(1);
-      expect(loaded.theme).toBe("classic");
+      expect(loaded.accent_color).toBe("#ff0000");
       expect(loaded.items).toHaveLength(1);
       expect(loaded.items[0].label).toBe("Prize");
     });
 
     it("upserts config on save (overwrite)", () => {
-      db.saveConfig(1, [{ label: "A" }], "wood");
-      db.saveConfig(1, [{ label: "B" }, { label: "C" }], "classic");
+      db.saveConfig(1, { items: [{ label: "A" }], accent_color: "#111111" });
+      db.saveConfig(1, { items: [{ label: "B" }, { label: "C" }], accent_color: "#222222" });
 
       const loaded = db.getConfig(1);
       expect(loaded.items).toHaveLength(2);
-      expect(loaded.theme).toBe("classic");
+      expect(loaded.accent_color).toBe("#222222");
     });
 
     it("isolates config between streamers", () => {
       db.upsertStreamer({ broadcaster_id: 2, kick_username: "u2", access_token: "t", refresh_token: "r" });
 
-      db.saveConfig(1, [{ label: "StreamerA" }], "wood");
-      db.saveConfig(2, [{ label: "StreamerB" }], "classic");
+      db.saveConfig(1, { items: [{ label: "StreamerA" }] });
+      db.saveConfig(2, { items: [{ label: "StreamerB" }] });
 
       expect(db.getConfig(1).items[0].label).toBe("StreamerA");
       expect(db.getConfig(2).items[0].label).toBe("StreamerB");

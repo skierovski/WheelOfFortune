@@ -1,4 +1,3 @@
-const ALLOWED_THEMES = ["wood", "classic"];
 const MAX_LABEL_LENGTH = 100;
 const MAX_ITEMS = 100;
 
@@ -43,13 +42,26 @@ export function validateWheelItems(items) {
 }
 
 /**
- * Validate theme name.
- * @param {string} theme
- * @returns {string} Validated theme or default "wood"
+ * Validate and clamp gifts_per_spin value.
+ * @param {*} value
+ * @returns {number} Clamped value between 1 and 100, default 5
  */
-export function validateTheme(theme) {
-  if (typeof theme !== "string") return "wood";
-  return ALLOWED_THEMES.includes(theme) ? theme : "wood";
+export function validateGiftsPerSpin(value) {
+  if (value == null || value === "") return 5;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 5;
+  return Math.max(1, Math.min(100, Math.round(n)));
+}
+
+/**
+ * Validate accent color (hex format).
+ * @param {string} color
+ * @returns {string} Valid hex color or default
+ */
+export function validateAccentColor(color) {
+  if (typeof color !== "string") return "#7c3aed";
+  const trimmed = color.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : "#7c3aed";
 }
 
 /**

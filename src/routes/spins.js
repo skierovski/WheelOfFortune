@@ -52,64 +52,11 @@ router.get("/dashboard/spins/pending", requireSession, (req, res) => {
   });
 });
 
-// Test page
-router.get("/dashboard/test", requireSession, (req, res) => {
-  res.type("html").send(`
-    <!DOCTYPE html>
-    <html><head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Wheel Test</title>
-      <style>
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 20px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px;
-          padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        h1 { margin: 0 0 24px 0; font-size: 32px; color: #1f2937; }
-        .buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-          gap: 12px; margin: 24px 0; }
-        button { padding: 16px 24px; border: none; border-radius: 12px; font-size: 18px;
-          font-weight: 600; cursor: pointer; transition: all 0.2s; background: #667eea;
-          color: white; }
-        button:hover { transform: translateY(-2px); }
-        #result { margin: 24px 0; padding: 16px; border-radius: 12px; background: #f3f4f6;
-          display: none; }
-        .links { margin-top: 24px; padding-top: 24px; border-top: 2px solid #e5e7eb; }
-        .links a { display: inline-block; margin-right: 16px; color: #667eea; text-decoration: none; }
-      </style>
-    </head><body>
-      <div class="container">
-        <h1>Wheel Test Panel</h1>
-        <div class="buttons">
-          <button onclick="testSpin(1)">1 Spin</button>
-          <button onclick="testSpin(2)">2 Spins</button>
-          <button onclick="testSpin(3)">3 Spins</button>
-          <button onclick="testSpin(5)">5 Spins</button>
-        </div>
-        <div id="result"></div>
-        <div class="links">
-          <a href="/dashboard">Dashboard</a>
-        </div>
-      </div>
-      <script>
-        async function testSpin(n) {
-          const el = document.getElementById('result');
-          el.style.display = 'block';
-          el.textContent = 'Sending...';
-          try {
-            const r = await fetch('/dashboard/test/' + n);
-            const data = await r.json();
-            el.textContent = data.message;
-            el.style.background = '#d1fae5';
-          } catch (e) {
-            el.textContent = 'Error: ' + e.message;
-            el.style.background = '#fee2e2';
-          }
-        }
-      </script>
-    </body></html>
-  `);
+// Reset delay timer
+router.post("/dashboard/reset-delay", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  spins.resetDelay(bid);
+  res.json({ ok: true, message: "Delay timer reset." });
 });
 
 // External trigger (requires TRIGGER_KEY + broadcaster_id)

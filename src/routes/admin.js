@@ -25,7 +25,7 @@ function requireAdmin(req, res, next) {
 // ── Admin Panel Page ────────────────────────────────────────────────
 
 router.get("/admin", requireAdmin, (req, res) => {
-  const file = path.join(process.cwd(), "public", "admin.html");
+  const file = path.join(process.cwd(), "views", "admin.html");
   if (!fs.existsSync(file)) return res.status(404).send("admin.html not found");
   res.sendFile(file);
 });
@@ -53,7 +53,8 @@ router.get("/admin/overview", requireAdmin, (req, res) => {
       updated_at: s.updated_at,
       config: {
         items_count: config?.items?.length || 0,
-        theme: config?.theme || "none",
+        accent_color: config?.accent_color || "#7c3aed",
+        gifts_per_spin: config?.gifts_per_spin ?? 5,
       },
       spins: {
         pending: spinState.pending_count,
@@ -141,7 +142,7 @@ router.post("/admin/streamers", requireAdmin, (req, res) => {
       { label: "Map choice", weight: 15, bonus: false },
       { label: "Shot (18+)", weight: 10, bonus: false },
       { label: "Meme on IG", weight: 10, bonus: false },
-    ], "wood");
+    ]);
   }
 
   console.log(`[ADMIN] Created streamer bid=${bid} username=${username} overlay_key=${streamer.overlay_key}`);
@@ -201,7 +202,7 @@ router.get("/admin/streamers/:bid", requireAdmin, (req, res) => {
       has_tokens: !!streamer.access_token,
       created_at: streamer.created_at,
     },
-    config: config || { items: [], theme: "wood" },
+    config: config || { items: [], accent_color: "#7c3aed", gifts_per_spin: 5 },
     goals,
     spins: {
       pending: spinState.pending_count,
@@ -280,10 +281,12 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
   const giftCount = Math.max(1, Math.min(100, Number(req.body?.gift_count || 5)));
   const gifterName = String(req.body?.gifter_name || "TestGifter");
 
-  // Convert gifts to spins (same logic as webhook)
-  const spinCount = Math.floor(giftCount / 5);
+  // Convert gifts to spins (use streamer's gifts_per_spin setting)
+  const config = getDb().getConfig(bid);
+  const giftsPerSpin = config?.gifts_per_spin || 5;
+  const spinCount = Math.floor(giftCount / giftsPerSpin);
 
-  console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} -> spins=${spinCount}`);
+  console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} giftsPerSpin=${giftsPerSpin} -> spins=${spinCount}`);
 
   let delivered = 0;
   if (spinCount > 0) {
@@ -293,12 +296,13 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
   res.json({
     ok: true,
     gift_count: giftCount,
+    gifts_per_spin: giftsPerSpin,
     spin_count: spinCount,
     delivered,
     pending: spins.getPending(bid),
     message: spinCount > 0
-      ? `${giftCount} gifts -> ${spinCount} spin(s), ${delivered} delivered to overlay`
-      : `${giftCount} gifts -> not enough for a spin (need 5)`,
+      ? `${giftCount} gifts -> ${spinCount} spin(s) (${giftsPerSpin} per spin), ${delivered} delivered to overlay`
+      : `${giftCount} gifts -> not enough for a spin (need ${giftsPerSpin})`,
   });
 });
 
@@ -311,22 +315,23 @@ router.post("/admin/streamers/:bid/config", requireAdmin, (req, res) => {
   }
 
   const items = req.body?.items;
-  const theme = req.body?.theme;
+  const accent_color = req.body?.accent_color;
+  const gifts_per_spin = req.body?.gifts_per_spin;
   if (!Array.isArray(items)) {
     return res.status(400).json({ ok: false, error: "items[] required" });
   }
 
-  const saved = saveConfig(bid, items, theme);
+  const saved = saveConfig(bid, items, { accent_color, gifts_per_spin });
 
   // Broadcast to overlay
   try {
     const wss = req.app?.locals?.wss;
     if (wss?.broadcastTo) {
-      wss.broadcastTo(bid, { type: "config", items: saved.items, theme: saved.theme });
+      wss.broadcastTo(bid, { type: "config", items: saved.items, accent_color: saved.accent_color, gifts_per_spin: saved.gifts_per_spin });
     }
   } catch {}
 
-  res.json({ ok: true, items: saved.items, theme: saved.theme });
+  res.json({ ok: true, items: saved.items, accent_color: saved.accent_color, gifts_per_spin: saved.gifts_per_spin });
 });
 
 // ── Quick Setup (create dev streamer + login in one step) ───────────
@@ -355,7 +360,7 @@ router.post("/admin/quick-setup", requireAdmin, (req, res) => {
       { label: "Map choice", weight: 15, bonus: false },
       { label: "Shot (18+)", weight: 10, bonus: false },
       { label: "Meme on IG", weight: 10, bonus: false },
-    ], "wood");
+    ]);
   }
 
   // Create an invite code (for testing the flow)

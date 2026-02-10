@@ -7,6 +7,7 @@ import { getDb } from "../db.js";
 
 const router = Router();
 const publicDir = path.join(process.cwd(), "public");
+const viewsDir = path.join(process.cwd(), "views");
 
 // Landing page (redirect to dashboard if already logged in)
 router.get("/", (req, res) => {
@@ -24,7 +25,7 @@ router.get("/", (req, res) => {
 
 // Streamer dashboard (session-protected)
 router.get("/dashboard", requireSession, (req, res) => {
-  const file = path.join(publicDir, "home.html");
+  const file = path.join(viewsDir, "home.html");
   if (!fs.existsSync(file)) return res.status(404).send("home.html not found");
   res.sendFile(file);
 });

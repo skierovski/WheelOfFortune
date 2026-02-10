@@ -30,9 +30,9 @@ describe("configStore (multi-tenant)", () => {
     });
 
     it("loads config for a streamer", () => {
-      db.saveConfig(BID, [{ id: "itm_1", label: "Prize", weight: 100, bonus: false }], "classic");
+      db.saveConfig(BID, { items: [{ id: "itm_1", label: "Prize", weight: 100, bonus: false }], accent_color: "#ff0000" });
       const result = loadConfig(BID);
-      expect(result.theme).toBe("classic");
+      expect(result.accent_color).toBe("#ff0000");
       expect(result.items).toHaveLength(1);
       expect(result.items[0].label).toBe("Prize");
     });
@@ -45,14 +45,14 @@ describe("configStore (multi-tenant)", () => {
       const result = saveConfig(BID, [
         { label: "A", weight: 50 },
         { label: "B", weight: 50 },
-      ], "classic");
-      expect(result.theme).toBe("classic");
+      ], { accent_color: "#ff0000" });
+      expect(result.accent_color).toBe("#ff0000");
       expect(result.items).toHaveLength(2);
       expect(result.items[0].weight + result.items[1].weight).toBe(100);
 
       // Verify in DB
       const loaded = loadConfig(BID);
-      expect(loaded.theme).toBe("classic");
+      expect(loaded.accent_color).toBe("#ff0000");
     });
 
     it("normalizes weights when saving", () => {
@@ -64,19 +64,19 @@ describe("configStore (multi-tenant)", () => {
       expect(sum).toBe(100);
     });
 
-    it("preserves previous theme when not provided", () => {
-      saveConfig(BID, [{ label: "A", weight: 100 }], "classic");
-      saveConfig(BID, [{ label: "A", weight: 100 }]); // no theme
+    it("preserves previous accent_color when not provided", () => {
+      saveConfig(BID, [{ label: "A", weight: 100 }], { accent_color: "#ff0000" });
+      saveConfig(BID, [{ label: "A", weight: 100 }]); // no accent_color
       const loaded = loadConfig(BID);
-      expect(loaded.theme).toBe("classic");
+      expect(loaded.accent_color).toBe("#ff0000");
     });
 
     it("isolates config between streamers", () => {
       const BID2 = 200;
       db.upsertStreamer({ broadcaster_id: BID2, kick_username: "u2", access_token: null, refresh_token: null });
 
-      saveConfig(BID, [{ label: "StreamerA" }], "wood");
-      saveConfig(BID2, [{ label: "StreamerB" }], "classic");
+      saveConfig(BID, [{ label: "StreamerA" }], { accent_color: "#aaaaaa" });
+      saveConfig(BID2, [{ label: "StreamerB" }], { accent_color: "#bbbbbb" });
 
       expect(loadConfig(BID).items[0].label).toBe("StreamerA");
       expect(loadConfig(BID2).items[0].label).toBe("StreamerB");

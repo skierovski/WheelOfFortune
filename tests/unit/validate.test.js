@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateWheelItems, validateTheme, isValidOverlayKey } from "../../src/utils/validate.js";
+import { validateWheelItems, isValidOverlayKey, validateGiftsPerSpin, validateAccentColor } from "../../src/utils/validate.js";
 
 describe("validateWheelItems", () => {
   it("accepts valid items", () => {
@@ -63,20 +63,43 @@ describe("validateWheelItems", () => {
   });
 });
 
-describe("validateTheme", () => {
-  it("accepts 'wood'", () => {
-    expect(validateTheme("wood")).toBe("wood");
+describe("validateAccentColor", () => {
+  it("accepts valid hex colors", () => {
+    expect(validateAccentColor("#ff0000")).toBe("#ff0000");
+    expect(validateAccentColor("#7c3aed")).toBe("#7c3aed");
+    expect(validateAccentColor("#AABBCC")).toBe("#AABBCC");
   });
 
-  it("accepts 'classic'", () => {
-    expect(validateTheme("classic")).toBe("classic");
+  it("defaults for invalid input", () => {
+    expect(validateAccentColor("red")).toBe("#7c3aed");
+    expect(validateAccentColor("#fff")).toBe("#7c3aed");
+    expect(validateAccentColor("")).toBe("#7c3aed");
+    expect(validateAccentColor(null)).toBe("#7c3aed");
+    expect(validateAccentColor(undefined)).toBe("#7c3aed");
+  });
+});
+
+describe("validateGiftsPerSpin", () => {
+  it("accepts valid numbers", () => {
+    expect(validateGiftsPerSpin(1)).toBe(1);
+    expect(validateGiftsPerSpin(5)).toBe(5);
+    expect(validateGiftsPerSpin(100)).toBe(100);
   });
 
-  it("defaults to 'wood' for invalid theme", () => {
-    expect(validateTheme("hacker")).toBe("wood");
-    expect(validateTheme("")).toBe("wood");
-    expect(validateTheme(null)).toBe("wood");
-    expect(validateTheme(undefined)).toBe("wood");
+  it("clamps to range 1-100", () => {
+    expect(validateGiftsPerSpin(0)).toBe(1);
+    expect(validateGiftsPerSpin(-5)).toBe(1);
+    expect(validateGiftsPerSpin(200)).toBe(100);
+  });
+
+  it("rounds floats", () => {
+    expect(validateGiftsPerSpin(3.7)).toBe(4);
+  });
+
+  it("defaults to 5 for non-numeric input", () => {
+    expect(validateGiftsPerSpin(null)).toBe(5);
+    expect(validateGiftsPerSpin(undefined)).toBe(5);
+    expect(validateGiftsPerSpin("abc")).toBe(5);
   });
 });
 
