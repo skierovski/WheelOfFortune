@@ -13,10 +13,13 @@ export async function fetchUserInfo(accessToken) {
   const data = await r.json();
   const user = data?.data?.[0];
   if (!user?.user_id) throw new Error("Cannot determine user from Kick API response");
+  // Kick API returns: { user_id, name, email, profile_picture }
+  // "name" is the display name; no separate "username" field in /users endpoint
+  const name = user.name || user.username || user.display_name || null;
   return {
     user_id: Number(user.user_id),
-    username: user.username || null,
-    display_name: user.display_name || user.username || null,
+    username: name,
+    display_name: name,
   };
 }
 
