@@ -1,26 +1,34 @@
 [
   {
+    "version": "1.0.2",
+    "date": "2026-02-11",
+    "changes_en": [
+      "Added app favicon",
+      "Streamer username is now saved automatically on login",
+      "Cleaner overlay — removed debug elements"
+    ],
+    "changes_pl": [
+      "Dodano ikone aplikacji (favicon)",
+      "Nazwa streamera zapisywana automatycznie przy logowaniu",
+      "Czystsza nakladka — usunieto elementy debugowania"
+    ]
+  },
+  {
     "version": "1.0.1",
     "date": "2026-02-07",
     "changes_en": [
       "Added privacy policy page",
       "Added version stamp and changelog to dashboard",
-      "Added visual 'How it works' section on landing page",
+      "Visual 'How it works' section on landing page",
       "Updated OBS setup tip to recommend 1920x1080",
-      "Added copyright footer to all pages",
-      "Added CI/CD pipeline with automatic semver versioning",
-      "Streamer rename feature in admin panel",
       "Wheel padding fix for OBS browser sources",
       "EN/PL language toggle on dashboard"
     ],
     "changes_pl": [
       "Dodano strone polityki prywatnosci",
       "Dodano oznaczenie wersji i dziennik zmian w panelu",
-      "Dodano sekcje 'Jak to dziala' na stronie glownej",
+      "Sekcja 'Jak to dziala' na stronie glownej",
       "Zaktualizowano porade OBS -- zalecane 1920x1080",
-      "Dodano stopke z prawami autorskimi",
-      "Dodano pipeline CI/CD z automatycznym wersjonowaniem",
-      "Funkcja zmiany nazwy streamera w panelu admina",
       "Poprawka paddingu kola dla OBS",
       "Przelacznik jezykow EN/PL w panelu streamera"
     ]
