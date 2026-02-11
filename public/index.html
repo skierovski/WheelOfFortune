@@ -37,11 +37,6 @@
   </style>
 </head>
 <body>
-  <div id="debugIndicator" class="debug-indicator">
-    <div>WS: <span id="wsStatus">connecting...</span></div>
-    <div>Queue: <span id="debugPending">0</span></div>
-  </div>
-  
   <div id="resultBanner" class="result-banner" aria-hidden="true"></div>
   <div id="overlay" class="overlay">
     <canvas id="wheel" width="1000" height="1000"></canvas>
@@ -421,7 +416,6 @@
         spinBag = [];
         bagPos = 0;
         spinBagVersion = CONFIG_VERSION;
-        console.log("🧰 Bag skipped (no items).");
         return;
       }
 
@@ -453,13 +447,11 @@
       }
       shuffleInPlace(bag);
       spinBag=bag; bagPos=0; spinBagVersion=CONFIG_VERSION;
-      const dbg = counts.map((c,i)=>`${ITEMS[i]?.label||i}:${c}`).join(" | ");
-      console.log(`🧰 Bag built (${BAG_SIZE}):`, dbg);
     }
 
     function nextFromBag(){
       if(!spinBag || bagPos>=spinBag.length || spinBagVersion!==CONFIG_VERSION) buildSpinBag();
-      if (spinBag.length === 0) { console.warn("Spin requested but no items."); return null; }
+      if (spinBag.length === 0) return null;
       let pickedId = spinBag[bagPos++];
       if (NO_REPEAT_BACK_TO_BACK && lastPickedId===pickedId && spinBag.length>1){
         if (bagPos<spinBag.length && spinBag[bagPos]!==lastPickedId){ const alt=spinBag[bagPos]; spinBag[bagPos]=pickedId; pickedId=alt; }
@@ -657,15 +649,12 @@
             ITEMS = tierItems;
             buildSpinBag();
             if (!ACTIVE_SNAPSHOT) drawWheel(rotation);
-            console.log(`[TIER] Using tier "${tierName}" with ${tierItems.length} items`);
           }
         }
 
         const pickedId = nextFromBag();
         const result = await spinToId(pickedId);
         if (result.label) {
-          const tierTag = tierName ? ` [${tierName}]` : "";
-          console.log(`✅ [${bagPos}/${spinBag.length}] ${result.label} ${result.bonus ? '(bonus)' : ''}${tierTag}`);
           showResult(result.label, 1800, result.bonus);
           playSound();
           speak(result.label);
@@ -701,8 +690,6 @@
     }
 
     // ====== WebSocket & watchdog ======
-    const OBS_EDIT_MODE = new URLSearchParams(location.search).get("edit") === "1";
-    const DEBUG_MODE = new URLSearchParams(location.search).get("debug") === "1";
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws?key=' + encodeURIComponent(OVERLAY_KEY);
 
     let ws = null;
@@ -710,19 +697,6 @@
     let lastSignalAt = Date.now();
     const staleKickMs = 60_000;
     const hardReloadEveryMs = 30 * 60_000;
-
-    // Debug indicator
-    const debugIndicator = document.getElementById("debugIndicator");
-    const wsStatusEl = document.getElementById("wsStatus");
-    const debugPendingEl = document.getElementById("debugPending");
-    if (DEBUG_MODE) debugIndicator?.classList.add("show");
-    
-    function updateDebugStatus(wsState, pending = null) {
-      if (!DEBUG_MODE || !wsStatusEl) return;
-      wsStatusEl.textContent = wsState;
-      debugIndicator.className = "debug-indicator show " + (wsState === "connected" ? "connected" : "disconnected");
-      if (pending !== null) debugPendingEl.textContent = pending;
-    }
 
     function getItemsForTier(tierName) {
       if (!tierName || !Array.isArray(TIERS) || TIERS.length === 0) return null;
@@ -744,7 +718,6 @@
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
         const tierName = data.tier || null;
-        console.log("[WS] 📥 Received spin command" + (tierName ? ` tier="${tierName}"` : ""));
         queue.push({ times: 1, tier: tierName });
         showOverlay(); runQueue(); return;
       }
@@ -752,56 +725,32 @@
 
     // Simple wake-up check - only when overlay becomes visible
     async function checkForPendingSpins() {
-      console.log("[WAKE UP] Checking if server has spins for me...");
       try {
         const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
         const pending = Math.max(0, Number(j?.count || 0));
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
-        
         if (pending > 0 && timeUntilNext === 0 && queue.length === 0 && !spinning) {
-          console.log(`[WAKE UP] ✅ Server has ${pending} spin(s) ready - taking it!`);
           queue.push(1);
           showOverlay();
           runQueue();
-        } else if (pending > 0) {
-          console.log(`[WAKE UP] Server has ${pending} spin(s) but delay active (${timeUntilNext}s remaining)`);
-        } else {
-          console.log("[WAKE UP] No spins pending - going back to sleep");
         }
-      } catch (e) {
-        console.error("[WAKE UP] Failed to check:", e);
-      }
+      } catch {}
     }
 
     function connectWS() {
       try { if (ws) ws.close(); } catch {}
       ws = new WebSocket(WS_URL);
-      updateDebugStatus("connecting...");
 
-      ws.onopen = () => {
-        console.log("[WS] ✅ Connected (nice-to-have for instant spins)");
-        updateDebugStatus("connected");
-        reconnectDelay = 1000;
-      };
+      ws.onopen = () => { reconnectDelay = 1000; };
       
       ws.onmessage = (evt) => {
-        console.log("[WS] 📥 Got message from server:", evt.data);
-        try { handleServerMessage(JSON.parse(evt.data)); } catch (e) { console.error("Bad WS message", e); }
+        try { handleServerMessage(JSON.parse(evt.data)); } catch {}
       };
       
-      ws.onerror = () => { 
-        console.log("[WS] ⚠️ Error (no problem, we have wake-up check)");
-        updateDebugStatus("disconnected");
-        try { ws.close(); } catch {} 
-      };
+      ws.onerror = () => { try { ws.close(); } catch {} };
       
-      ws.onclose = () => {
-        console.log("[WS] ❌ Disconnected (no problem, we rely on wake-up check)");
-        updateDebugStatus("disconnected");
-        // Reconnect slowly - we don't really need it urgently
-        setTimeout(connectWS, 10000); // Try again in 10 seconds
-      };
+      ws.onclose = () => { setTimeout(connectWS, 10000); };
     }
     
     // Connect once on page load
@@ -809,28 +758,9 @@
 
     canvas.addEventListener("click", () => { queue.push(1); showOverlay(); runQueue(); });
 
-    // === SIMPLE WAKE-UP SYSTEM ===
-    // When overlay becomes visible → check if server has spins → done!
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        console.log("[OBS] 👁️ Overlay visible - waking up!");
-        checkForPendingSpins(); // Simple: ask server once
-      }
-    });
-
-    // OBS-specific event
-    window.addEventListener("obsSourceActiveChanged", (event) => {
-      if (event.detail?.active) {
-        console.log("[OBS] 🎬 Source activated - waking up!");
-        checkForPendingSpins(); // Simple: ask server once
-      }
-    });
-
-    // Light periodic check - ensures spins don't wait forever if overlay stays hidden
-    // Checks every 30 seconds even when hidden (won't spam server)
-    setInterval(() => {
-      checkForPendingSpins();
-    }, 30000); // 30 seconds
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForPendingSpins(); });
+    window.addEventListener("obsSourceActiveChanged", (event) => { if (event.detail?.active) checkForPendingSpins(); });
+    setInterval(checkForPendingSpins, 30000);
 
     // ====== Editor (client-side helper) ======
     const editor=document.getElementById("editor");
