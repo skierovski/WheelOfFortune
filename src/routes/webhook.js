@@ -77,15 +77,16 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
     // Process subscription gift events
     if (type === "channel.subscription.gifts" || payload?.name === "channel.subscription.gifts") {
       // Extract broadcaster_id from the event payload
+      // Kick API sends: { broadcaster: { user_id: 123456789, ... }, gifter: {...}, giftees: [...] }
       const broadcasterId = Number(
+        payload?.broadcaster?.user_id ||
         payload?.data?.broadcaster_user_id ||
         payload?.broadcaster_user_id ||
-        payload?.broadcaster?.id ||
         0
       );
 
       if (!broadcasterId) {
-        console.warn("[WEBHOOK] Gift event missing broadcaster_user_id");
+        console.warn("[WEBHOOK] Gift event missing broadcaster_user_id. Payload keys:", Object.keys(payload), "broadcaster:", JSON.stringify(payload?.broadcaster));
         return res.status(200).send("ok-no-broadcaster");
       }
 
