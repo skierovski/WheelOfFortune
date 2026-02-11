@@ -60,18 +60,10 @@ jobs:
 
       # ── Deploy to Render (production) ────────────────────────
       - name: Deploy to Render (production)
-        if: github.ref == 'refs/heads/main' && success() && secrets.RENDER_DEPLOY_HOOK != ''
-        env:
-          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-        run: |
-          echo "Triggering Render production deploy..."
-          curl -sS -X POST "$DEPLOY_HOOK"
+        if: github.ref == 'refs/heads/main' && success()
+        run: curl -sS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
 
       # ── Deploy to Render (dev) ───────────────────────────────
       - name: Deploy to Render (dev)
-        if: github.ref == 'refs/heads/dev' && success() && secrets.RENDER_DEV_DEPLOY_HOOK != ''
-        env:
-          DEPLOY_HOOK: ${{ secrets.RENDER_DEV_DEPLOY_HOOK }}
-        run: |
-          echo "Triggering Render dev deploy..."
-          curl -sS -X POST "$DEPLOY_HOOK"
+        if: github.ref == 'refs/heads/dev' && success()
+        run: curl -sS -X POST "${{ secrets.RENDER_DEV_DEPLOY_HOOK }}"
