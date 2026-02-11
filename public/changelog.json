@@ -1,0 +1,56 @@
+[
+  {
+    "version": "1.0.1",
+    "date": "2026-02-07",
+    "changes_en": [
+      "Added privacy policy page",
+      "Added version stamp and changelog to dashboard",
+      "Added visual 'How it works' section on landing page",
+      "Updated OBS setup tip to recommend 1920x1080",
+      "Added copyright footer to all pages",
+      "Added CI/CD pipeline with automatic semver versioning",
+      "Streamer rename feature in admin panel",
+      "Wheel padding fix for OBS browser sources",
+      "EN/PL language toggle on dashboard"
+    ],
+    "changes_pl": [
+      "Dodano strone polityki prywatnosci",
+      "Dodano oznaczenie wersji i dziennik zmian w panelu",
+      "Dodano sekcje 'Jak to dziala' na stronie glownej",
+      "Zaktualizowano porade OBS -- zalecane 1920x1080",
+      "Dodano stopke z prawami autorskimi",
+      "Dodano pipeline CI/CD z automatycznym wersjonowaniem",
+      "Funkcja zmiany nazwy streamera w panelu admina",
+      "Poprawka paddingu kola dla OBS",
+      "Przelacznik jezykow EN/PL w panelu streamera"
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-02-07",
+    "changes_en": [
+      "Official v1.0.0 release",
+      "Multi-tenant support with unique overlay keys",
+      "Tiered prize sets based on gift amounts",
+      "Custom accent color for wheel and delay overlay",
+      "Glassmorphism wheel design with tick sound",
+      "EN/PL language toggle on landing page",
+      "Admin panel for streamer management",
+      "Invite-based beta access system",
+      "SQLite database with encrypted tokens",
+      "Rate limiting and security headers"
+    ],
+    "changes_pl": [
+      "Oficjalne wydanie v1.0.0",
+      "Obsluga wielu streamerow z unikalnymi kluczami",
+      "Zestawy nagrod na podstawie liczby giftow",
+      "Wlasny kolor akcentu dla kola i nakladki timera",
+      "Design kola glassmorphism z dzwiekiem tykania",
+      "Przelacznik jezykow EN/PL na stronie glownej",
+      "Panel admina do zarzadzania streamerami",
+      "System dostepu na zaproszenia (beta)",
+      "Baza danych SQLite z szyfrowanymi tokenami",
+      "Ograniczanie zapytan i naglowki bezpieczenstwa"
+    ]
+  }
+]

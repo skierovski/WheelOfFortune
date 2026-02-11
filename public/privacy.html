@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy - Wheel of Fortune</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      min-height: 100vh;
+      color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 24px;
+    }
+    .card {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 24px;
+      padding: 48px 40px;
+      max-width: 680px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .updated { font-size: 13px; color: #64748b; margin-bottom: 28px; }
+    h2 { font-size: 17px; font-weight: 700; color: #f1f5f9; margin: 24px 0 10px; }
+    p, li { font-size: 14px; line-height: 1.8; color: #94a3b8; }
+    ul { padding-left: 20px; margin: 8px 0; }
+    li { margin-bottom: 4px; }
+    b { color: #e2e8f0; }
+    a { color: #a78bfa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back-link { margin-top: 24px; font-size: 13px; }
+    .footer { margin-top: 24px; font-size: 11px; color: #475569; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: February 7, 2026</p>
+
+    <h2>1. Who We Are</h2>
+    <p>Wheel of Fortune is a stream overlay application created by <b>Patryk Skierkowski</b>. This policy explains how we collect, use, and protect your data when you use the application.</p>
+
+    <h2>2. What Data We Collect</h2>
+    <p>When you log in via Kick OAuth, we collect and store:</p>
+    <ul>
+      <li><b>Kick username</b> and <b>broadcaster ID</b> (public profile information)</li>
+      <li><b>OAuth access and refresh tokens</b> (encrypted with AES-256-GCM)</li>
+      <li><b>Wheel configuration</b> (prizes, tiers, accent color)</li>
+      <li><b>Spin state</b> (pending spins, delay timers)</li>
+      <li><b>Event subscriptions</b> (webhook subscription IDs)</li>
+    </ul>
+    <p>We do <b>not</b> collect passwords, payment information, viewer personal data, or any data beyond what is needed for the wheel overlay to function.</p>
+
+    <h2>3. How We Use Your Data</h2>
+    <ul>
+      <li>To authenticate you with Kick and manage your session</li>
+      <li>To subscribe to Kick channel events (gifted subscriptions) on your behalf</li>
+      <li>To deliver wheel spins to your OBS overlay</li>
+      <li>To store and serve your wheel configuration</li>
+    </ul>
+
+    <h2>4. Data Storage and Security</h2>
+    <ul>
+      <li>All data is stored in an <b>SQLite database</b> on the hosting server</li>
+      <li>OAuth tokens are <b>encrypted at rest</b> using AES-256-GCM with a server-side key</li>
+      <li>HTTPS is enforced for all connections</li>
+      <li>Sessions use secure, signed cookies</li>
+      <li>The application is hosted on <b>Render</b> (render.com)</li>
+    </ul>
+
+    <h2>5. Third-Party Services</h2>
+    <p>We interact with the following third-party services:</p>
+    <ul>
+      <li><b>Kick</b> (kick.com) -- for OAuth authentication and webhook events</li>
+      <li><b>Render</b> (render.com) -- for application hosting</li>
+    </ul>
+    <p>We do <b>not</b> share your data with any other third parties, advertisers, or analytics services.</p>
+
+    <h2>6. Data Retention</h2>
+    <p>Your data is retained for as long as your account is active. If you wish to have your data deleted, please contact the administrator. Upon deletion, all your configuration, tokens, and spin history will be permanently removed.</p>
+
+    <h2>7. Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+      <li>Access the data we store about you (visible in the dashboard)</li>
+      <li>Request deletion of your account and all associated data</li>
+      <li>Revoke OAuth access at any time through your Kick account settings</li>
+    </ul>
+
+    <h2>8. Cookies</h2>
+    <p>We use a single session cookie (<code>wheel_sess</code>) for authentication. It is <b>HTTP-only</b>, <b>signed</b>, and contains only your session identifier. No tracking cookies or third-party cookies are used.</p>
+
+    <h2>9. Contact</h2>
+    <p>For any privacy-related questions or data deletion requests, please contact:<br><b>Patryk Skierkowski</b></p>
+
+    <p class="back-link"><a href="/">&larr; Back to Wheel of Fortune</a></p>
+  </div>
+  <p class="footer">&copy; 2026 Patryk Skierkowski. All rights reserved.</p>
+</body>
+</html>

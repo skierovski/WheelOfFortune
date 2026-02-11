@@ -1,9 +1,13 @@
 import { Router } from "express";
 import path from "path";
 import fs from "fs";
+import { createRequire } from "module";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { getSessionBroadcasterId } from "../utils/cookies.js";
 import { getDb } from "../db.js";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../../package.json");
 
 const router = Router();
 const publicDir = path.join(process.cwd(), "public");
@@ -55,6 +59,7 @@ router.get("/dashboard/status", requireSession, async (req, res) => {
 
     res.json({
       ok: true,
+      version: pkg.version,
       broadcaster_user_id: bid,
       kick_username: streamer.kick_username,
       overlay_key: streamer.overlay_key,
@@ -65,6 +70,16 @@ router.get("/dashboard/status", requireSession, async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
+});
+
+// Version endpoint (public)
+router.get("/version", (_req, res) => res.json({ version: pkg.version }));
+
+// Privacy policy page
+router.get("/privacy", (_req, res) => {
+  const file = path.join(publicDir, "privacy.html");
+  if (!fs.existsSync(file)) return res.status(404).send("privacy.html not found");
+  res.sendFile(file);
 });
 
 // Health check

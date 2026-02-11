@@ -171,6 +171,37 @@
     }
     .lang-btn:hover { background: rgba(255,255,255,0.08); color: #e2e8f0; }
     .lang-btn.active { background: var(--accent); color: #fff; }
+
+    .version-badge {
+      display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px;
+      background: rgba(124,58,237,0.15); color: #a78bfa; font-weight: 600;
+      vertical-align: middle; margin-left: 6px;
+    }
+    .changelog-modal {
+      position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .changelog-content {
+      background: rgba(15,12,41,0.97); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 28px 32px; max-width: 540px; width: 100%;
+      max-height: 80vh; overflow-y: auto; backdrop-filter: blur(20px);
+    }
+    .changelog-version { font-size: 16px; font-weight: 700; color: #a78bfa; margin-top: 16px; }
+    .changelog-date { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+    .changelog-list { list-style: none; padding: 0; }
+    .changelog-list li {
+      padding: 4px 0; font-size: 13px; color: #94a3b8;
+    }
+    .changelog-list li::before { content: "~"; color: var(--accent); margin-right: 8px; }
+
+    .legal-footer {
+      text-align: center; padding: 20px 0 0; margin-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      font-size: 11px; color: #475569;
+    }
+    .legal-footer a { color: #64748b; text-decoration: none; }
+    .legal-footer a:hover { text-decoration: underline; }
+    .legal-sep { margin: 0 6px; }
   </style>
 </head>
 <body>
@@ -178,9 +209,10 @@
     <div class="header-row">
       <div class="titles">
         <h1 data-i18n="title">Wheel of Fortune</h1>
-        <p class="subtitle" data-i18n="subtitle">Streamer Dashboard</p>
+        <p class="subtitle"><span data-i18n="subtitle">Streamer Dashboard</span> <span id="versionBadge" class="version-badge"></span></p>
       </div>
-      <div style="display:flex; align-items:center;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn" id="changelogBtn" style="font-size:12px; padding:6px 12px;" data-i18n="whats_new">What's New</button>
         <div class="lang-toggle">
           <button class="lang-btn active" id="langEN" onclick="setLang('en')">EN</button>
           <button class="lang-btn" id="langPL" onclick="setLang('pl')">PL</button>
@@ -189,6 +221,17 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span data-i18n="logout">Logout</span>
         </a>
+      </div>
+    </div>
+
+    <!-- Changelog modal -->
+    <div id="changelogModal" class="changelog-modal" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+      <div class="changelog-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 data-i18n="whats_new" style="margin:0;">What's New</h2>
+          <button class="btn" onclick="el('changelogModal').style.display='none'" style="padding:4px 10px; font-size:18px; line-height:1;">&times;</button>
+        </div>
+        <div id="changelogBody"></div>
       </div>
     </div>
 
@@ -352,6 +395,11 @@
           <button class="btn btn-accent" id="saveCfgBtn" data-i18n="cfg_save">Save Configuration</button>
         </div>
       </div>
+
+      <!-- Legal footer -->
+      <div class="legal-footer full-width">
+        <span id="footerVersion"></span><span class="legal-sep">|</span>&copy; 2026 Patryk Skierkowski<span class="legal-sep">|</span><a href="/privacy" data-i18n="privacy_link">Privacy Policy</a>
+      </div>
     </div>
   </div>
 
@@ -366,7 +414,7 @@
         actions_sim_label: "Simulate gifted subs", actions_send_gifts: "Send Gifts",
         tips_title: "Tips & Tricks",
         tip1_q: "How to set up the wheel in OBS",
-        tip1_a: 'Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>600x600</code> (or your preferred size). Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.',
+        tip1_a: 'Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>1920x1080</code> (match your stream resolution). The wheel auto-scales with padding to fit any size \u2014 using a smaller resolution may make the wheel appear too large for the source box. Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.',
         tip2_q: "Why is there no sound on the wheel?",
         tip2_a: 'Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you\'re testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.',
         tip3_q: "How do prize tiers work?",
@@ -392,6 +440,7 @@
         max_tiers: "Maximum 10 tiers.", min_tier: "You need at least one tier.",
         confirm_remove_tier: "Remove tier",
         click_copy: "click to copy", copied: "copied!",
+        whats_new: "What's New", privacy_link: "Privacy Policy",
       },
       pl: {
         title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
@@ -401,7 +450,7 @@
         actions_sim_label: "Symuluj podarowane suby", actions_send_gifts: "Wyslij gifty",
         tips_title: "Porady i wskazowki",
         tip1_q: "Jak skonfigurowac kolo w OBS",
-        tip1_a: 'Skopiuj adres <b>nakladki kola</b> i dodaj go jako <b>Browser Source</b> w OBS. Ustaw wymiary na <code>600x600</code> (lub inny preferowany rozmiar). Upewnij sie, ze opcja <em>"Shutdown source when not visible"</em> jest <b>odznaczona</b>, aby kolo bylo caly czas polaczone. Zrob to samo dla <b>nakladki timera</b>, jesli chcesz wyswietlac odliczanie.',
+        tip1_a: 'Skopiuj adres <b>nakladki kola</b> i dodaj go jako <b>Browser Source</b> w OBS. Ustaw wymiary na <code>1920x1080</code> (zgodnie z rozdzielczoscia streama). Kolo automatycznie skaluje sie z marginesami \u2014 mniejsza rozdzielczosc moze spowodowac, ze kolo bedzie za duze. Upewnij sie, ze opcja <em>"Shutdown source when not visible"</em> jest <b>odznaczona</b>, aby kolo bylo caly czas polaczone. Zrob to samo dla <b>nakladki timera</b>, jesli chcesz wyswietlac odliczanie.',
         tip2_q: "Dlaczego nie slychac dzwieku kola?",
         tip2_a: 'Przegladarki blokuja dzwiek do momentu interakcji uzytkownika ze strona. W <b>OBS Browser Sources</b> dzwiek gra automatycznie. Jesli testujesz w zwyklej przegladarce, kliknij gdziekolwiek na stronie, aby odblokowac dzwiek. Mozesz tez wlaczyc <em>"Control audio via OBS"</em> we wlasciwosciach zrodla.',
         tip3_q: "Jak dzialaja zestawy nagrod?",
@@ -427,6 +476,7 @@
         max_tiers: "Maksymalnie 10 zestawow.", min_tier: "Potrzebujesz przynajmniej jednego zestawu.",
         confirm_remove_tier: "Usunac zestaw",
         click_copy: "kliknij aby skopiowac", copied: "skopiowano!",
+        whats_new: "Co nowego", privacy_link: "Polityka prywatnosci",
       }
     };
 
@@ -497,6 +547,7 @@
         const j = await r.json();
         if (!j?.ok) throw new Error(j?.error || "Error");
         overlayKey = j.overlay_key || "";
+        if (j.version) setVersionBadge(j.version);
 
         // Update overlay URLs
         const base = location.origin;
@@ -864,11 +915,45 @@
       previewTimer = setTimeout(renderPreview, 60);
     }
 
+    // ── Changelog ──────────────────────────────────────────────
+    let changelogData = [];
+
+    async function loadChangelog() {
+      try {
+        const r = await fetch("/changelog.json", { cache: "no-store" });
+        changelogData = await r.json();
+      } catch { changelogData = []; }
+    }
+
+    function renderChangelog() {
+      const body = el("changelogBody");
+      const langKey = currentLang === "pl" ? "changes_pl" : "changes_en";
+      body.innerHTML = changelogData.map(entry => {
+        const changes = entry[langKey] || entry.changes_en || [];
+        return `<div class="changelog-version">v${entry.version}</div>
+          <div class="changelog-date">${entry.date}</div>
+          <ul class="changelog-list">${changes.map(c => `<li>${c}</li>`).join("")}</ul>`;
+      }).join("");
+    }
+
+    el("changelogBtn").onclick = () => {
+      renderChangelog();
+      el("changelogModal").style.display = "flex";
+    };
+
+    // ── Version badge ───────────────────────────────────────────
+    function setVersionBadge(version) {
+      if (!version) return;
+      el("versionBadge").textContent = "v" + version;
+      el("footerVersion").textContent = "v" + version;
+    }
+
     // BOOT
     (async function(){
       applyLang();
       await loadStatus();
       await loadWheel();
+      await loadChangelog();
     })();
   </script>
 </body>
