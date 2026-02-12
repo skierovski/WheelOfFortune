@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS wheel_configs (
   items_json       TEXT DEFAULT '[]',
   tiers_json       TEXT DEFAULT NULL,
   accent_color     TEXT DEFAULT '#7c3aed',
+  secondary_color  TEXT DEFAULT '#121228',
+  wheel_opacity    REAL DEFAULT 0.9,
   gifts_per_spin   INTEGER DEFAULT 5,
   updated_at       INTEGER DEFAULT (unixepoch())
 );
@@ -100,6 +102,12 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("tiers_json")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN tiers_json TEXT DEFAULT NULL");
   }
+  if (!cols.includes("secondary_color")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN secondary_color TEXT DEFAULT '#121228'");
+  }
+  if (!cols.includes("wheel_opacity")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN wheel_opacity REAL DEFAULT 0.9");
+  }
 
   // Migrate existing single-tier configs into tiers_json format
   const needsMigration = sqlite.prepare(
@@ -152,14 +160,16 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, gifts_per_spin, updated_at)
-      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @gifts_per_spin, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, updated_at)
+      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
-        items_json     = excluded.items_json,
-        tiers_json     = excluded.tiers_json,
-        accent_color   = excluded.accent_color,
-        gifts_per_spin = excluded.gifts_per_spin,
-        updated_at     = unixepoch()
+        items_json      = excluded.items_json,
+        tiers_json      = excluded.tiers_json,
+        accent_color    = excluded.accent_color,
+        secondary_color = excluded.secondary_color,
+        wheel_opacity   = excluded.wheel_opacity,
+        gifts_per_spin  = excluded.gifts_per_spin,
+        updated_at      = unixepoch()
     `),
     getConfig: sqlite.prepare(`SELECT * FROM wheel_configs WHERE broadcaster_id = ?`),
 
@@ -283,17 +293,21 @@ export function openDatabase(dbPath = ":memory:") {
         items: JSON.parse(row.items_json),
         tiers: Array.isArray(tiers) ? tiers : null,
         accent_color: row.accent_color || "#7c3aed",
+        secondary_color: row.secondary_color || "#121228",
+        wheel_opacity: row.wheel_opacity ?? 0.9,
         gifts_per_spin: row.gifts_per_spin ?? 5,
       };
     },
 
-    saveConfig(broadcasterId, { items, tiers, accent_color, gifts_per_spin }) {
+    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin }) {
       const prev = stmts.getConfig.get(broadcasterId);
       stmts.upsertConfig.run({
         broadcaster_id: broadcasterId,
         items_json: JSON.stringify(items),
         tiers_json: tiers ? JSON.stringify(tiers) : (prev?.tiers_json ?? null),
         accent_color: accent_color ?? prev?.accent_color ?? "#7c3aed",
+        secondary_color: secondary_color ?? prev?.secondary_color ?? "#121228",
+        wheel_opacity: wheel_opacity ?? prev?.wheel_opacity ?? 0.9,
         gifts_per_spin: gifts_per_spin ?? prev?.gifts_per_spin ?? 5,
       });
     },

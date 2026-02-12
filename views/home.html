@@ -346,12 +346,22 @@
         <h2 data-i18n="cfg_title">Wheel Configuration</h2>
         <div class="muted" data-i18n="cfg_desc">Create prize tiers based on gift amount. Each tier has its own set of prizes.</div>
 
-        <!-- Accent color -->
-        <div class="row" style="margin:16px 0; gap:16px;">
+        <!-- Colors & opacity -->
+        <div class="row" style="margin:16px 0; gap:16px; flex-wrap:wrap;">
           <div class="color-row">
             <label class="muted" for="accentPicker" data-i18n="cfg_accent">Accent color:</label>
             <input type="color" id="accentPicker" value="#7c3aed" />
             <span class="color-swatch" id="accentSwatch" style="background:#7c3aed;"></span>
+          </div>
+          <div class="color-row">
+            <label class="muted" for="secondaryPicker">Secondary color:</label>
+            <input type="color" id="secondaryPicker" value="#121228" />
+            <span class="color-swatch" id="secondarySwatch" style="background:#121228;"></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label class="muted" for="opacitySlider">Opacity:</label>
+            <input type="range" id="opacitySlider" min="10" max="100" step="5" value="90" style="width:100px;" />
+            <span id="opacityValue" class="muted" style="min-width:36px;">90%</span>
           </div>
         </div>
 
@@ -583,6 +593,8 @@
     let tiers = [{ name: "Default", min_gifts: 5, items: defaultItems.slice() }];
     let activeTierIdx = 0;
     let accentColor = "#7c3aed";
+    let secondaryColor = "#121228";
+    let wheelOpacity = 0.9;
 
     function sanitizeItem(it){
       const label = String(it?.label ?? "").trim();
@@ -599,6 +611,16 @@
       document.documentElement.style.setProperty("--accent", hex);
       el("accentPicker").value = hex;
       el("accentSwatch").style.background = hex;
+    }
+    function applySecondary(hex) {
+      secondaryColor = hex;
+      el("secondaryPicker").value = hex;
+      el("secondarySwatch").style.background = hex;
+    }
+    function applyOpacity(val) {
+      wheelOpacity = Math.max(0.1, Math.min(1.0, Number(val) || 0.9));
+      el("opacitySlider").value = Math.round(wheelOpacity * 100);
+      el("opacityValue").textContent = Math.round(wheelOpacity * 100) + "%";
     }
 
     async function loadWheel(){
@@ -617,6 +639,8 @@
           tiers = [{ name: "Default", min_gifts: 5, items: defaultItems.slice().map(sanitizeItem) }];
         }
         if (typeof j?.accent_color === "string") applyAccent(j.accent_color);
+        if (typeof j?.secondary_color === "string") applySecondary(j.secondary_color);
+        if (j?.wheel_opacity != null) applyOpacity(j.wheel_opacity);
       } catch {
         tiers = [{ name: "Default", min_gifts: 5, items: defaultItems.slice().map(sanitizeItem) }];
       }
@@ -756,6 +780,14 @@
       applyAccent(e.target.value);
       renderPreviewDebounced();
     });
+    el("secondaryPicker").addEventListener("input", (e) => {
+      applySecondary(e.target.value);
+      renderPreviewDebounced();
+    });
+    el("opacitySlider").addEventListener("input", (e) => {
+      applyOpacity(Number(e.target.value) / 100);
+      renderPreviewDebounced();
+    });
 
     el("saveCfgBtn").onclick = async () => {
       try {
@@ -772,7 +804,7 @@
         const r = await fetch("/dashboard/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tiers: normalizedTiers, accent_color: accentColor })
+          body: JSON.stringify({ tiers: normalizedTiers, accent_color: accentColor, secondary_color: secondaryColor, wheel_opacity: wheelOpacity })
         });
         if (!r.ok) throw new Error(await r.text());
         alert(t("cfg_saved"));
@@ -841,16 +873,18 @@
       return { r: parseInt(hex.slice(1,3),16), g: parseInt(hex.slice(3,5),16), b: parseInt(hex.slice(5,7),16) };
     }
 
-    function drawPreview(ctx, list, accent){
+    function drawPreview(ctx, list, accent, secondary, opacity){
       const W=180, H=180, CX=W/2, CY=H/2, R=58, rimW=12, rimOuter=R+rimW, rimMid=R+rimW/2;
       const ac = hexToRgb(accent);
+      const sc = hexToRgb(secondary);
+      const op = Math.max(0.1, Math.min(1.0, opacity));
       const TAU = 2*Math.PI;
       ctx.clearRect(0,0,W,H);
 
       // Dark glassmorphism rim
       ctx.beginPath(); ctx.arc(CX,CY,rimOuter,0,TAU);
       ctx.arc(CX,CY,R,0,TAU,true);
-      ctx.fillStyle = "rgba(10,10,24,0.85)"; ctx.fill();
+      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`; ctx.fill();
       // Glass refraction on rim
       const rg = ctx.createRadialGradient(CX,CY-rimOuter*0.4,rimW*0.5,CX,CY,rimOuter);
       rg.addColorStop(0,"rgba(255,255,255,0.08)"); rg.addColorStop(1,"rgba(255,255,255,0)");
@@ -866,7 +900,7 @@
         const frac = Math.max(0, Number(list[i].weight)||0)/sum;
         const b = a + frac*TAU;
         ctx.beginPath(); ctx.moveTo(CX,CY); ctx.arc(CX,CY,R,a,b); ctx.closePath();
-        ctx.fillStyle = (i%2===0) ? "rgba(18,18,40,0.92)" : `rgba(${ac.r},${ac.g},${ac.b},0.18)`;
+        ctx.fillStyle = (i%2===0) ? `rgba(${sc.r},${sc.g},${sc.b},${op.toFixed(2)})` : `rgba(${ac.r},${ac.g},${ac.b},${op.toFixed(2)})`;
         ctx.fill();
         // Glass highlight
         const grad = ctx.createRadialGradient(CX,CY,R*0.9,CX,CY,R);
@@ -893,9 +927,9 @@
         a += frac*TAU;
       }
 
-      // Center hub (dark)
+      // Center hub
       ctx.beginPath(); ctx.arc(CX,CY,8,0,TAU);
-      ctx.fillStyle = "rgba(14,14,26,0.9)"; ctx.fill();
+      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`; ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 0.5; ctx.stroke();
       ctx.beginPath(); ctx.arc(CX,CY,3,0,TAU);
       ctx.fillStyle = accent; ctx.fill();
@@ -909,7 +943,7 @@
     let previewTimer;
     function renderPreview(){
       const list = getActiveItems().length ? getActiveItems() : defaultItems;
-      drawPreview(ctxP, list, accentColor);
+      drawPreview(ctxP, list, accentColor, secondaryColor, wheelOpacity);
     }
     function renderPreviewDebounced(){
       clearTimeout(previewTimer);

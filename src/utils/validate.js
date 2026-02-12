@@ -65,6 +65,29 @@ export function validateAccentColor(color) {
 }
 
 /**
+ * Validate secondary color (hex format).
+ * @param {string} color
+ * @returns {string} Valid hex color or default
+ */
+export function validateSecondaryColor(color) {
+  if (typeof color !== "string") return "#121228";
+  const trimmed = color.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : "#121228";
+}
+
+/**
+ * Validate wheel opacity (0.1 to 1.0).
+ * @param {*} value
+ * @returns {number} Clamped value between 0.1 and 1.0, default 0.9
+ */
+export function validateWheelOpacity(value) {
+  if (value == null || value === "") return 0.9;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0.9;
+  return Math.round(Math.max(0.1, Math.min(1.0, n)) * 100) / 100;
+}
+
+/**
  * Validate prize tiers array from user input.
  * @param {Array} tiers  Raw tiers array
  * @returns {{ valid: boolean, tiers?: Array, error?: string }}

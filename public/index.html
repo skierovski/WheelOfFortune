@@ -121,6 +121,8 @@
     let TIERS = null; // Array of { name, min_gifts, items } or null
     let CONFIG_VERSION = 1;
     let ACCENT_COLOR = "#7c3aed"; // streamer-customizable accent color
+    let SECONDARY_COLOR = "#121228"; // streamer-customizable secondary color
+    let WHEEL_OPACITY = 0.9; // streamer-customizable wheel opacity
 
     // ====== Drawing etc. ======
     const FULL_ROUNDS_MIN = 8, FULL_ROUNDS_MAX = 12;
@@ -199,6 +201,8 @@
     function drawWheel(angle = 0) {
       const items = ACTIVE_SNAPSHOT || ITEMS;
       const ac = hexToRgb(ACCENT_COLOR);
+      const sc = hexToRgb(SECONDARY_COLOR);
+      const op = Math.max(0.1, Math.min(1.0, WHEEL_OPACITY));
       const acL = rgbLighten(ac, 80);
       ctx.clearRect(0, 0, W, H);
       const TAU = 2 * Math.PI;
@@ -213,7 +217,7 @@
       ctx.shadowBlur = 24;
       ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
       ctx.arc(CX, CY, R, 0, TAU, true);
-      ctx.fillStyle = "rgba(10, 10, 24, 0.85)";
+      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`;
       ctx.fill();
       ctx.restore();
 
@@ -250,7 +254,7 @@
 
       if (!items || items.length === 0) {
         ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU);
-        ctx.fillStyle = "#141420"; ctx.fill();
+        ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${op.toFixed(2)})`; ctx.fill();
         ctx.beginPath(); ctx.arc(CX, CY, 8, 0, TAU);
         ctx.fillStyle = ACCENT_COLOR; ctx.fill();
         drawPointer(ac, rimOuter);
@@ -271,11 +275,11 @@
         ctx.arc(CX, CY, R, start, end);
         ctx.closePath();
 
-        // Base fill: alternating dark / accent-tinted
+        // Base fill: alternating secondary / accent
         if (i % 2 === 0) {
-          ctx.fillStyle = "rgba(18, 18, 40, 0.92)";
+          ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${op.toFixed(2)})`;
         } else {
-          ctx.fillStyle = `rgba(${ac.r},${ac.g},${ac.b},0.18)`;
+          ctx.fillStyle = `rgba(${ac.r},${ac.g},${ac.b},${op.toFixed(2)})`;
         }
         ctx.fill();
 
@@ -371,7 +375,7 @@
       ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.35)`;
       ctx.shadowBlur = 10;
       ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, TAU);
-      ctx.fillStyle = "rgba(14,14,26,0.9)";
+      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`;
       ctx.fill();
       ctx.restore();
 
@@ -713,6 +717,8 @@
           TIERS = data.tiers;
         }
         if (typeof data.accent_color === "string") ACCENT_COLOR = data.accent_color;
+        if (typeof data.secondary_color === "string") SECONDARY_COLOR = data.secondary_color;
+        if (data.wheel_opacity != null) WHEEL_OPACITY = Math.max(0.1, Math.min(1.0, Number(data.wheel_opacity) || 0.9));
         CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();
         return;
       }
@@ -866,6 +872,8 @@
         if (Array.isArray(cfg.items)) ITEMS = cfg.items.map(sanitizeItem); else ITEMS = loadItemsLocal();
         if (Array.isArray(cfg.tiers)) TIERS = cfg.tiers;
         if (typeof cfg.accent_color === "string") ACCENT_COLOR = cfg.accent_color;
+        if (typeof cfg.secondary_color === "string") SECONDARY_COLOR = cfg.secondary_color;
+        if (cfg.wheel_opacity != null) WHEEL_OPACITY = Math.max(0.1, Math.min(1.0, Number(cfg.wheel_opacity) || 0.9));
       } else {
         ITEMS = loadItemsLocal();
       }

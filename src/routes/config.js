@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
-import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor } from "../utils/validate.js";
+import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor, validateSecondaryColor, validateWheelOpacity } from "../utils/validate.js";
 
 const router = Router();
 
@@ -16,6 +16,8 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
     items: cfg?.items ?? null,
     tiers: cfg?.tiers ?? null,
     accent_color: cfg?.accent_color ?? "#7c3aed",
+    secondary_color: cfg?.secondary_color ?? "#121228",
+    wheel_opacity: cfg?.wheel_opacity ?? 0.9,
     gifts_per_spin: cfg?.gifts_per_spin ?? 5,
   });
 });
@@ -31,6 +33,8 @@ router.get("/dashboard/config", requireSession, (req, res) => {
     items: cfg?.items ?? null,
     tiers: cfg?.tiers ?? null,
     accent_color: cfg?.accent_color ?? "#7c3aed",
+    secondary_color: cfg?.secondary_color ?? "#121228",
+    wheel_opacity: cfg?.wheel_opacity ?? 0.9,
     gifts_per_spin: cfg?.gifts_per_spin ?? 5,
   });
 });
@@ -39,6 +43,8 @@ router.get("/dashboard/config", requireSession, (req, res) => {
 router.post("/dashboard/config", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const accent_color = validateAccentColor(req.body?.accent_color);
+  const secondary_color = validateSecondaryColor(req.body?.secondary_color);
+  const wheel_opacity = validateWheelOpacity(req.body?.wheel_opacity);
 
   // Tiers mode: save multiple prize tiers
   if (Array.isArray(req.body?.tiers)) {
@@ -50,6 +56,8 @@ router.post("/dashboard/config", requireSession, (req, res) => {
     const gifts_per_spin = tierResult.tiers[0].min_gifts;
     const saved = saveConfig(bid, tierResult.tiers[0].items, {
       accent_color,
+      secondary_color,
+      wheel_opacity,
       gifts_per_spin,
       tiers: tierResult.tiers,
     });
@@ -63,6 +71,8 @@ router.post("/dashboard/config", requireSession, (req, res) => {
           items: saved.items,
           tiers: saved.tiers,
           accent_color: saved.accent_color,
+          secondary_color: saved.secondary_color,
+          wheel_opacity: saved.wheel_opacity,
           gifts_per_spin: saved.gifts_per_spin,
         });
       }
@@ -75,6 +85,8 @@ router.post("/dashboard/config", requireSession, (req, res) => {
       items: saved.items,
       tiers: saved.tiers,
       accent_color: saved.accent_color,
+      secondary_color: saved.secondary_color,
+      wheel_opacity: saved.wheel_opacity,
       gifts_per_spin: saved.gifts_per_spin,
     });
   }
@@ -86,7 +98,7 @@ router.post("/dashboard/config", requireSession, (req, res) => {
   }
 
   const gifts_per_spin = validateGiftsPerSpin(req.body?.gifts_per_spin);
-  const saved = saveConfig(bid, validation.items, { accent_color, gifts_per_spin });
+  const saved = saveConfig(bid, validation.items, { accent_color, secondary_color, wheel_opacity, gifts_per_spin });
 
   try {
     const { app } = req;
@@ -96,6 +108,8 @@ router.post("/dashboard/config", requireSession, (req, res) => {
         items: saved.items,
         tiers: saved.tiers,
         accent_color: saved.accent_color,
+        secondary_color: saved.secondary_color,
+        wheel_opacity: saved.wheel_opacity,
         gifts_per_spin: saved.gifts_per_spin,
       });
     }
@@ -108,6 +122,8 @@ router.post("/dashboard/config", requireSession, (req, res) => {
     items: saved.items,
     tiers: saved.tiers,
     accent_color: saved.accent_color,
+    secondary_color: saved.secondary_color,
+    wheel_opacity: saved.wheel_opacity,
     gifts_per_spin: saved.gifts_per_spin,
   });
 });

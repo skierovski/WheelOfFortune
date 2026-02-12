@@ -14,13 +14,15 @@ export function loadConfig(broadcasterId) {
  * Save wheel config for a streamer (normalizes weights).
  * @param {number} broadcasterId
  * @param {Array} items  — legacy single item list (used as fallback / Tier 1 items)
- * @param {{ accent_color?: string, gifts_per_spin?: number, tiers?: Array }} [opts]
- * @returns {{ items: Array, tiers: Array|null, accent_color: string, gifts_per_spin: number }}
+ * @param {{ accent_color?: string, secondary_color?: string, wheel_opacity?: number, gifts_per_spin?: number, tiers?: Array }} [opts]
+ * @returns {{ items: Array, tiers: Array|null, accent_color: string, secondary_color: string, wheel_opacity: number, gifts_per_spin: number }}
  */
 export function saveConfig(broadcasterId, items, opts = {}) {
   const prev = getDb().getConfig(broadcasterId);
 
   const finalAccent = typeof opts.accent_color === "string" ? opts.accent_color : (prev?.accent_color || "#7c3aed");
+  const finalSecondary = typeof opts.secondary_color === "string" ? opts.secondary_color : (prev?.secondary_color || "#121228");
+  const finalOpacity = Number.isFinite(opts.wheel_opacity) ? opts.wheel_opacity : (prev?.wheel_opacity ?? 0.9);
   const finalGifts = Number.isFinite(opts.gifts_per_spin) ? opts.gifts_per_spin : (prev?.gifts_per_spin ?? 5);
 
   // Normalize tiers if provided
@@ -42,11 +44,13 @@ export function saveConfig(broadcasterId, items, opts = {}) {
     items: normalized,
     tiers: finalTiers,
     accent_color: finalAccent,
+    secondary_color: finalSecondary,
+    wheel_opacity: finalOpacity,
     gifts_per_spin: finalGifts,
   });
   const tierCount = finalTiers ? finalTiers.length : 0;
-  console.log(`[config] saved ${normalized.length} items, ${tierCount} tiers for broadcaster ${broadcasterId} accent=${finalAccent} gifts_per_spin=${finalGifts}`);
-  return { items: normalized, tiers: finalTiers, accent_color: finalAccent, gifts_per_spin: finalGifts };
+  console.log(`[config] saved ${normalized.length} items, ${tierCount} tiers for broadcaster ${broadcasterId} accent=${finalAccent} secondary=${finalSecondary} opacity=${finalOpacity} gifts_per_spin=${finalGifts}`);
+  return { items: normalized, tiers: finalTiers, accent_color: finalAccent, secondary_color: finalSecondary, wheel_opacity: finalOpacity, gifts_per_spin: finalGifts };
 }
 
 /**

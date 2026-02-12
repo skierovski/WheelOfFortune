@@ -191,16 +191,23 @@ router.delete("/admin/streamers/:bid", requireAdmin, (req, res) => {
     return res.status(404).json({ ok: false, error: "Streamer not found" });
   }
 
-  const db = getDb();
-  // Clean up all related data
-  db.raw.prepare("DELETE FROM wheel_configs WHERE broadcaster_id = ?").run(bid);
-  db.raw.prepare("DELETE FROM goals WHERE broadcaster_id = ?").run(bid);
-  db.raw.prepare("DELETE FROM spin_state WHERE broadcaster_id = ?").run(bid);
-  db.raw.prepare("DELETE FROM subscriptions WHERE broadcaster_id = ?").run(bid);
-  db.raw.prepare("DELETE FROM streamers WHERE broadcaster_id = ?").run(bid);
+  try {
+    const db = getDb();
+    // Clean up all related data (invite_codes must be cleared before streamers due to FK)
+    db.raw.prepare("UPDATE invite_codes SET created_by = NULL WHERE created_by = ?").run(bid);
+    db.raw.prepare("UPDATE invite_codes SET used_by = NULL WHERE used_by = ?").run(bid);
+    db.raw.prepare("DELETE FROM wheel_configs WHERE broadcaster_id = ?").run(bid);
+    db.raw.prepare("DELETE FROM goals WHERE broadcaster_id = ?").run(bid);
+    db.raw.prepare("DELETE FROM spin_state WHERE broadcaster_id = ?").run(bid);
+    db.raw.prepare("DELETE FROM subscriptions WHERE broadcaster_id = ?").run(bid);
+    db.raw.prepare("DELETE FROM streamers WHERE broadcaster_id = ?").run(bid);
 
-  console.log(`[ADMIN] Deleted streamer bid=${bid}`);
-  res.json({ ok: true, deleted: bid });
+    console.log(`[ADMIN] Deleted streamer bid=${bid}`);
+    res.json({ ok: true, deleted: bid });
+  } catch (err) {
+    console.error(`[ADMIN] Error deleting streamer bid=${bid}:`, err);
+    res.status(500).json({ ok: false, error: err.message || "Failed to delete streamer" });
+  }
 });
 
 // ── Streamer Details ────────────────────────────────────────────────
