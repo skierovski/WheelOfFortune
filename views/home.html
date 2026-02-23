@@ -415,21 +415,28 @@
         <!-- Bot toggle -->
         <div style="margin:16px 0; display:flex; flex-direction:column; gap:14px;">
           <label class="chk"><input type="checkbox" id="botEnabled" /> <span data-i18n="bot_enable">Enable chat bot</span></label>
-          <label class="chk"><input type="checkbox" id="announcePrizes" checked /> <span data-i18n="bot_announce">Announce prizes in chat</span></label>
+          <label class="chk"><input type="checkbox" id="announcePrizes" checked /> <span data-i18n="bot_announce">Send prize result to chat after spin</span></label>
         </div>
 
         <!-- Prize template -->
         <div style="margin-bottom:14px;">
           <label class="muted small" style="display:block; margin-bottom:4px;" data-i18n="bot_template_label">Prize announcement template ({prize} = prize name):</label>
-          <input type="text" id="prizeTemplate" value="The wheel landed on: {prize}!" style="width:100%; max-width:500px;" maxlength="500" />
+          <div style="position:relative; max-width:500px;">
+            <input type="text" id="prizeTemplate" value="The wheel landed on: {prize}!" style="width:100%; padding-right:60px;" maxlength="500" oninput="updateCharCount('prizeTemplate','prizeTemplateCount')" />
+            <span id="prizeTemplateCount" class="muted small" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;">0/500</span>
+          </div>
         </div>
 
         <!-- Wheel description -->
         <div style="margin-bottom:14px;">
           <label class="muted small" style="display:block; margin-bottom:4px;" data-i18n="bot_wheel_desc_label">!wheel response message:</label>
-          <input type="text" id="wheelDescription" value="Wheel of Fortune! Gift subs to spin the wheel and win prizes!" style="width:100%; max-width:500px;" maxlength="500" />
+          <div style="position:relative; max-width:500px;">
+            <input type="text" id="wheelDescription" value="Wheel of Fortune! Gift subs to spin the wheel and win prizes!" style="width:100%; padding-right:60px;" maxlength="500" oninput="updateCharCount('wheelDescription','wheelDescCount')" />
+            <span id="wheelDescCount" class="muted small" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;">0/500</span>
+          </div>
         </div>
 
+        <div class="muted small" style="margin-bottom:10px;" data-i18n="bot_lang_note">Bot responses (built-in commands) use the dashboard language (EN/PL).</div>
         <button class="btn btn-accent" id="saveBotCfgBtn" style="margin-bottom:20px;" data-i18n="bot_save">Save Bot Settings</button>
         <div id="botSaveResult" style="display:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; margin-bottom:14px;"></div>
 
@@ -498,7 +505,7 @@
         click_copy: "click to copy", copied: "copied!",
         whats_new: "What's New", privacy_link: "Privacy Policy",
         bot_title: "Chat Bot & Commands", bot_desc: "Configure the Kick chat bot. When enabled, the bot responds to commands and announces prizes in chat.",
-        bot_enable: "Enable chat bot", bot_announce: "Announce prizes in chat",
+        bot_enable: "Enable chat bot", bot_announce: "Send prize result to chat after spin",
         bot_template_label: "Prize announcement template ({prize} = prize name):",
         bot_wheel_desc_label: "!wheel response message:",
         bot_save: "Save Bot Settings", bot_saved: "Bot settings saved.", bot_save_err: "Save error: ",
@@ -509,6 +516,7 @@
         bot_cmd_name_ph: "!command", bot_cmd_resp_ph: "Response message...",
         bot_cmd_add: "Add Command", bot_cmd_del_confirm: "Delete command",
         bot_tbl_cmd: "Command", bot_tbl_resp: "Response", bot_tbl_cd: "CD (s)", bot_tbl_on: "On",
+        bot_lang_note: "Bot responses (built-in commands) use the dashboard language (EN/PL).",
       },
       pl: {
         title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
@@ -545,9 +553,9 @@
         confirm_remove_tier: "Usunac zestaw",
         click_copy: "kliknij aby skopiowac", copied: "skopiowano!",
         whats_new: "Co nowego", privacy_link: "Polityka prywatnosci",
-        bot_title: "Chat Bot i Komendy", bot_desc: "Konfiguracja bota czatu Kick. Po wlaczeniu bot odpowiada na komendy i oglasza nagrody na czacie.",
-        bot_enable: "Wlacz chat bota", bot_announce: "Oglos nagrody na czacie",
-        bot_template_label: "Szablon ogloszenia nagrody ({prize} = nazwa nagrody):",
+        bot_title: "Chat Bot i Komendy", bot_desc: "Konfiguracja bota czatu Kick. Po wlaczeniu bot odpowiada na komendy i wysyla wyniki losowania na czat.",
+        bot_enable: "Wlacz chat bota", bot_announce: "Wyslij wynik losowania na czat po zakreceniu",
+        bot_template_label: "Szablon wiadomosci z wynikiem ({prize} = nazwa nagrody):",
         bot_wheel_desc_label: "Odpowiedz na !wheel:",
         bot_save: "Zapisz ustawienia bota", bot_saved: "Ustawienia bota zapisane.", bot_save_err: "Blad zapisu: ",
         bot_builtin_title: "Wbudowane komendy (dostepne gdy bot jest wlaczony):",
@@ -557,6 +565,7 @@
         bot_cmd_name_ph: "!komenda", bot_cmd_resp_ph: "Tresc odpowiedzi...",
         bot_cmd_add: "Dodaj komende", bot_cmd_del_confirm: "Usunac komende",
         bot_tbl_cmd: "Komenda", bot_tbl_resp: "Odpowiedz", bot_tbl_cd: "CD (s)", bot_tbl_on: "Wl.",
+        bot_lang_note: "Odpowiedzi bota (wbudowane komendy) uzywaja jezyka panelu (EN/PL).",
       }
     };
 
@@ -1055,6 +1064,12 @@
     // ── Bot Config & Commands ──────────────────────────────────
     let botCommands = [];
 
+    function updateCharCount(inputId, countId) {
+      const inp = el(inputId);
+      const cnt = el(countId);
+      if (inp && cnt) cnt.textContent = inp.value.length + "/500";
+    }
+
     async function loadBotConfig() {
       try {
         const r = await fetch("/dashboard/bot-config", { cache: "no-store" });
@@ -1064,6 +1079,8 @@
         el("announcePrizes").checked = !!j.announce_prizes;
         if (j.prize_announce_template) el("prizeTemplate").value = j.prize_announce_template;
         if (j.wheel_description) el("wheelDescription").value = j.wheel_description;
+        updateCharCount("prizeTemplate", "prizeTemplateCount");
+        updateCharCount("wheelDescription", "wheelDescCount");
       } catch (e) {
         console.warn("Failed to load bot config:", e);
       }
@@ -1130,6 +1147,7 @@
             announce_prizes: el("announcePrizes").checked,
             prize_announce_template: el("prizeTemplate").value.trim(),
             wheel_description: el("wheelDescription").value.trim(),
+            language: currentLang,
           }),
         });
         const j = await r.json();

@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS bot_config (
   announce_prizes       INTEGER DEFAULT 1,
   prize_announce_template TEXT DEFAULT 'The wheel landed on: {prize}!',
   wheel_description     TEXT DEFAULT 'Wheel of Fortune! Gift subs to spin the wheel and win prizes!',
+  language              TEXT DEFAULT 'en',
   updated_at            INTEGER DEFAULT (unixepoch())
 );
 
@@ -128,6 +129,12 @@ export function openDatabase(dbPath = ":memory:") {
   }
   if (!cols.includes("wheel_opacity")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN wheel_opacity REAL DEFAULT 0.9");
+  }
+
+  // bot_config migrations
+  const botCols = sqlite.prepare("PRAGMA table_info(bot_config)").all().map(c => c.name);
+  if (botCols.length > 0 && !botCols.includes("language")) {
+    sqlite.exec("ALTER TABLE bot_config ADD COLUMN language TEXT DEFAULT 'en'");
   }
 
   // Migrate existing single-tier configs into tiers_json format
@@ -247,13 +254,14 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Bot config
     upsertBotConfig: sqlite.prepare(`
-      INSERT INTO bot_config (broadcaster_id, bot_enabled, announce_prizes, prize_announce_template, wheel_description, updated_at)
-      VALUES (@broadcaster_id, @bot_enabled, @announce_prizes, @prize_announce_template, @wheel_description, unixepoch())
+      INSERT INTO bot_config (broadcaster_id, bot_enabled, announce_prizes, prize_announce_template, wheel_description, language, updated_at)
+      VALUES (@broadcaster_id, @bot_enabled, @announce_prizes, @prize_announce_template, @wheel_description, @language, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
         bot_enabled           = excluded.bot_enabled,
         announce_prizes       = excluded.announce_prizes,
         prize_announce_template = excluded.prize_announce_template,
         wheel_description     = excluded.wheel_description,
+        language              = excluded.language,
         updated_at            = unixepoch()
     `),
     getBotConfig: sqlite.prepare(`SELECT * FROM bot_config WHERE broadcaster_id = ?`),
@@ -453,10 +461,11 @@ export function openDatabase(dbPath = ":memory:") {
         announce_prizes: 1,
         prize_announce_template: "The wheel landed on: {prize}!",
         wheel_description: "Wheel of Fortune! Gift subs to spin the wheel and win prizes!",
+        language: "en",
       };
     },
 
-    saveBotConfig(broadcasterId, { bot_enabled, announce_prizes, prize_announce_template, wheel_description }) {
+    saveBotConfig(broadcasterId, { bot_enabled, announce_prizes, prize_announce_template, wheel_description, language }) {
       const prev = stmts.getBotConfig.get(broadcasterId);
       stmts.upsertBotConfig.run({
         broadcaster_id: broadcasterId,
@@ -464,6 +473,7 @@ export function openDatabase(dbPath = ":memory:") {
         announce_prizes: announce_prizes ?? prev?.announce_prizes ?? 1,
         prize_announce_template: prize_announce_template ?? prev?.prize_announce_template ?? "The wheel landed on: {prize}!",
         wheel_description: wheel_description ?? prev?.wheel_description ?? "Wheel of Fortune! Gift subs to spin the wheel and win prizes!",
+        language: language ?? prev?.language ?? "en",
       });
       return stmts.getBotConfig.get(broadcasterId);
     },

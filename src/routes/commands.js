@@ -14,7 +14,7 @@ router.get("/dashboard/bot-config", requireSession, (req, res) => {
 
 router.post("/dashboard/bot-config", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
-  const { bot_enabled, announce_prizes, prize_announce_template, wheel_description } = req.body || {};
+  const { bot_enabled, announce_prizes, prize_announce_template, wheel_description, language } = req.body || {};
 
   if (prize_announce_template != null && typeof prize_announce_template === "string") {
     if (prize_announce_template.length > 500) {
@@ -26,12 +26,14 @@ router.post("/dashboard/bot-config", requireSession, (req, res) => {
       return res.status(400).json({ ok: false, error: "Wheel description too long (max 500)" });
     }
   }
+  const validLang = language === "pl" ? "pl" : language === "en" ? "en" : undefined;
 
   const saved = getDb().saveBotConfig(bid, {
     bot_enabled: bot_enabled != null ? (bot_enabled ? 1 : 0) : undefined,
     announce_prizes: announce_prizes != null ? (announce_prizes ? 1 : 0) : undefined,
     prize_announce_template,
     wheel_description,
+    language: validLang,
   });
   res.json({ ok: true, ...saved });
 });
