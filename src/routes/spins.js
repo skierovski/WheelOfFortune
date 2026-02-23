@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { spins } from "../services/spins.js";
 import { postChatMessage } from "../services/kick.js";
+import { announcePrize } from "../services/chatBot.js";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { env } from "../utils/env.js";
 import { getDb } from "../db.js";
@@ -126,12 +127,13 @@ router.get("/trigger/spin", (req, res) => {
 });
 
 // Chat announce (called by frontend after spin completes)
+// Uses bot config template if bot is enabled, falls back to raw label
 router.post("/overlay/:key/chat/announce", resolveOverlayKey, async (req, res) => {
   try {
     const bid = req.streamer.broadcaster_id;
     const label = String(req.body?.label || "").trim();
     if (!label) return res.status(400).json({ ok: false, error: "Missing label" });
-    await postChatMessage(bid, label);
+    await announcePrize(bid, label);
     return res.json({ ok: true });
   } catch (e) {
     console.error("[chat/announce] error:", e);

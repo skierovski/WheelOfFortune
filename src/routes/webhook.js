@@ -3,6 +3,7 @@ import bodyParser from "body-parser";
 import { verifyKickSignature } from "../webhookVerify.js";
 import { spins } from "../services/spins.js";
 import { getDb } from "../db.js";
+import { handleChatMessage } from "../services/chatBot.js";
 
 const router = Router();
 
@@ -139,6 +140,19 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
           spins.deliverSpinOrQueue(broadcasterId, spinCount);
         }
       }
+    } else if (type === "chat.message.sent") {
+      const broadcasterId = Number(payload?.broadcaster?.user_id || 0);
+      const content = payload?.content || "";
+      const senderUsername = payload?.sender?.username || "unknown";
+
+      // Respond 200 immediately, process command asynchronously
+      res.status(200).send("ok");
+      console.log(`[WEBHOOK] Chat bid=${broadcasterId} from=${senderUsername}: ${content.slice(0, 80)}`);
+
+      if (broadcasterId && content.startsWith("!")) {
+        setImmediate(() => handleChatMessage(broadcasterId, senderUsername, content));
+      }
+      return;
     } else {
       console.log(`[WEBHOOK] Unhandled event: ${type}`);
     }

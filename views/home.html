@@ -407,6 +407,51 @@
         </div>
       </div>
 
+      <!-- BOT & COMMANDS -->
+      <div class="card full-width">
+        <h2 data-i18n="bot_title">Chat Bot &amp; Commands</h2>
+        <div class="muted" data-i18n="bot_desc">Configure the Kick chat bot. When enabled, the bot responds to commands and announces prizes in chat.</div>
+
+        <!-- Bot toggle -->
+        <div style="margin:16px 0; display:flex; flex-direction:column; gap:14px;">
+          <label class="chk"><input type="checkbox" id="botEnabled" /> <span data-i18n="bot_enable">Enable chat bot</span></label>
+          <label class="chk"><input type="checkbox" id="announcePrizes" checked /> <span data-i18n="bot_announce">Announce prizes in chat</span></label>
+        </div>
+
+        <!-- Prize template -->
+        <div style="margin-bottom:14px;">
+          <label class="muted small" style="display:block; margin-bottom:4px;" data-i18n="bot_template_label">Prize announcement template ({prize} = prize name):</label>
+          <input type="text" id="prizeTemplate" value="The wheel landed on: {prize}!" style="width:100%; max-width:500px;" maxlength="500" />
+        </div>
+
+        <!-- Wheel description -->
+        <div style="margin-bottom:14px;">
+          <label class="muted small" style="display:block; margin-bottom:4px;" data-i18n="bot_wheel_desc_label">!wheel response message:</label>
+          <input type="text" id="wheelDescription" value="Wheel of Fortune! Gift subs to spin the wheel and win prizes!" style="width:100%; max-width:500px;" maxlength="500" />
+        </div>
+
+        <button class="btn btn-accent" id="saveBotCfgBtn" style="margin-bottom:20px;" data-i18n="bot_save">Save Bot Settings</button>
+        <div id="botSaveResult" style="display:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; margin-bottom:14px;"></div>
+
+        <!-- Built-in commands info -->
+        <div style="margin-bottom:16px; padding:12px 16px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+          <div class="muted small" style="margin-bottom:6px; font-weight:700;" data-i18n="bot_builtin_title">Built-in commands (always available when bot is enabled):</div>
+          <div class="muted small"><code>!prizes</code> &mdash; <span data-i18n="bot_builtin_prizes">Lists all available prizes on the wheel</span></div>
+          <div class="muted small"><code>!wheel</code> &mdash; <span data-i18n="bot_builtin_wheel">Sends the wheel description message above</span></div>
+        </div>
+
+        <!-- Custom commands -->
+        <h3 style="font-size:14px; font-weight:700; margin-bottom:10px; color:#f1f5f9;" data-i18n="bot_custom_title">Custom Commands</h3>
+        <div id="commandsList"></div>
+
+        <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+          <input type="text" id="newCmdName" data-i18n-placeholder="bot_cmd_name_ph" placeholder="!command" style="width:120px;" maxlength="32" />
+          <input type="text" id="newCmdResponse" data-i18n-placeholder="bot_cmd_resp_ph" placeholder="Response message..." style="flex:1; min-width:200px;" maxlength="500" />
+          <input type="number" id="newCmdCooldown" placeholder="CD (s)" min="0" max="3600" value="5" style="width:80px;" title="Cooldown in seconds" />
+          <button class="btn" id="addCmdBtn" data-i18n="bot_cmd_add">Add Command</button>
+        </div>
+      </div>
+
       <!-- Legal footer -->
       <div class="legal-footer full-width">
         <span id="footerVersion"></span><span class="legal-sep">|</span>&copy; 2026 Patryk Skierkowski<span class="legal-sep">|</span><a href="/privacy" data-i18n="privacy_link">Privacy Policy</a>
@@ -452,6 +497,18 @@
         confirm_remove_tier: "Remove tier",
         click_copy: "click to copy", copied: "copied!",
         whats_new: "What's New", privacy_link: "Privacy Policy",
+        bot_title: "Chat Bot & Commands", bot_desc: "Configure the Kick chat bot. When enabled, the bot responds to commands and announces prizes in chat.",
+        bot_enable: "Enable chat bot", bot_announce: "Announce prizes in chat",
+        bot_template_label: "Prize announcement template ({prize} = prize name):",
+        bot_wheel_desc_label: "!wheel response message:",
+        bot_save: "Save Bot Settings", bot_saved: "Bot settings saved.", bot_save_err: "Save error: ",
+        bot_builtin_title: "Built-in commands (always available when bot is enabled):",
+        bot_builtin_prizes: "Lists all available prizes on the wheel",
+        bot_builtin_wheel: "Sends the wheel description message above",
+        bot_custom_title: "Custom Commands",
+        bot_cmd_name_ph: "!command", bot_cmd_resp_ph: "Response message...",
+        bot_cmd_add: "Add Command", bot_cmd_del_confirm: "Delete command",
+        bot_tbl_cmd: "Command", bot_tbl_resp: "Response", bot_tbl_cd: "CD (s)", bot_tbl_on: "On",
       },
       pl: {
         title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
@@ -488,6 +545,18 @@
         confirm_remove_tier: "Usunac zestaw",
         click_copy: "kliknij aby skopiowac", copied: "skopiowano!",
         whats_new: "Co nowego", privacy_link: "Polityka prywatnosci",
+        bot_title: "Chat Bot i Komendy", bot_desc: "Konfiguracja bota czatu Kick. Po wlaczeniu bot odpowiada na komendy i oglasza nagrody na czacie.",
+        bot_enable: "Wlacz chat bota", bot_announce: "Oglos nagrody na czacie",
+        bot_template_label: "Szablon ogloszenia nagrody ({prize} = nazwa nagrody):",
+        bot_wheel_desc_label: "Odpowiedz na !wheel:",
+        bot_save: "Zapisz ustawienia bota", bot_saved: "Ustawienia bota zapisane.", bot_save_err: "Blad zapisu: ",
+        bot_builtin_title: "Wbudowane komendy (dostepne gdy bot jest wlaczony):",
+        bot_builtin_prizes: "Wyswietla liste dostepnych nagrod na kole",
+        bot_builtin_wheel: "Wysyla wiadomosc z opisem kola powyzej",
+        bot_custom_title: "Wlasne komendy",
+        bot_cmd_name_ph: "!komenda", bot_cmd_resp_ph: "Tresc odpowiedzi...",
+        bot_cmd_add: "Dodaj komende", bot_cmd_del_confirm: "Usunac komende",
+        bot_tbl_cmd: "Komenda", bot_tbl_resp: "Odpowiedz", bot_tbl_cd: "CD (s)", bot_tbl_on: "Wl.",
       }
     };
 
@@ -983,11 +1052,143 @@
       el("footerVersion").textContent = "v" + version;
     }
 
+    // ── Bot Config & Commands ──────────────────────────────────
+    let botCommands = [];
+
+    async function loadBotConfig() {
+      try {
+        const r = await fetch("/dashboard/bot-config", { cache: "no-store" });
+        const j = await r.json();
+        if (!j?.ok) return;
+        el("botEnabled").checked = !!j.bot_enabled;
+        el("announcePrizes").checked = !!j.announce_prizes;
+        if (j.prize_announce_template) el("prizeTemplate").value = j.prize_announce_template;
+        if (j.wheel_description) el("wheelDescription").value = j.wheel_description;
+      } catch (e) {
+        console.warn("Failed to load bot config:", e);
+      }
+    }
+
+    async function loadCommands() {
+      try {
+        const r = await fetch("/dashboard/commands", { cache: "no-store" });
+        const j = await r.json();
+        botCommands = j?.commands || [];
+        renderCommands();
+      } catch (e) {
+        console.warn("Failed to load commands:", e);
+        botCommands = [];
+        renderCommands();
+      }
+    }
+
+    function renderCommands() {
+      const box = el("commandsList");
+      if (!botCommands.length) {
+        box.innerHTML = `<div class="muted small" style="padding:8px 0;">No custom commands yet.</div>`;
+        return;
+      }
+      let html = `<table><thead><tr>
+        <th style="width:18%;">${t("bot_tbl_cmd")}</th>
+        <th style="width:42%;">${t("bot_tbl_resp")}</th>
+        <th style="width:10%;">${t("bot_tbl_cd")}</th>
+        <th style="width:10%;">${t("bot_tbl_on")}</th>
+        <th style="width:20%;"></th>
+      </tr></thead><tbody>`;
+      botCommands.forEach((cmd) => {
+        const safeResp = (cmd.response || "").replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+        const safeCmd = (cmd.command || "").replaceAll('"', '&quot;');
+        html += `<tr>
+          <td><code>${safeCmd}</code></td>
+          <td class="muted small" style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${safeResp}">${safeResp}</td>
+          <td>${cmd.cooldown_seconds || 5}s</td>
+          <td><input type="checkbox" ${cmd.enabled ? "checked" : ""} onchange="toggleCmd(${cmd.id}, this.checked)" /></td>
+          <td><button class="btn small" style="color:#f87171;" onclick="deleteCmd(${cmd.id}, '${safeCmd}')">&#10005;</button></td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      box.innerHTML = html;
+    }
+
+    function showBotResult(ok, msg) {
+      const box = el("botSaveResult");
+      box.style.display = "block";
+      box.textContent = msg;
+      box.style.background = ok ? "rgba(34,197,94,0.12)" : "rgba(248,113,113,0.12)";
+      box.style.color = ok ? "#4ade80" : "#f87171";
+      clearTimeout(box._timer);
+      box._timer = setTimeout(() => { box.style.display = "none"; }, 4000);
+    }
+
+    el("saveBotCfgBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/bot-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bot_enabled: el("botEnabled").checked,
+            announce_prizes: el("announcePrizes").checked,
+            prize_announce_template: el("prizeTemplate").value.trim(),
+            wheel_description: el("wheelDescription").value.trim(),
+          }),
+        });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error || "Failed");
+        showBotResult(true, t("bot_saved"));
+      } catch (e) {
+        showBotResult(false, t("bot_save_err") + e.message);
+      }
+    };
+
+    el("addCmdBtn").onclick = async () => {
+      const command = (el("newCmdName").value || "").trim();
+      const response = (el("newCmdResponse").value || "").trim();
+      const cooldown_seconds = Math.max(0, parseInt(el("newCmdCooldown").value, 10) || 5);
+      if (!command || !response) return;
+      try {
+        const r = await fetch("/dashboard/commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command, response, cooldown_seconds }),
+        });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error || "Failed");
+        botCommands = j.commands || [];
+        renderCommands();
+        el("newCmdName").value = "";
+        el("newCmdResponse").value = "";
+        el("newCmdCooldown").value = "5";
+      } catch (e) {
+        showBotResult(false, e.message);
+      }
+    };
+
+    window.toggleCmd = async (id, enabled) => {
+      try {
+        await fetch(`/dashboard/commands/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        await loadCommands();
+      } catch {}
+    };
+
+    window.deleteCmd = async (id, name) => {
+      if (!confirm(`${t("bot_cmd_del_confirm")} "${name}"?`)) return;
+      try {
+        await fetch(`/dashboard/commands/${id}`, { method: "DELETE" });
+        await loadCommands();
+      } catch {}
+    };
+
     // BOOT
     (async function(){
       applyLang();
       await loadStatus();
       await loadWheel();
+      await loadBotConfig();
+      await loadCommands();
       await loadChangelog();
     })();
   </script>

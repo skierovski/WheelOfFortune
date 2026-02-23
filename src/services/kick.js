@@ -27,21 +27,26 @@ export async function fetchUserInfo(accessToken) {
  * Subscribe to events for a specific broadcaster.
  * @param {number} broadcasterId
  * @param {string} callbackUrl
+ * @param {{ name: string, version: number }[]} [events]
  */
-export async function subscribeToEvents(broadcasterId, callbackUrl) {
+export async function subscribeToEvents(broadcasterId, callbackUrl, events) {
   const token = await ensureAccessToken(broadcasterId);
+  const eventList = events || [
+    { name: "channel.subscription.gifts", version: 1 },
+    { name: "chat.message.sent", version: 1 },
+  ];
   const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       broadcaster_user_id: Number(broadcasterId),
-      events: [{ name: "channel.subscription.gifts", version: 1 }],
+      events: eventList,
       method: "webhook",
       callback: callbackUrl,
     }),
   });
   const text = await response.text();
-  console.log(`[SUBSCRIBE] bid=${broadcasterId} status:`, response.status, text);
+  console.log(`[SUBSCRIBE] bid=${broadcasterId} events=${eventList.map(e => e.name).join(",")} status:`, response.status, text);
   if (!response.ok) throw new Error(`Failed to subscribe: ${response.status} ${text}`);
   return JSON.parse(text);
 }
@@ -62,22 +67,21 @@ export async function listSubscriptions(broadcasterId) {
 }
 
 /**
- * Post a chat message as a broadcaster.
+ * Post a chat message as a broadcaster (user) or as a bot.
  * @param {number} broadcasterId
  * @param {string} content
+ * @param {{ type?: "user"|"bot" }} [opts]
  */
-export async function postChatMessage(broadcasterId, content) {
+export async function postChatMessage(broadcasterId, content, { type = "bot" } = {}) {
   if (!content?.trim()) return;
   try {
     const token = await ensureAccessToken(broadcasterId);
+    const body = { content: content.slice(0, 500), type };
+    if (type === "user") body.broadcaster_user_id = broadcasterId;
     const r = await fetch("https://api.kick.com/public/v1/chat", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        broadcaster_user_id: broadcasterId,
-        content: content.slice(0, 500),
-        type: "user",
-      }),
+      body: JSON.stringify(body),
     });
     if (!r.ok) console.warn(`chat send failed bid=${broadcasterId}: ${r.status}`);
   } catch (e) {

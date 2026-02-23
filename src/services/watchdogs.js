@@ -37,29 +37,33 @@ async function ensureAllSubscriptions() {
     return; // DB not ready
   }
 
+  const REQUIRED_EVENTS = ["channel.subscription.gifts", "chat.message.sent"];
+
   for (const streamer of streamers) {
-    if (!streamer.access_token) continue; // no tokens, skip
+    if (!streamer.access_token) continue;
 
     try {
       const bid = streamer.broadcaster_id;
       const subs = await listSubscriptions(bid);
-      const hasGifts = subs.some(
-        (s) => s?.name === "channel.subscription.gifts" && s?.callback === callbackUrl
+
+      const missingEvents = REQUIRED_EVENTS.filter(
+        (evt) => !subs.some((s) => s?.name === evt && s?.callback === callbackUrl)
       );
 
-      if (!hasGifts) {
-        console.log(`[WATCHDOG] bid=${bid} missing subscription -> creating`);
-        await subscribeToEvents(bid, callbackUrl);
-        
-        // Store in DB
+      if (missingEvents.length > 0) {
+        console.log(`[WATCHDOG] bid=${bid} missing events: ${missingEvents.join(", ")} -> subscribing`);
+        const events = missingEvents.map((name) => ({ name, version: 1 }));
+        await subscribeToEvents(bid, callbackUrl, events);
+
         const db = getDb();
-        db.deactivateSubscriptions(bid);
-        db.addSubscription(bid, {
-          subscription_id: "auto",
-          event_type: "channel.subscription.gifts",
-          callback_url: callbackUrl,
-        });
-        console.log(`[WATCHDOG] bid=${bid} subscription created`);
+        for (const evt of missingEvents) {
+          db.addSubscription(bid, {
+            subscription_id: "auto",
+            event_type: evt,
+            callback_url: callbackUrl,
+          });
+        }
+        console.log(`[WATCHDOG] bid=${bid} subscriptions created: ${missingEvents.join(", ")}`);
       }
     } catch (e) {
       console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} subscription error:`, e?.message || e);

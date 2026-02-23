@@ -1,5 +1,29 @@
 [
   {
+    "version": "2.0.0",
+    "date": "2026-02-23",
+    "changes_en": [
+      "Kick Chat Bot integration — bot responds to commands and announces prizes in chat",
+      "Built-in !prizes command — lists all available prizes on the wheel",
+      "Built-in !wheel command — sends a customizable wheel description to chat",
+      "Custom commands — streamers can create their own chat commands with custom responses",
+      "Bot settings dashboard — enable/disable bot, configure prize announcement template",
+      "Auto-subscribe to chat.message.sent webhook — no re-auth required for existing streamers",
+      "Async webhook processing — instant 200 response to Kick for reliable delivery",
+      "Per-command cooldowns to prevent chat spam"
+    ],
+    "changes_pl": [
+      "Integracja Chat Bota Kick — bot odpowiada na komendy i oglasza nagrody na czacie",
+      "Wbudowana komenda !prizes — wyswietla liste dostepnych nagrod na kole",
+      "Wbudowana komenda !wheel — wysyla konfigurowalny opis kola na czat",
+      "Wlasne komendy — streamerzy moga tworzyc wlasne komendy czatu z odpowiedziami",
+      "Panel ustawien bota — wlacz/wylacz bota, konfiguruj szablon ogloszenia nagrody",
+      "Automatyczna subskrypcja chat.message.sent — bez koniecznosci ponownej autoryzacji",
+      "Asynchroniczne przetwarzanie webhookow — natychmiastowa odpowiedz 200 do Kicka",
+      "Cooldowny per komenda aby zapobiec spamowi na czacie"
+    ]
+  },
+  {
     "version": "1.0.2",
     "date": "2026-02-11",
     "changes_en": [

@@ -61,6 +61,27 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   created_at       INTEGER DEFAULT (unixepoch()),
   used_at          INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS bot_config (
+  broadcaster_id        INTEGER PRIMARY KEY REFERENCES streamers(broadcaster_id),
+  bot_enabled           INTEGER DEFAULT 0,
+  announce_prizes       INTEGER DEFAULT 1,
+  prize_announce_template TEXT DEFAULT 'The wheel landed on: {prize}!',
+  wheel_description     TEXT DEFAULT 'Wheel of Fortune! Gift subs to spin the wheel and win prizes!',
+  updated_at            INTEGER DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS chat_commands (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  broadcaster_id   INTEGER REFERENCES streamers(broadcaster_id),
+  command          TEXT NOT NULL,
+  response         TEXT NOT NULL,
+  enabled          INTEGER DEFAULT 1,
+  cooldown_seconds INTEGER DEFAULT 5,
+  last_used_at     INTEGER DEFAULT 0,
+  created_at       INTEGER DEFAULT (unixepoch()),
+  UNIQUE(broadcaster_id, command)
+);
 `;
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -223,6 +244,34 @@ export function openDatabase(dbPath = ":memory:") {
       WHERE code = @code AND used_by IS NULL
     `),
     getUnusedInviteCodes: sqlite.prepare(`SELECT * FROM invite_codes WHERE used_by IS NULL ORDER BY created_at`),
+
+    // Bot config
+    upsertBotConfig: sqlite.prepare(`
+      INSERT INTO bot_config (broadcaster_id, bot_enabled, announce_prizes, prize_announce_template, wheel_description, updated_at)
+      VALUES (@broadcaster_id, @bot_enabled, @announce_prizes, @prize_announce_template, @wheel_description, unixepoch())
+      ON CONFLICT(broadcaster_id) DO UPDATE SET
+        bot_enabled           = excluded.bot_enabled,
+        announce_prizes       = excluded.announce_prizes,
+        prize_announce_template = excluded.prize_announce_template,
+        wheel_description     = excluded.wheel_description,
+        updated_at            = unixepoch()
+    `),
+    getBotConfig: sqlite.prepare(`SELECT * FROM bot_config WHERE broadcaster_id = ?`),
+
+    // Chat commands
+    insertCommand: sqlite.prepare(`
+      INSERT INTO chat_commands (broadcaster_id, command, response, enabled, cooldown_seconds)
+      VALUES (@broadcaster_id, @command, @response, @enabled, @cooldown_seconds)
+    `),
+    updateCommand: sqlite.prepare(`
+      UPDATE chat_commands SET command = @command, response = @response, enabled = @enabled, cooldown_seconds = @cooldown_seconds
+      WHERE id = @id AND broadcaster_id = @broadcaster_id
+    `),
+    deleteCommand: sqlite.prepare(`DELETE FROM chat_commands WHERE id = ? AND broadcaster_id = ?`),
+    getCommands: sqlite.prepare(`SELECT * FROM chat_commands WHERE broadcaster_id = ? ORDER BY created_at`),
+    getCommandById: sqlite.prepare(`SELECT * FROM chat_commands WHERE id = ? AND broadcaster_id = ?`),
+    getEnabledCommands: sqlite.prepare(`SELECT * FROM chat_commands WHERE broadcaster_id = ? AND enabled = 1`),
+    updateCommandCooldown: sqlite.prepare(`UPDATE chat_commands SET last_used_at = ? WHERE id = ?`),
   };
 
   // ── Public API ──────────────────────────────────────────────────
@@ -393,6 +442,82 @@ export function openDatabase(dbPath = ":memory:") {
 
     getUnusedInviteCodes() {
       return stmts.getUnusedInviteCodes.all();
+    },
+
+    // ── Bot Config ──────────────────────────────────────────────
+
+    getBotConfig(broadcasterId) {
+      return stmts.getBotConfig.get(broadcasterId) || {
+        broadcaster_id: broadcasterId,
+        bot_enabled: 0,
+        announce_prizes: 1,
+        prize_announce_template: "The wheel landed on: {prize}!",
+        wheel_description: "Wheel of Fortune! Gift subs to spin the wheel and win prizes!",
+      };
+    },
+
+    saveBotConfig(broadcasterId, { bot_enabled, announce_prizes, prize_announce_template, wheel_description }) {
+      const prev = stmts.getBotConfig.get(broadcasterId);
+      stmts.upsertBotConfig.run({
+        broadcaster_id: broadcasterId,
+        bot_enabled: bot_enabled ?? prev?.bot_enabled ?? 0,
+        announce_prizes: announce_prizes ?? prev?.announce_prizes ?? 1,
+        prize_announce_template: prize_announce_template ?? prev?.prize_announce_template ?? "The wheel landed on: {prize}!",
+        wheel_description: wheel_description ?? prev?.wheel_description ?? "Wheel of Fortune! Gift subs to spin the wheel and win prizes!",
+      });
+      return stmts.getBotConfig.get(broadcasterId);
+    },
+
+    // ── Chat Commands ───────────────────────────────────────────
+
+    getCommands(broadcasterId) {
+      return stmts.getCommands.all(broadcasterId);
+    },
+
+    getEnabledCommands(broadcasterId) {
+      return stmts.getEnabledCommands.all(broadcasterId);
+    },
+
+    getCommandById(id, broadcasterId) {
+      return stmts.getCommandById.get(id, broadcasterId) || null;
+    },
+
+    addCommand(broadcasterId, { command, response, enabled = 1, cooldown_seconds = 5 }) {
+      const cmd = command.startsWith("!") ? command.toLowerCase() : `!${command.toLowerCase()}`;
+      stmts.insertCommand.run({
+        broadcaster_id: broadcasterId,
+        command: cmd,
+        response,
+        enabled: enabled ? 1 : 0,
+        cooldown_seconds: Math.max(0, Number(cooldown_seconds) || 5),
+      });
+      return stmts.getCommands.all(broadcasterId);
+    },
+
+    updateCommand(broadcasterId, id, { command, response, enabled, cooldown_seconds }) {
+      const existing = stmts.getCommandById.get(id, broadcasterId);
+      if (!existing) return null;
+      const cmd = command
+        ? (command.startsWith("!") ? command.toLowerCase() : `!${command.toLowerCase()}`)
+        : existing.command;
+      stmts.updateCommand.run({
+        id,
+        broadcaster_id: broadcasterId,
+        command: cmd,
+        response: response ?? existing.response,
+        enabled: enabled != null ? (enabled ? 1 : 0) : existing.enabled,
+        cooldown_seconds: cooldown_seconds != null ? Math.max(0, Number(cooldown_seconds) || 5) : existing.cooldown_seconds,
+      });
+      return stmts.getCommandById.get(id, broadcasterId);
+    },
+
+    deleteCommand(id, broadcasterId) {
+      const result = stmts.deleteCommand.run(id, broadcasterId);
+      return result.changes > 0;
+    },
+
+    updateCommandCooldown(id, timestamp) {
+      stmts.updateCommandCooldown.run(timestamp, id);
     },
   };
 

@@ -11,6 +11,7 @@ import subscribeRoutes from "./routes/subscribe.js";
 import webhookRoutes from "./routes/webhook.js";
 import spinsRoutes from "./routes/spins.js";
 import adminRoutes from "./routes/admin.js";
+import commandsRoutes from "./routes/commands.js";
 
 export const app = express();
 app.set("trust proxy", 1);
@@ -96,4 +97,5 @@ app.use(indexRoutes);
 app.use(configRoutes);
 app.use(subscribeRoutes);
 app.use(spinsRoutes);
+app.use(commandsRoutes);
 app.use(adminRoutes);
