@@ -19,9 +19,26 @@
       font-variant-numeric: tabular-nums; letter-spacing: 2px; }
     .delay-overlay .pending { font-size: 14px; color: #9ca3af; margin-top: 8px; }
     .delay-overlay .pending strong { color: var(--accent, #7c3aed); }
+    .auth-warning {
+      position: fixed;
+      left: 50%;
+      top: 8%;
+      transform: translateX(-50%);
+      z-index: 30;
+      pointer-events: none;
+      display: none;
+      color: #ef4444;
+      font-family: system-ui, sans-serif;
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+    .auth-warning.show { display: block; }
   </style>
 </head>
 <body>
+  <div id="authWarning" class="auth-warning" aria-hidden="true">Re-login re auth</div>
   <div id="delayOverlay" class="delay-overlay" aria-hidden="true">
     <h3>⏱️ Nastepne koło za:</h3>
     <div class="time" id="delayTime">0:00</div>
@@ -86,6 +103,17 @@
       return m ? m[1] : new URLSearchParams(location.search).get("key") || "";
     })();
     const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
+    const authWarningEl = document.getElementById("authWarning");
+    let authOk = true;
+
+    function applyAuthStatus(nextAuthOk, authMessage) {
+      authOk = !!nextAuthOk;
+      if (authWarningEl) {
+        authWarningEl.textContent = authMessage || "Re-login re auth";
+        authWarningEl.classList.toggle("show", !authOk);
+        authWarningEl.setAttribute("aria-hidden", authOk ? "true" : "false");
+      }
+    }
 
     // ====== WebSocket connection ======
     const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws?key=' + encodeURIComponent(OVERLAY_KEY);
@@ -116,6 +144,9 @@
 
     function handleServerMessage(data) {
       lastWsMessageTime = Date.now();
+      if (Object.prototype.hasOwnProperty.call(data, "auth_ok")) {
+        applyAuthStatus(data.auth_ok, data.auth_message);
+      }
       if (data.type === "delay" && Number.isFinite(data.timeUntilNext)) {
         startDelayCountdown(data.timeUntilNext, data.pending || 0);
         return;
@@ -132,6 +163,9 @@
       try {
         const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
+        if (Object.prototype.hasOwnProperty.call(j, "auth_ok")) {
+          applyAuthStatus(j.auth_ok, j.auth_message);
+        }
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
         const pending = Math.max(0, Number(j?.count || 0));
         if (timeUntilNext > 0 || pending > 0) {
@@ -151,6 +185,9 @@
       try {
         const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
+        if (Object.prototype.hasOwnProperty.call(j, "auth_ok")) {
+          applyAuthStatus(j.auth_ok, j.auth_message);
+        }
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
         const pending = Math.max(0, Number(j?.count || 0));
         
@@ -198,6 +235,9 @@
         if (r.ok) {
           const j = await r.json();
           if (j?.ok) {
+            if (Object.prototype.hasOwnProperty.call(j, "auth_ok")) {
+              applyAuthStatus(j.auth_ok, j.auth_message);
+            }
             if (j.accent_color) applyAccentColor(j.accent_color);
             applySecondaryAndOpacity(j.secondary_color, j.wheel_opacity);
           }

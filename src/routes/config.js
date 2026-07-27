@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
 import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor, validateSecondaryColor, validateWheelOpacity } from "../utils/validate.js";
+import { getOverlayAuthStatus } from "../services/authStatus.js";
 
 const router = Router();
 
@@ -11,6 +12,7 @@ const router = Router();
 router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
   const bid = req.streamer.broadcaster_id;
   const cfg = loadConfig(bid);
+  const auth = getOverlayAuthStatus(req.streamer);
   res.json({
     ok: true,
     items: cfg?.items ?? null,
@@ -19,6 +21,8 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
     secondary_color: cfg?.secondary_color ?? "#121228",
     wheel_opacity: cfg?.wheel_opacity ?? 0.9,
     gifts_per_spin: cfg?.gifts_per_spin ?? 5,
+    auth_ok: auth.auth_ok,
+    auth_message: auth.auth_message,
   });
 });
 

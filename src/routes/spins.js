@@ -5,6 +5,7 @@ import { announcePrize } from "../services/chatBot.js";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { env } from "../utils/env.js";
 import { getDb } from "../db.js";
+import { getOverlayAuthStatus } from "../services/authStatus.js";
 
 const router = Router();
 
@@ -14,10 +15,13 @@ const router = Router();
 router.get("/overlay/:key/spins/pending", resolveOverlayKey, (req, res) => {
   const bid = req.streamer.broadcaster_id;
   const timeUntilNext = spins.getTimeUntilNextSpin(bid);
+  const auth = getOverlayAuthStatus(req.streamer);
   res.json({
     ok: true,
     count: spins.getPending(bid),
     timeUntilNext: Math.ceil(timeUntilNext / 1000),
+    auth_ok: auth.auth_ok,
+    auth_message: auth.auth_message,
   });
 });
 

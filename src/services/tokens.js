@@ -4,6 +4,9 @@ import { getDb } from "../db.js";
 
 const SKEW_MS = 60_000 * 15; // 15-minute safety margin
 
+/** In-flight refresh promises keyed by broadcaster_id (serialize Kick refresh rotation). */
+const refreshInFlight = new Map();
+
 /**
  * Compute expires_at from expires_in, applying a 15-minute skew.
  */
@@ -23,6 +26,16 @@ function secondsUntilExpiry(expiresAt) {
   return Math.floor((expiresAt - Date.now()) / 1000);
 }
 
+function isInvalidGrantError(status, bodyText) {
+  if (status !== 400 && status !== 401) return false;
+  try {
+    const j = JSON.parse(bodyText);
+    return j?.error === "invalid_grant";
+  } catch {
+    return /invalid_grant/i.test(bodyText || "");
+  }
+}
+
 /**
  * Refresh the access token using Kick's OAuth endpoint.
  */
@@ -38,7 +51,13 @@ async function refreshAccessTokenFromKick(refreshToken) {
     body,
   });
   const text = await r.text();
-  if (!r.ok) throw new Error(`refresh failed: ${r.status} ${text}`);
+  if (!r.ok) {
+    const err = new Error(`refresh failed: ${r.status} ${text}`);
+    err.status = r.status;
+    err.body = text;
+    err.invalidGrant = isInvalidGrantError(r.status, text);
+    throw err;
+  }
   return JSON.parse(text);
 }
 
@@ -87,28 +106,65 @@ export function saveTokens(broadcasterId, tokens) {
 }
 
 /**
+ * Clear stored OAuth tokens so watchdogs stop retrying until the user re-logs in.
+ * @param {number} broadcasterId
+ */
+export function clearTokens(broadcasterId) {
+  getDb().updateTokens(broadcasterId, {
+    access_token: null,
+    refresh_token: null,
+    token_expires_at: null,
+    token_scope: null,
+  });
+  console.warn(`[tokens] cleared dead tokens for broadcaster ${broadcasterId} — re-login via /auth/login required`);
+}
+
+/**
  * Ensure a valid access token is available for a streamer.
  * Refreshes automatically if expiring within 15 minutes.
+ * Concurrent refreshes for the same bid are serialized (Kick rotates refresh tokens).
  * @param {number} broadcasterId
  * @returns {Promise<string>} access_token
  */
 export async function ensureAccessToken(broadcasterId) {
-  const tokens = loadTokens(broadcasterId);
-  if (!tokens?.access_token) {
-    throw new Error(`No tokens stored for broadcaster ${broadcasterId}. Needs re-login via /auth/login`);
-  }
-  const left = secondsUntilExpiry(tokens.expires_at);
-  if (!Number.isFinite(left) || left <= 15 * 60) {
-    if (!tokens.refresh_token) {
-      throw new Error(`No refresh_token for broadcaster ${broadcasterId}`);
+  const existing = refreshInFlight.get(broadcasterId);
+  if (existing) return existing;
+
+  const run = (async () => {
+    const tokens = loadTokens(broadcasterId);
+    if (!tokens?.access_token) {
+      throw new Error(`No tokens stored for broadcaster ${broadcasterId}. Needs re-login via /auth/login`);
     }
-    console.log(`[tokens] refreshing for ${broadcasterId} (left ${left}s)`);
-    const refreshed = await refreshAccessTokenFromKick(tokens.refresh_token);
-    const merged = withExpiresAt({ ...tokens, ...refreshed });
-    saveTokens(broadcasterId, merged);
-    return merged.access_token;
+    const left = secondsUntilExpiry(tokens.expires_at);
+    if (!Number.isFinite(left) || left <= 15 * 60) {
+      if (!tokens.refresh_token) {
+        throw new Error(`No refresh_token for broadcaster ${broadcasterId}`);
+      }
+      console.log(`[tokens] refreshing for ${broadcasterId} (left ${left}s)`);
+      try {
+        const refreshed = await refreshAccessTokenFromKick(tokens.refresh_token);
+        const merged = withExpiresAt({ ...tokens, ...refreshed });
+        saveTokens(broadcasterId, merged);
+        return merged.access_token;
+      } catch (e) {
+        if (e?.invalidGrant) {
+          clearTokens(broadcasterId);
+          throw new Error(
+            `Refresh token revoked/expired for broadcaster ${broadcasterId}. Streamer must re-login via /auth/login`
+          );
+        }
+        throw e;
+      }
+    }
+    return tokens.access_token;
+  })();
+
+  refreshInFlight.set(broadcasterId, run);
+  try {
+    return await run;
+  } finally {
+    refreshInFlight.delete(broadcasterId);
   }
-  return tokens.access_token;
 }
 
 // ── Exported for backward compatibility and watchdog use ─────────
@@ -116,6 +172,7 @@ export async function ensureAccessToken(broadcasterId) {
 export const tokenStore = {
   loadTokens,
   saveTokens,
+  clearTokens,
   withExpiresAt,
   secondsUntilExpiry,
 };

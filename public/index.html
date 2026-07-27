@@ -34,9 +34,26 @@
       pointer-events: none; z-index: 20; transition: opacity .35s ease, transform .35s ease; }
     .result-banner.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
     .bonus-badge{ font-size:14px; margin-left:8px; padding:4px 8px; background:#14532d; border:1px solid #166534; color:#bbf7d0; border-radius:999px; vertical-align:middle; }
+    .auth-warning {
+      position: fixed;
+      left: 50%;
+      top: 6%;
+      transform: translateX(-50%);
+      z-index: 30;
+      pointer-events: none;
+      display: none;
+      color: #ef4444;
+      font-family: system-ui, sans-serif;
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+    .auth-warning.show { display: block; }
   </style>
 </head>
 <body>
+  <div id="authWarning" class="auth-warning" aria-hidden="true">Re-login re auth</div>
   <div id="resultBanner" class="result-banner" aria-hidden="true"></div>
   <div id="overlay" class="overlay">
     <canvas id="wheel" width="1000" height="1000"></canvas>
@@ -79,6 +96,17 @@
       return m ? m[1] : new URLSearchParams(location.search).get("key") || "";
     })();
     const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
+    const authWarningEl = document.getElementById("authWarning");
+    let authOk = true;
+
+    function applyAuthStatus(nextAuthOk, authMessage) {
+      authOk = !!nextAuthOk;
+      if (authWarningEl) {
+        authWarningEl.textContent = authMessage || "Re-login re auth";
+        authWarningEl.classList.toggle("show", !authOk);
+        authWarningEl.setAttribute("aria-hidden", authOk ? "true" : "false");
+      }
+    }
 
     // ====== Server config helpers ======
     async function fetchServerConfigFull() {
@@ -709,6 +737,9 @@
     }
 
     function handleServerMessage(data) {
+      if (Object.prototype.hasOwnProperty.call(data, "auth_ok")) {
+        applyAuthStatus(data.auth_ok, data.auth_message);
+      }
       if (data.type === "config") {
         if (Array.isArray(data.items)) {
           ITEMS = data.items.map(sanitizeItem);
@@ -734,6 +765,9 @@
       try {
         const r = await fetch(`${API_BASE}/spins/pending`, { cache: 'no-store' });
         const j = await r.json();
+        if (Object.prototype.hasOwnProperty.call(j, "auth_ok")) {
+          applyAuthStatus(j.auth_ok, j.auth_message);
+        }
         const pending = Math.max(0, Number(j?.count || 0));
         const timeUntilNext = Math.max(0, Number(j?.timeUntilNext || 0));
         if (pending > 0 && timeUntilNext === 0 && queue.length === 0 && !spinning) {
@@ -869,6 +903,9 @@
 
       const cfg = await fetchServerConfigFull();
       if (cfg) {
+        if (Object.prototype.hasOwnProperty.call(cfg, "auth_ok")) {
+          applyAuthStatus(cfg.auth_ok, cfg.auth_message);
+        }
         if (Array.isArray(cfg.items)) ITEMS = cfg.items.map(sanitizeItem); else ITEMS = loadItemsLocal();
         if (Array.isArray(cfg.tiers)) TIERS = cfg.tiers;
         if (typeof cfg.accent_color === "string") ACCENT_COLOR = cfg.accent_color;

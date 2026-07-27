@@ -66,7 +66,12 @@ async function ensureAllSubscriptions() {
         console.log(`[WATCHDOG] bid=${bid} subscriptions created: ${missingEvents.join(", ")}`);
       }
     } catch (e) {
-      console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} subscription error:`, e?.message || e);
+      const msg = e?.message || String(e);
+      if (/re-login/i.test(msg)) {
+        console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} skipped (needs re-login)`);
+      } else {
+        console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} subscription error:`, msg);
+      }
     }
   }
 }
@@ -96,7 +101,12 @@ async function refreshAllTokens() {
         await ensureAccessToken(bid);
       }
     } catch (e) {
-      console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} token refresh error:`, e?.message || e);
+      const msg = e?.message || String(e);
+      if (/re-login|revoked\/expired/i.test(msg)) {
+        console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} tokens cleared — streamer must re-login`);
+      } else {
+        console.warn(`[WATCHDOG] bid=${streamer.broadcaster_id} token refresh error:`, msg);
+      }
     }
   }
 }

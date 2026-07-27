@@ -179,4 +179,46 @@ describe("ensureAccessToken (multi-tenant)", () => {
     const { ensureAccessToken } = await import("../../src/services/tokens.js");
     await expect(ensureAccessToken(BID)).rejects.toThrow("No refresh_token");
   });
+
+  it("clears tokens and asks for re-login on invalid_grant", async () => {
+    createStreamerWithTokens(BID, "old_token_abcdefgh", "dead_refresh_token", Date.now() - 60_000);
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve(JSON.stringify({
+        error: "invalid_grant",
+        error_description: "The provided authorization grant is invalid",
+      })),
+    }));
+
+    const { ensureAccessToken, loadTokens } = await import("../../src/services/tokens.js");
+    await expect(ensureAccessToken(BID)).rejects.toThrow(/re-login/);
+    expect(loadTokens(BID)).toBeNull();
+    expect(db.getStreamerById(BID).access_token).toBeNull();
+  });
+
+  it("serializes concurrent refreshes for the same broadcaster", async () => {
+    createStreamerWithTokens(BID, "old_token_abcdefgh", "my_refresh_token", Date.now() + 60_000);
+
+    let resolveFetch;
+    const fetchPromise = new Promise((resolve) => { resolveFetch = resolve; });
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(fetchPromise.then(() => ({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify({
+        access_token: "new_token_xyz12345",
+        refresh_token: "new_refresh_token",
+        expires_in: 3600,
+      })),
+    }))));
+
+    const { ensureAccessToken } = await import("../../src/services/tokens.js");
+    const p1 = ensureAccessToken(BID);
+    const p2 = ensureAccessToken(BID);
+    resolveFetch();
+    const [t1, t2] = await Promise.all([p1, p2]);
+    expect(t1).toBe("new_token_xyz12345");
+    expect(t2).toBe("new_token_xyz12345");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });

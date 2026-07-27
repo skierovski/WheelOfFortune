@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 import { getDb } from "./db.js";
 import { spins } from "./services/spins.js";
+import { getOverlayAuthStatus } from "./services/authStatus.js";
 
 /**
  * Create the WebSocket server with per-streamer room support.
@@ -38,12 +39,16 @@ export function createWSS() {
     try {
       const pending = spins.getPending(bid);
       const timeUntilNext = spins.getTimeUntilNextSpin(bid);
+      const streamer = getDb().getStreamerById(bid);
+      const auth = getOverlayAuthStatus(streamer);
       ws.send(JSON.stringify({
         action: "pending",
         count: pending,
         type: "delay",
         timeUntilNext: Math.ceil(timeUntilNext / 1000),
         pending,
+        auth_ok: auth.auth_ok,
+        auth_message: auth.auth_message,
       }));
     } catch {}
 
