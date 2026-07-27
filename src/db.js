@@ -130,6 +130,15 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("wheel_opacity")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN wheel_opacity REAL DEFAULT 0.9");
   }
+  if (!cols.includes("sub_goal")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_goal INTEGER DEFAULT 0");
+  }
+  if (!cols.includes("sub_counter_title")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_title TEXT DEFAULT 'Subskrybenci'");
+  }
+  if (!cols.includes("sub_counter_label")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_label TEXT DEFAULT 'aktywne subskrypcje'");
+  }
 
   // bot_config migrations
   const botCols = sqlite.prepare("PRAGMA table_info(bot_config)").all().map(c => c.name);
@@ -188,16 +197,19 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, updated_at)
-      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, updated_at)
+      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, @sub_goal, @sub_counter_title, @sub_counter_label, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
-        items_json      = excluded.items_json,
-        tiers_json      = excluded.tiers_json,
-        accent_color    = excluded.accent_color,
-        secondary_color = excluded.secondary_color,
-        wheel_opacity   = excluded.wheel_opacity,
-        gifts_per_spin  = excluded.gifts_per_spin,
-        updated_at      = unixepoch()
+        items_json          = excluded.items_json,
+        tiers_json          = excluded.tiers_json,
+        accent_color        = excluded.accent_color,
+        secondary_color     = excluded.secondary_color,
+        wheel_opacity       = excluded.wheel_opacity,
+        gifts_per_spin      = excluded.gifts_per_spin,
+        sub_goal            = excluded.sub_goal,
+        sub_counter_title   = excluded.sub_counter_title,
+        sub_counter_label   = excluded.sub_counter_label,
+        updated_at          = unixepoch()
     `),
     getConfig: sqlite.prepare(`SELECT * FROM wheel_configs WHERE broadcaster_id = ?`),
 
@@ -353,10 +365,13 @@ export function openDatabase(dbPath = ":memory:") {
         secondary_color: row.secondary_color || "#121228",
         wheel_opacity: row.wheel_opacity ?? 0.9,
         gifts_per_spin: row.gifts_per_spin ?? 5,
+        sub_goal: row.sub_goal ?? 0,
+        sub_counter_title: row.sub_counter_title ?? "Subskrybenci",
+        sub_counter_label: row.sub_counter_label ?? "aktywne subskrypcje",
       };
     },
 
-    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin }) {
+    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label }) {
       const prev = stmts.getConfig.get(broadcasterId);
       stmts.upsertConfig.run({
         broadcaster_id: broadcasterId,
@@ -366,6 +381,9 @@ export function openDatabase(dbPath = ":memory:") {
         secondary_color: secondary_color ?? prev?.secondary_color ?? "#121228",
         wheel_opacity: wheel_opacity ?? prev?.wheel_opacity ?? 0.9,
         gifts_per_spin: gifts_per_spin ?? prev?.gifts_per_spin ?? 5,
+        sub_goal: sub_goal ?? prev?.sub_goal ?? 0,
+        sub_counter_title: sub_counter_title ?? prev?.sub_counter_title ?? "Subskrybenci",
+        sub_counter_label: sub_counter_label ?? prev?.sub_counter_label ?? "aktywne subskrypcje",
       });
     },
 

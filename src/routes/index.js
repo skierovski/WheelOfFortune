@@ -48,6 +48,13 @@ router.get("/delay/:key", resolveOverlayKey, (req, res) => {
   res.sendFile(file);
 });
 
+// Overlay: sub counter (by overlay_key)
+router.get("/subs/:key", resolveOverlayKey, (req, res) => {
+  const file = path.join(publicDir, "subs.html");
+  if (!fs.existsSync(file)) return res.status(404).send("subs.html not found");
+  res.sendFile(file);
+});
+
 // Status endpoint (session-protected)
 router.get("/dashboard/status", requireSession, async (req, res) => {
   try {

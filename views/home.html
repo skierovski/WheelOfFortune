@@ -262,6 +262,16 @@
               <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
+          <div class="muted small" style="margin-top:8px;" data-i18n="urls_subs">Sub counter overlay:</div>
+          <div class="url-row">
+            <div class="overlay-url masked" id="subsUrl" onclick="copyUrl(this)">
+              <span class="copy-hint">click to copy</span>
+            </div>
+            <button class="eye-btn" data-target="subsUrl" onclick="toggleUrlVisibility(this)" title="Show / hide">
+              <svg class="ico-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
           <div class="muted small" style="margin-top:8px;" data-i18n="urls_ws">WebSocket (custom integrations):</div>
           <div class="url-row">
             <div class="overlay-url masked" id="wsUrl" onclick="copyUrl(this)">
@@ -407,6 +417,53 @@
         </div>
       </div>
 
+      <!-- SUB COUNTER -->
+      <div class="card full-width">
+        <h2 data-i18n="sc_title">Sub Counter</h2>
+        <div class="muted" data-i18n="sc_desc">Overlay wyświetlający liczbę aktywnych subskrybentów z Kick. Dane odświeżają się co 60 sekund.</div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+          <div>
+            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_goal_label">Cel subskrypcji (0 = ukryty)</label>
+            <input type="number" id="scGoal" min="0" max="1000000" step="1" value="0" style="width:100%;" />
+          </div>
+          <div>
+            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_title_label">Nagłówek overlaya</label>
+            <input type="text" id="scTitle" maxlength="60" value="Subskrybenci" style="width:100%;" />
+          </div>
+          <div>
+            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_label_label">Etykieta pod liczbą</label>
+            <input type="text" id="scLabel" maxlength="60" value="aktywne subskrypcje" style="width:100%;" />
+          </div>
+          <div>
+            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_live_label">Aktualna liczba subów (Kick API)</label>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span id="scLiveCount" style="font-size:28px; font-weight:800; color:var(--accent);">–</span>
+              <button class="btn" id="scRefreshBtn" style="font-size:12px; padding:6px 12px;" data-i18n="sc_refresh">Odśwież</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:16px;">
+          <button class="btn btn-accent" id="scSaveBtn" data-i18n="sc_save">Zapisz ustawienia</button>
+        </div>
+        <div id="scSaveResult" style="display:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; margin-top:10px;"></div>
+
+        <div style="margin-top:14px; padding:12px 16px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+          <div class="muted small" style="margin-bottom:4px; font-weight:700;" data-i18n="sc_url_info">URL overlaya sub countera (skopiuj do OBS):</div>
+          <div class="url-row">
+            <div class="overlay-url masked" id="scOverlayUrl" onclick="copyUrl(this)">
+              <span class="copy-hint">click to copy</span>
+            </div>
+            <button class="eye-btn" data-target="scOverlayUrl" onclick="toggleUrlVisibility(this)" title="Show / hide">
+              <svg class="ico-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <div class="muted small" style="margin-top:6px;" data-i18n="sc_url_note">Wymiary OBS: ~320×120px. Tło: przezroczyste.</div>
+        </div>
+      </div>
+
       <!-- BOT & COMMANDS -->
       <div class="card full-width">
         <h2 data-i18n="bot_title">Chat Bot &amp; Commands</h2>
@@ -517,6 +574,12 @@
         bot_cmd_add: "Add Command", bot_cmd_del_confirm: "Delete command",
         bot_tbl_cmd: "Command", bot_tbl_resp: "Response", bot_tbl_cd: "CD (s)", bot_tbl_on: "On",
         bot_lang_note: "Bot responses (built-in commands) use the dashboard language (EN/PL).",
+        sc_title: "Sub Counter", sc_desc: "Overlay showing active subscriber count from Kick. Refreshes every 60 seconds.",
+        sc_goal_label: "Subscriber goal (0 = hidden)", sc_title_label: "Overlay header", sc_label_label: "Label below count",
+        sc_live_label: "Live sub count (Kick API)", sc_refresh: "Refresh",
+        sc_save: "Save settings", sc_saved: "Sub counter saved.", sc_save_err: "Save error: ",
+        sc_url_info: "Sub counter overlay URL (copy to OBS):", sc_url_note: "OBS size: ~320×120px. Background: transparent.",
+        urls_subs: "Sub counter overlay:",
       },
       pl: {
         title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
@@ -566,6 +629,12 @@
         bot_cmd_add: "Dodaj komende", bot_cmd_del_confirm: "Usunac komende",
         bot_tbl_cmd: "Komenda", bot_tbl_resp: "Odpowiedz", bot_tbl_cd: "CD (s)", bot_tbl_on: "Wl.",
         bot_lang_note: "Odpowiedzi bota (wbudowane komendy) uzywaja jezyka panelu (EN/PL).",
+        sc_title: "Licznik subów", sc_desc: "Overlay wyswietlajacy liczbe aktywnych subskrybentow z Kick. Dane odswieza sie co 60 sekund.",
+        sc_goal_label: "Cel subskrypcji (0 = ukryty)", sc_title_label: "Naglowek overlaya", sc_label_label: "Etykieta pod liczba",
+        sc_live_label: "Aktualna liczba subow (Kick API)", sc_refresh: "Odswiez",
+        sc_save: "Zapisz ustawienia", sc_saved: "Licznik zapisany.", sc_save_err: "Blad zapisu: ",
+        sc_url_info: "URL overlaya licznika subow (skopiuj do OBS):", sc_url_note: "Wymiary OBS: ~320x120px. Tlo: przezroczyste.",
+        urls_subs: "Overlay licznika subow:",
       }
     };
 
@@ -644,10 +713,12 @@
         const urls = {
           wheelUrl: `${base}/overlay/${overlayKey}`,
           delayUrl: `${base}/delay/${overlayKey}`,
+          subsUrl: `${base}/subs/${overlayKey}?key=${overlayKey}`,
           wsUrl: `${wsProto}://${location.host}/ws?key=${overlayKey}`,
         };
         for (const [id, url] of Object.entries(urls)) {
           const box = el(id);
+          if (!box) continue;
           box._rawUrl = url;
           box.innerHTML = `${url}<span class="copy-hint">${t("click_copy")}</span>`;
         }
@@ -1200,6 +1271,93 @@
       } catch {}
     };
 
+    // ── Sub Counter ─────────────────────────────────────────────
+    function updateSubsUrl() {
+      if (!overlayKey) return;
+      const base = location.origin;
+      const goal = parseInt(el("scGoal").value, 10) || 0;
+      const title = encodeURIComponent((el("scTitle").value || "Subskrybenci").trim());
+      const label = encodeURIComponent((el("scLabel").value || "aktywne subskrypcje").trim());
+      let url = `${base}/subs/${overlayKey}?key=${overlayKey}`;
+      if (goal > 0) url += `&target=${goal}`;
+      if (title) url += `&title=${title}`;
+      if (label) url += `&label=${label}`;
+      const box = el("scOverlayUrl");
+      if (box) {
+        box._rawUrl = url;
+        box.innerHTML = `${url}<span class="copy-hint">${t("click_copy")}</span>`;
+      }
+      // Also keep top-level subsUrl in sync
+      const subsBox = el("subsUrl");
+      if (subsBox) {
+        subsBox._rawUrl = `${base}/subs/${overlayKey}?key=${overlayKey}`;
+        subsBox.innerHTML = `${base}/subs/${overlayKey}?key=${overlayKey}<span class="copy-hint">${t("click_copy")}</span>`;
+      }
+    }
+
+    function showScResult(ok, msg) {
+      const box = el("scSaveResult");
+      box.style.display = "block";
+      box.textContent = msg;
+      box.style.background = ok ? "rgba(34,197,94,0.12)" : "rgba(248,113,113,0.12)";
+      box.style.color = ok ? "#4ade80" : "#f87171";
+      clearTimeout(box._timer);
+      box._timer = setTimeout(() => { box.style.display = "none"; }, 4000);
+    }
+
+    async function loadSubCounterConfig() {
+      try {
+        const r = await fetch("/dashboard/sub-counter", { cache: "no-store" });
+        const j = await r.json();
+        if (!j?.ok) return;
+        el("scGoal").value = j.sub_goal ?? 0;
+        el("scTitle").value = j.sub_counter_title ?? "Subskrybenci";
+        el("scLabel").value = j.sub_counter_label ?? "aktywne subskrypcje";
+        updateSubsUrl();
+      } catch (e) {
+        console.warn("Failed to load sub counter config:", e);
+      }
+    }
+
+    async function fetchLiveSubCount() {
+      try {
+        const r = await fetch(`/dashboard/status`, { cache: "no-store" });
+        const j = await r.json();
+        if (!j?.ok || !j.overlay_key) return;
+        const r2 = await fetch(`/overlay/${j.overlay_key}/subs`, { cache: "no-store" });
+        const j2 = await r2.json();
+        if (j2?.ok && Number.isFinite(j2.active_subscribers_count)) {
+          el("scLiveCount").textContent = j2.active_subscribers_count;
+        }
+      } catch {}
+    }
+
+    el("scGoal").addEventListener("input", updateSubsUrl);
+    el("scTitle").addEventListener("input", updateSubsUrl);
+    el("scLabel").addEventListener("input", updateSubsUrl);
+
+    el("scRefreshBtn").onclick = fetchLiveSubCount;
+
+    el("scSaveBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/sub-counter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sub_goal: parseInt(el("scGoal").value, 10) || 0,
+            sub_counter_title: (el("scTitle").value || "").trim(),
+            sub_counter_label: (el("scLabel").value || "").trim(),
+          }),
+        });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error || "Failed");
+        updateSubsUrl();
+        showScResult(true, t("sc_saved"));
+      } catch (e) {
+        showScResult(false, t("sc_save_err") + e.message);
+      }
+    };
+
     // BOOT
     (async function(){
       applyLang();
@@ -1208,6 +1366,8 @@
       await loadBotConfig();
       await loadCommands();
       await loadChangelog();
+      await loadSubCounterConfig();
+      fetchLiveSubCount();
     })();
   </script>
 </body>

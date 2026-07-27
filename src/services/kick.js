@@ -67,6 +67,29 @@ export async function listSubscriptions(broadcasterId) {
 }
 
 /**
+ * Fetch channel info (including active_subscribers_count) from Kick API.
+ * @param {number} broadcasterId
+ * @returns {Promise<{ active_subscribers_count: number, canceled_subscribers_count: number, slug: string, stream_title: string }>}
+ */
+export async function fetchChannelInfo(broadcasterId) {
+  const token = await ensureAccessToken(broadcasterId);
+  const r = await fetch(
+    `https://api.kick.com/public/v1/channels?broadcaster_user_id=${broadcasterId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!r.ok) throw new Error(`channels failed: ${r.status} ${await r.text().catch(() => "")}`);
+  const j = await r.json();
+  const ch = Array.isArray(j?.data) ? j.data[0] : j?.data;
+  if (!ch) throw new Error("No channel data returned");
+  return {
+    active_subscribers_count: Number(ch.active_subscribers_count ?? 0),
+    canceled_subscribers_count: Number(ch.canceled_subscribers_count ?? 0),
+    slug: ch.slug ?? null,
+    stream_title: ch.stream_title ?? null,
+  };
+}
+
+/**
  * Post a chat message as a broadcaster (user) or as a bot.
  * @param {number} broadcasterId
  * @param {string} content

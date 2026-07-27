@@ -24,6 +24,9 @@ export function saveConfig(broadcasterId, items, opts = {}) {
   const finalSecondary = typeof opts.secondary_color === "string" ? opts.secondary_color : (prev?.secondary_color || "#121228");
   const finalOpacity = Number.isFinite(opts.wheel_opacity) ? opts.wheel_opacity : (prev?.wheel_opacity ?? 0.9);
   const finalGifts = Number.isFinite(opts.gifts_per_spin) ? opts.gifts_per_spin : (prev?.gifts_per_spin ?? 5);
+  const finalSubGoal = Number.isFinite(opts.sub_goal) ? opts.sub_goal : (prev?.sub_goal ?? 0);
+  const finalSubTitle = typeof opts.sub_counter_title === "string" ? opts.sub_counter_title : (prev?.sub_counter_title ?? "Subskrybenci");
+  const finalSubLabel = typeof opts.sub_counter_label === "string" ? opts.sub_counter_label : (prev?.sub_counter_label ?? "aktywne subskrypcje");
 
   // Normalize tiers if provided
   let finalTiers = null;
@@ -47,10 +50,13 @@ export function saveConfig(broadcasterId, items, opts = {}) {
     secondary_color: finalSecondary,
     wheel_opacity: finalOpacity,
     gifts_per_spin: finalGifts,
+    sub_goal: finalSubGoal,
+    sub_counter_title: finalSubTitle,
+    sub_counter_label: finalSubLabel,
   });
   const tierCount = finalTiers ? finalTiers.length : 0;
   console.log(`[config] saved ${normalized.length} items, ${tierCount} tiers for broadcaster ${broadcasterId} accent=${finalAccent} secondary=${finalSecondary} opacity=${finalOpacity} gifts_per_spin=${finalGifts}`);
-  return { items: normalized, tiers: finalTiers, accent_color: finalAccent, secondary_color: finalSecondary, wheel_opacity: finalOpacity, gifts_per_spin: finalGifts };
+  return { items: normalized, tiers: finalTiers, accent_color: finalAccent, secondary_color: finalSecondary, wheel_opacity: finalOpacity, gifts_per_spin: finalGifts, sub_goal: finalSubGoal, sub_counter_title: finalSubTitle, sub_counter_label: finalSubLabel };
 }
 
 /**
