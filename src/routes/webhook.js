@@ -2,6 +2,7 @@ import { Router } from "express";
 import bodyParser from "body-parser";
 import { verifyKickSignature } from "../webhookVerify.js";
 import { spins } from "../services/spins.js";
+import { slots } from "../services/slots.js";
 import { getDb } from "../db.js";
 import { handleChatMessage } from "../services/chatBot.js";
 
@@ -111,6 +112,11 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       const gifter = payload?.gifter || payload?.data?.gifter || {};
       console.log(`[WEBHOOK] Gifts bid=${broadcasterId}: ${gifter?.username || "Anon"} x${giftCount}`);
 
+      // Slots: every gifted sub = 1 slots spin
+      if (giftCount > 0) {
+        slots.deliverOrQueue(broadcasterId, giftCount);
+      }
+
       // Determine tier and spin count based on gift count
       const config = getDb().getConfig(broadcasterId);
       const tiers = config?.tiers;
@@ -140,6 +146,30 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
           spins.deliverSpinOrQueue(broadcasterId, spinCount);
         }
       }
+    } else if (
+      type === "channel.subscription.new" ||
+      type === "channel.subscription.renewal" ||
+      payload?.name === "channel.subscription.new" ||
+      payload?.name === "channel.subscription.renewal"
+    ) {
+      const broadcasterId = Number(
+        payload?.broadcaster?.user_id ||
+        payload?.data?.broadcaster_user_id ||
+        payload?.broadcaster_user_id ||
+        0
+      );
+      if (!broadcasterId) {
+        console.warn("[WEBHOOK] Sub event missing broadcaster_user_id");
+        return res.status(200).send("ok-no-broadcaster");
+      }
+      const streamer = getDb().getStreamerById(broadcasterId);
+      if (!streamer) {
+        console.warn(`[WEBHOOK] Unknown broadcaster ${broadcasterId} - ignoring sub`);
+        return res.status(200).send("ok-unknown-broadcaster");
+      }
+      const subName = payload?.subscriber?.username || payload?.data?.subscriber?.username || "viewer";
+      console.log(`[WEBHOOK] Sub ${type} bid=${broadcasterId} from=${subName} -> 1 slots spin`);
+      slots.deliverOrQueue(broadcasterId, 1);
     } else if (type === "chat.message.sent") {
       const broadcasterId = Number(payload?.broadcaster?.user_id || 0);
       const content = payload?.content || "";

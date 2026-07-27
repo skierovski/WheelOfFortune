@@ -315,6 +315,9 @@
         <div class="url-box" onclick="copyText('${base}/overlay/${s.overlay_key}')">
           Wheel: ${base}/overlay/${s.overlay_key}
         </div>
+        <div class="url-box" onclick="copyText('${base}/slots/${s.overlay_key}')">
+          Slots: ${base}/slots/${s.overlay_key}
+        </div>
         <div class="url-box" onclick="copyText('${base}/delay/${s.overlay_key}')">
           Delay: ${base}/delay/${s.overlay_key}
         </div>
@@ -324,10 +327,12 @@
           <button class="btn btn-blue btn-sm" onclick="triggerSpin(${s.broadcaster_id}, 5)">5 Spins</button>
           <button class="btn btn-sm" onclick="simulateGift(${s.broadcaster_id})">Simulate 5 Gifts</button>
           <button class="btn btn-sm" onclick="simulateGift(${s.broadcaster_id}, 15)">Simulate 15 Gifts</button>
+          <button class="btn btn-sm" onclick="testSlots(${s.broadcaster_id})">Test Slots Spin</button>
           <button class="btn btn-sm" onclick="resetSpins(${s.broadcaster_id})">Reset Spins</button>
           <button class="btn btn-sm" onclick="skipDelay(${s.broadcaster_id})">Skip Delay</button>
           <button class="btn btn-sm" onclick="devLogin(${s.broadcaster_id})">Login as</button>
           <a class="btn btn-sm" href="/overlay/${s.overlay_key}" target="_blank">Open Overlay</a>
+          <a class="btn btn-sm" href="/slots/${s.overlay_key}" target="_blank">Open Slots</a>
           <a class="btn btn-sm" href="/delay/${s.overlay_key}" target="_blank">Open Delay</a>
           <button class="btn btn-danger btn-sm" onclick="deleteStreamer(${s.broadcaster_id})">Delete</button>
         </div>
@@ -440,6 +445,17 @@
     try {
       const data = await api("POST", `/admin/streamers/${bid}/simulate-gift`, { gift_count: count });
       log(`Gift sim bid=${bid}: ${data.message}`);
+      toast(data.message);
+    } catch (e) {
+      log("Error: " + e.message);
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function testSlots(bid) {
+    try {
+      const data = await api("POST", `/admin/streamers/${bid}/test-slots`, { n: 1 });
+      log(`Slots test bid=${bid}: ${data.message}`);
       toast(data.message);
     } catch (e) {
       log("Error: " + e.message);

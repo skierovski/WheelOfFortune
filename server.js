@@ -6,6 +6,7 @@ import { env } from "./src/utils/env.js";
 import { initDb } from "./src/db.js";
 import { startWatchdogs } from "./src/services/watchdogs.js";
 import { startSpinChecker } from "./src/services/spins.js";
+import { startSlotsChecker } from "./src/services/slots.js";
 
 // Initialize database
 const db = initDb(env.DB_PATH);
@@ -39,3 +40,4 @@ server.listen(env.PORT_HTTP, () => {
 // Start background services
 startWatchdogs();
 startSpinChecker();
+startSlotsChecker();

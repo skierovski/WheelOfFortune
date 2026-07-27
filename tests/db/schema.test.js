@@ -25,6 +25,7 @@ describe("database schema and queries", () => {
       expect(tables).toContain("wheel_configs");
       expect(tables).toContain("goals");
       expect(tables).toContain("spin_state");
+      expect(tables).toContain("slots_state");
       expect(tables).toContain("subscriptions");
       expect(tables).toContain("invite_codes");
     });

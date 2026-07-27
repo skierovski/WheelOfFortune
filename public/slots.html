@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fruit Slots Overlay</title>
+  <style>
+    :root {
+      --accent: #f5a623;
+      --secondary: #0a1628;
+      --neon: #3b82f6;
+      --gold: #fbbf24;
+      --panel: rgba(8, 14, 28, 0.92);
+      --opacity: 0.95;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    #stage {
+      width: 100vw; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity .5s ease;
+      pointer-events: none;
+    }
+    #stage.show { opacity: 1; }
+
+    .machine {
+      width: min(920px, 94vw);
+      padding: 18px 22px 16px;
+      border-radius: 18px;
+      background:
+        radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 55%),
+        linear-gradient(165deg, color-mix(in srgb, var(--secondary) 90%, #000), #050a14);
+      border: 3px solid color-mix(in srgb, var(--accent) 70%, #fff);
+      box-shadow:
+        0 0 0 2px rgba(0,0,0,.6),
+        0 0 40px color-mix(in srgb, var(--accent) 40%, transparent),
+        inset 0 1px 0 rgba(255,255,255,.12);
+      opacity: var(--opacity);
+    }
+
+    .title {
+      text-align: center;
+      font-weight: 900;
+      font-size: clamp(22px, 3.2vw, 36px);
+      letter-spacing: .12em;
+      color: var(--gold);
+      text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 80%, transparent), 0 2px 0 #000;
+      margin: 0 0 12px;
+      text-transform: uppercase;
+    }
+    .title span.gem {
+      display: inline-block;
+      margin: 0 .35em;
+      filter: drop-shadow(0 0 8px var(--neon));
+    }
+
+    .reels-wrap {
+      position: relative;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .side-label {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      color: var(--gold);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: .18em;
+      text-align: center;
+      opacity: .85;
+      padding: 8px 2px;
+      border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+      border-radius: 8px;
+      background: rgba(0,0,0,.35);
+    }
+
+    .reels {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      padding: 10px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #061018, #0b1a2e);
+      border: 2px solid var(--neon);
+      box-shadow: inset 0 0 30px rgba(0,0,0,.7), 0 0 18px color-mix(in srgb, var(--neon) 35%, transparent);
+      position: relative;
+      overflow: hidden;
+    }
+    .reels::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0;
+      top: calc(33.333% - 1px);
+      height: calc(33.333% + 2px);
+      border-top: 2px solid color-mix(in srgb, var(--gold) 70%, transparent);
+      border-bottom: 2px solid color-mix(in srgb, var(--gold) 70%, transparent);
+      background: color-mix(in srgb, var(--gold) 8%, transparent);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .reel {
+      height: clamp(210px, 32vh, 280px);
+      overflow: hidden;
+      border-radius: 8px;
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,.15) 3px, rgba(0,0,0,.15) 4px),
+        #0a1524;
+      border: 1px solid rgba(59,130,246,.35);
+      position: relative;
+    }
+    .reel-strip {
+      will-change: transform;
+    }
+    .cell {
+      height: calc(clamp(210px, 32vh, 280px) / 3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(34px, 5.5vw, 52px);
+      line-height: 1;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.6));
+      user-select: none;
+    }
+    .cell.win {
+      animation: winPulse .55s ease-in-out 3;
+    }
+    @keyframes winPulse {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px var(--gold)); }
+      50% { transform: scale(1.18); filter: drop-shadow(0 0 16px var(--gold)); }
+    }
+
+    .hud {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .hud-box {
+      background: var(--panel);
+      border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #e2e8f0;
+      min-width: 0;
+    }
+    .hud-box .label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      color: var(--gold);
+      opacity: .9;
+    }
+    .hud-box .value {
+      font-size: clamp(20px, 3vw, 28px);
+      font-weight: 900;
+      margin-top: 2px;
+      color: #fff;
+      text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent);
+    }
+    .hud-box.win .value { color: #4ade80; }
+    .spin-btn {
+      min-width: 150px;
+      background: linear-gradient(180deg, #facc15, #d97706);
+      border: 2px solid #fde68a;
+      border-radius: 12px;
+      color: #1a0f00;
+      font-weight: 900;
+      font-size: 18px;
+      letter-spacing: .08em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(250, 204, 21, .35), inset 0 1px 0 rgba(255,255,255,.4);
+      padding: 8px 18px;
+    }
+    .spin-btn .bet {
+      font-size: 12px;
+      font-weight: 700;
+      opacity: .85;
+      margin-top: 2px;
+    }
+    .spin-btn.spinning {
+      filter: brightness(1.15);
+      animation: spinGlow .4s ease-in-out infinite alternate;
+    }
+    @keyframes spinGlow {
+      from { box-shadow: 0 0 12px rgba(250,204,21,.3); }
+      to { box-shadow: 0 0 28px rgba(250,204,21,.7); }
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%; top: 18%;
+      transform: translate(-50%, -20px) scale(.92);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 40;
+      background: rgba(10, 16, 32, .94);
+      border: 2px solid var(--gold);
+      color: #fff;
+      padding: 16px 28px;
+      border-radius: 14px;
+      font-weight: 900;
+      font-size: clamp(18px, 2.8vw, 28px);
+      text-align: center;
+      box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 50%, transparent);
+      transition: opacity .35s ease, transform .35s ease;
+      max-width: 90vw;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+    #toast .sub {
+      display: block;
+      font-size: .55em;
+      font-weight: 700;
+      color: var(--gold);
+      margin-top: 6px;
+      letter-spacing: .06em;
+    }
+
+    #authWarn {
+      position: fixed; left: 12px; bottom: 12px;
+      background: rgba(127,29,29,.9); color: #fecaca;
+      padding: 8px 12px; border-radius: 8px; font-size: 12px;
+      display: none; z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div class="machine" id="machine">
+      <h1 class="title">FRUIT <span class="gem">💎</span> SLOTS</h1>
+      <div class="reels-wrap">
+        <div class="side-label">10 LINES FIXED</div>
+        <div class="reels" id="reels"></div>
+        <div class="side-label">10 LINES FIXED</div>
+      </div>
+      <div class="hud">
+        <div class="hud-box">
+          <div class="label">BANK</div>
+          <div class="value" id="bankVal">$0.00</div>
+        </div>
+        <div class="spin-btn" id="spinBtn">
+          <span id="statusText">WAITING</span>
+          <span class="bet" id="betText">$0.20</span>
+        </div>
+        <div class="hud-box win">
+          <div class="label">WIN</div>
+          <div class="value" id="winVal">$0.00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <div id="authWarn"></div>
+
+  <script>
+  (() => {
+    const SYMBOL_EMOJI = {
+      cherry: "🍓",
+      lemon: "🍋",
+      orange: "🍊",
+      plum: "🍑",
+      melon: "🍉",
+      grapes: "🍇",
+      dollar: "💵",
+    };
+    const SYMBOLS = Object.keys(SYMBOL_EMOJI);
+    const REELS = 5;
+    const ROWS = 3;
+    const CELL_H = () => (document.querySelector(".reel")?.clientHeight || 240) / 3;
+
+    const pathParts = location.pathname.split("/").filter(Boolean);
+    const OVERLAY_KEY = pathParts[pathParts.length - 1] || "";
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const WS_URL = `${proto}//${location.host}/ws?key=${encodeURIComponent(OVERLAY_KEY)}`;
+
+    let bank = 0;
+    let spinning = false;
+    let queue = [];
+    let accent = "#f5a623";
+    let audioCtx = null;
+    let reelEls = [];
+    let stripEls = [];
+
+    function money(n) {
+      return "$" + (Number(n) || 0).toFixed(2);
+    }
+
+    function applyTheme(cfg) {
+      if (cfg?.accent_color) {
+        accent = cfg.accent_color;
+        document.documentElement.style.setProperty("--accent", accent);
+      }
+      if (cfg?.secondary_color) {
+        document.documentElement.style.setProperty("--secondary", cfg.secondary_color);
+      }
+      if (cfg?.wheel_opacity != null) {
+        document.documentElement.style.setProperty("--opacity", String(cfg.wheel_opacity));
+      }
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+      }
+      if (audioCtx?.state === "suspended") audioCtx.resume().catch(() => {});
+      return audioCtx;
+    }
+
+    function beep(freq, dur, type = "square", gain = 0.04) {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = gain;
+      o.connect(g); g.connect(ctx.destination);
+      const t = ctx.currentTime;
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.start(t); o.stop(t + dur);
+    }
+
+    function sfxSpinStart() {
+      beep(120, 0.08, "sawtooth", 0.03);
+      beep(90, 0.12, "square", 0.025);
+    }
+    function sfxStop() { beep(220, 0.06, "triangle", 0.05); beep(440, 0.04, "square", 0.03); }
+    function sfxWin() {
+      [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.15, "sine", 0.05), i * 90));
+    }
+    function sfxPrize() {
+      [392, 523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => beep(f, 0.18, "triangle", 0.06), i * 70));
+    }
+
+    function buildReels() {
+      const root = document.getElementById("reels");
+      root.innerHTML = "";
+      reelEls = [];
+      stripEls = [];
+      for (let c = 0; c < REELS; c++) {
+        const reel = document.createElement("div");
+        reel.className = "reel";
+        const strip = document.createElement("div");
+        strip.className = "reel-strip";
+        // Long strip for scrolling illusion
+        const cells = [];
+        for (let i = 0; i < 24; i++) {
+          const sym = SYMBOLS[i % SYMBOLS.length];
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.dataset.sym = sym;
+          cell.textContent = SYMBOL_EMOJI[sym];
+          strip.appendChild(cell);
+          cells.push(cell);
+        }
+        reel.appendChild(strip);
+        root.appendChild(reel);
+        reelEls.push(reel);
+        stripEls.push({ strip, cells });
+      }
+      // Idle random middle view
+      setIdleGrid(randomIdleGrid());
+    }
+
+    function randomIdleGrid() {
+      const g = [];
+      for (let c = 0; c < REELS; c++) {
+        const col = [];
+        for (let r = 0; r < ROWS; r++) col.push(SYMBOLS[(c + r * 3) % SYMBOLS.length]);
+        g.push(col);
+      }
+      return g;
+    }
+
+    function setIdleGrid(grid) {
+      const h = CELL_H();
+      for (let c = 0; c < REELS; c++) {
+        const { strip, cells } = stripEls[c];
+        // Place target symbols at indices 10,11,12 (visible window top=10)
+        const base = 10;
+        for (let r = 0; r < ROWS; r++) {
+          const sym = grid[c][r];
+          cells[base + r].dataset.sym = sym;
+          cells[base + r].textContent = SYMBOL_EMOJI[sym];
+          cells[base + r].classList.remove("win");
+        }
+        strip.style.transition = "none";
+        strip.style.transform = `translateY(${-base * h}px)`;
+      }
+    }
+
+    function showToast(html, ms = 2800) {
+      const el = document.getElementById("toast");
+      el.innerHTML = html;
+      el.classList.add("show");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => el.classList.remove("show"), ms);
+    }
+
+    function updateHud({ bank: b, win, status } = {}) {
+      if (b != null) {
+        bank = b;
+        document.getElementById("bankVal").textContent = money(bank);
+      }
+      if (win != null) document.getElementById("winVal").textContent = money(win);
+      if (status) {
+        document.getElementById("statusText").textContent = status;
+        document.getElementById("spinBtn").classList.toggle("spinning", status === "SPINNING");
+      }
+    }
+
+    function animateReelTo(colIndex, targetCol, duration, onDone) {
+      const { strip, cells } = stripEls[colIndex];
+      const h = CELL_H();
+      const base = 10;
+      // Fill strip with random then lock end
+      for (let i = 0; i < cells.length; i++) {
+        const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+        cells[i].dataset.sym = sym;
+        cells[i].textContent = SYMBOL_EMOJI[sym];
+        cells[i].classList.remove("win");
+      }
+      for (let r = 0; r < ROWS; r++) {
+        cells[base + r].dataset.sym = targetCol[r];
+        cells[base + r].textContent = SYMBOL_EMOJI[targetCol[r]];
+      }
+      // Start offset above, then ease to base
+      const start = base + 12;
+      strip.style.transition = "none";
+      strip.style.transform = `translateY(${-start * h}px)`;
+      strip.offsetHeight;
+      strip.style.transition = `transform ${duration}ms cubic-bezier(.15,.7,.1,1)`;
+      strip.style.transform = `translateY(${-base * h}px)`;
+      setTimeout(() => {
+        sfxStop();
+        onDone?.();
+      }, duration);
+    }
+
+    function runSpin(result) {
+      return new Promise((resolve) => {
+        spinning = true;
+        updateHud({ win: 0, status: "SPINNING" });
+        sfxSpinStart();
+        const grid = result.grid;
+        let done = 0;
+        for (let c = 0; c < REELS; c++) {
+          const dur = 1800 + c * 450;
+          animateReelTo(c, grid[c], dur, () => {
+            done++;
+            if (done === REELS) {
+              // Highlight middle row if win
+              if (result.win > 0 && result.matchCount >= 3) {
+                for (let c2 = 0; c2 < result.matchCount; c2++) {
+                  stripEls[c2].cells[11]?.classList.add("win");
+                }
+                sfxWin();
+              }
+              updateHud({ bank: result.bank, win: result.win, status: "WAITING" });
+              if (result.win > 0) {
+                showToast(`WIN ${money(result.win)}<span class="sub">BANK ${money(result.bank)}</span>`);
+              }
+              const prizes = result.prizes_hit || [];
+              if (prizes.length) {
+                setTimeout(() => {
+                  sfxPrize();
+                  const labels = prizes.map((p) => p.label).join(" · ");
+                  showToast(`🏆 ${labels}<span class="sub">BANK THRESHOLD</span>`, 4000);
+                  for (const p of prizes) {
+                    fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ label: `Slots prize: ${p.label} (bank $${result.bank})` }),
+                    }).catch(() => {});
+                  }
+                }, result.win > 0 ? 900 : 0);
+              } else if (result.win > 0) {
+                fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ label: `Slots win $${result.win.toFixed(2)} (bank $${result.bank.toFixed(2)})` }),
+                }).catch(() => {});
+              }
+              fetch(`/overlay/${OVERLAY_KEY}/slots/complete`, { method: "POST" }).catch(() => {});
+              spinning = false;
+              resolve();
+            }
+          });
+        }
+      });
+    }
+
+    async function drain() {
+      if (spinning) return;
+      while (queue.length) {
+        const item = queue.shift();
+        await runSpin(item.result);
+      }
+    }
+
+    function handleMessage(msg) {
+      if (!msg) return;
+      if (msg.type === "slots_config") {
+        // prizes live server-side; bank sync
+        if (msg.bank != null) updateHud({ bank: msg.bank });
+        return;
+      }
+      if (msg.type === "slots_bank") {
+        updateHud({ bank: msg.bank ?? 0 });
+        return;
+      }
+      if (msg.type === "config") {
+        applyTheme(msg);
+        return;
+      }
+      if (msg.action === "slots" && msg.result) {
+        queue.push(msg);
+        drain();
+      }
+    }
+
+    function connectWs() {
+      let ws;
+      try { ws = new WebSocket(WS_URL); } catch { return setTimeout(connectWs, 2000); }
+      ws.onopen = () => console.log("[slots] ws open");
+      ws.onclose = () => setTimeout(connectWs, 2000);
+      ws.onerror = () => { try { ws.close(); } catch {} };
+      ws.onmessage = (ev) => {
+        try { handleMessage(JSON.parse(ev.data)); } catch {}
+      };
+    }
+
+    async function loadState() {
+      try {
+        const r = await fetch(`/overlay/${OVERLAY_KEY}/slots/state`, { cache: "no-store" });
+        const j = await r.json();
+        if (j.ok) {
+          applyTheme(j);
+          updateHud({ bank: j.bank, win: 0, status: "WAITING" });
+          if (j.bet) document.getElementById("betText").textContent = money(j.bet);
+        }
+      } catch {}
+      try {
+        const r2 = await fetch(`/overlay/${OVERLAY_KEY}/config`, { cache: "no-store" });
+        const j2 = await r2.json();
+        if (j2.ok) applyTheme(j2);
+      } catch {}
+    }
+
+    // Unlock audio on first gesture / OBS often autoplays
+    ["pointerdown", "keydown", "click"].forEach((ev) =>
+      window.addEventListener(ev, () => ensureAudio(), { once: true })
+    );
+
+    buildReels();
+    loadState();
+    connectWs();
+    document.getElementById("stage").classList.add("show");
+    window.addEventListener("resize", () => {
+      // re-snap strips after resize
+      setIdleGrid(randomIdleGrid());
+    });
+  })();
+  </script>
+</body>
+</html>

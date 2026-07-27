@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 import { getDb } from "./db.js";
 import { spins } from "./services/spins.js";
+import { slots } from "./services/slots.js";
 import { getOverlayAuthStatus } from "./services/authStatus.js";
 
 /**
@@ -73,9 +74,9 @@ export function createWSS() {
     }
   }, 30_000);
 
-  // Register the broadcast function with the spins service.
+  // Register the broadcast function with the spins + slots services.
   // Signature: (broadcasterId, msg) => numberOfClientsReached
-  spins.setBroadcaster((broadcasterId, msg) => {
+  const broadcastToRoom = (broadcasterId, msg) => {
     const room = rooms.get(broadcasterId);
     if (!room) return 0;
     let sent = 0;
@@ -86,7 +87,9 @@ export function createWSS() {
       }
     }
     return sent;
-  });
+  };
+  spins.setBroadcaster(broadcastToRoom);
+  slots.setBroadcaster(broadcastToRoom);
 
   /**
    * Broadcast to a specific broadcaster's connected clients.

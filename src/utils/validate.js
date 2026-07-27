@@ -137,6 +137,39 @@ export function validateTiers(tiers) {
 }
 
 /**
+ * Validate slots prize thresholds (bank $ → prize label).
+ * @param {*} raw
+ * @returns {{ valid: boolean, error?: string, prizes?: Array<{min_bank:number,label:string}> }}
+ */
+export function validateSlotsPrizes(raw) {
+  if (!Array.isArray(raw)) {
+    return { valid: false, error: "slots_prizes must be an array" };
+  }
+  if (raw.length > 20) {
+    return { valid: false, error: "Maximum 20 slots prize thresholds" };
+  }
+  const seen = new Set();
+  const prizes = [];
+  for (const p of raw) {
+    const min = Math.round(Number(p?.min_bank) * 100) / 100;
+    const label = String(p?.label || "").trim().slice(0, 80);
+    if (!Number.isFinite(min) || min <= 0 || min > 100000) {
+      return { valid: false, error: `Invalid min_bank for prize "${label || "?"}"` };
+    }
+    if (!label) {
+      return { valid: false, error: "Each slots prize needs a label" };
+    }
+    if (seen.has(min)) {
+      return { valid: false, error: `Duplicate min_bank: ${min}` };
+    }
+    seen.add(min);
+    prizes.push({ min_bank: min, label });
+  }
+  prizes.sort((a, b) => a.min_bank - b.min_bank);
+  return { valid: true, prizes };
+}
+
+/**
  * Validate overlay key format.
  * @param {string} key
  * @returns {boolean}

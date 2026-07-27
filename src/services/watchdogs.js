@@ -37,7 +37,12 @@ async function ensureAllSubscriptions() {
     return; // DB not ready
   }
 
-  const REQUIRED_EVENTS = ["channel.subscription.gifts", "chat.message.sent"];
+  const REQUIRED_EVENTS = [
+    "channel.subscription.gifts",
+    "channel.subscription.new",
+    "channel.subscription.renewal",
+    "chat.message.sent",
+  ];
 
   for (const streamer of streamers) {
     if (!streamer.access_token) continue;

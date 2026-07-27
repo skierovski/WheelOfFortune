@@ -55,6 +55,13 @@ router.get("/subs/:key", resolveOverlayKey, (req, res) => {
   res.sendFile(file);
 });
 
+// Overlay: slots (by overlay_key)
+router.get("/slots/:key", resolveOverlayKey, (req, res) => {
+  const file = path.join(publicDir, "slots.html");
+  if (!fs.existsSync(file)) return res.status(404).send("slots.html not found");
+  res.sendFile(file);
+});
+
 // Status endpoint (session-protected)
 router.get("/dashboard/status", requireSession, async (req, res) => {
   try {

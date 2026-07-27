@@ -4,6 +4,7 @@ import fs from "fs";
 import { env } from "../utils/env.js";
 import { getDb } from "../db.js";
 import { spins } from "../services/spins.js";
+import { slots } from "../services/slots.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
 
 const router = Router();
@@ -313,6 +314,8 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
   const giftCount = Math.max(1, Math.min(100, Number(req.body?.gift_count || 5)));
   const gifterName = String(req.body?.gifter_name || "TestGifter");
 
+  const slotsDelivered = slots.deliverOrQueue(bid, giftCount);
+
   // Convert gifts to spins (tier-aware)
   const config = getDb().getConfig(bid);
   const configTiers = config?.tiers;
@@ -340,7 +343,7 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
     }
   }
 
-  console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} -> spins=${spinCount}${tierUsed ? ` tier="${tierUsed}"` : ""}`);
+  console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} -> spins=${spinCount}${tierUsed ? ` tier="${tierUsed}"` : ""} slots=${giftCount}`);
 
   res.json({
     ok: true,
@@ -348,10 +351,25 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
     spin_count: spinCount,
     tier: tierUsed,
     delivered,
+    slots_delivered: slotsDelivered,
     pending: spins.getPending(bid),
-    message: spinCount > 0
-      ? `${giftCount} gifts -> ${spinCount} spin(s)${tierUsed ? ` [${tierUsed}]` : ""}, ${delivered} delivered to overlay`
-      : `${giftCount} gifts -> not enough for a spin (need ${giftsPerSpin})`,
+    message: `${giftCount} gifts -> wheel ${spinCount} / slots ${giftCount} (${slotsDelivered} slots delivered)`,
+  });
+});
+
+router.post("/admin/streamers/:bid/test-slots", requireAdmin, (req, res) => {
+  const bid = Number(req.params.bid);
+  if (!getDb().getStreamerById(bid)) {
+    return res.status(404).json({ ok: false, error: "Streamer not found" });
+  }
+  const n = Math.max(1, Math.min(20, Number(req.body?.n || 1)));
+  const delivered = slots.testSpin(bid, n);
+  res.json({
+    ok: true,
+    delivered,
+    pending: slots.getPending(bid),
+    bank: slots.getBank(bid),
+    message: `Test slots ×${n} → ${delivered} delivered`,
   });
 });
 

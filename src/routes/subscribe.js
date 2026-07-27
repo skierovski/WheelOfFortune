@@ -18,10 +18,13 @@ router.get("/dashboard/subscribe", requireSession, async (req, res) => {
     const subs = await listSubscriptions(bid);
     const callback = getCallbackUrl(req);
     const hasGifts = subs.some((s) => s?.name === "channel.subscription.gifts");
+    const hasNew = subs.some((s) => s?.name === "channel.subscription.new");
+    const hasRenewal = subs.some((s) => s?.name === "channel.subscription.renewal");
 
     return res.json({
       ok: true,
       subscribed: hasGifts,
+      slots_events: hasNew && hasRenewal,
       callbackUrl: callback,
       allSubscriptions: subs,
     });

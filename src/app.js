@@ -10,6 +10,7 @@ import configRoutes from "./routes/config.js";
 import subscribeRoutes from "./routes/subscribe.js";
 import webhookRoutes from "./routes/webhook.js";
 import spinsRoutes from "./routes/spins.js";
+import slotsRoutes from "./routes/slots.js";
 import adminRoutes from "./routes/admin.js";
 import commandsRoutes from "./routes/commands.js";
 
@@ -97,5 +98,6 @@ app.use(indexRoutes);
 app.use(configRoutes);
 app.use(subscribeRoutes);
 app.use(spinsRoutes);
+app.use(slotsRoutes);
 app.use(commandsRoutes);
 app.use(adminRoutes);

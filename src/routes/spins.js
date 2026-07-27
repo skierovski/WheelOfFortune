@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { spins } from "../services/spins.js";
+import { slots } from "../services/slots.js";
 import { postChatMessage } from "../services/kick.js";
 import { announcePrize } from "../services/chatBot.js";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
@@ -51,6 +52,9 @@ router.post("/dashboard/simulate-gift", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const giftCount = Math.max(1, Math.min(100, Number(req.body?.gift_count) || 1));
 
+  // Slots: every gifted sub = 1 slots spin
+  const slotsDelivered = slots.deliverOrQueue(bid, giftCount);
+
   const config = getDb().getConfig(bid);
   const configTiers = config?.tiers;
   let delivered = 0;
@@ -82,10 +86,11 @@ router.post("/dashboard/simulate-gift", requireSession, (req, res) => {
     spin_count: spinCount,
     tier: tierUsed,
     delivered,
+    slots_delivered: slotsDelivered,
+    slots_pending: slots.getPending(bid),
+    slots_bank: slots.getBank(bid),
     pending: spins.getPending(bid),
-    message: spinCount > 0
-      ? `${giftCount} gifts -> ${spinCount} spin(s)${tierUsed ? ` [${tierUsed}]` : ""}, ${delivered} delivered`
-      : `${giftCount} gifts below minimum tier threshold, no spin triggered`,
+    message: `${giftCount} gifts -> wheel: ${spinCount} spin(s)${tierUsed ? ` [${tierUsed}]` : ""} (${delivered} delivered); slots: ${giftCount} queued (${slotsDelivered} delivered)`,
   });
 });
 

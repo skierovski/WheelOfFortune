@@ -33,6 +33,8 @@ export async function subscribeToEvents(broadcasterId, callbackUrl, events) {
   const token = await ensureAccessToken(broadcasterId);
   const eventList = events || [
     { name: "channel.subscription.gifts", version: 1 },
+    { name: "channel.subscription.new", version: 1 },
+    { name: "channel.subscription.renewal", version: 1 },
     { name: "chat.message.sent", version: 1 },
   ];
   const response = await fetch("https://api.kick.com/public/v1/events/subscriptions", {

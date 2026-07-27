@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS wheel_configs (
   secondary_color  TEXT DEFAULT '#121228',
   wheel_opacity    REAL DEFAULT 0.9,
   gifts_per_spin   INTEGER DEFAULT 5,
+  slots_prizes_json TEXT DEFAULT '[]',
   updated_at       INTEGER DEFAULT (unixepoch())
 );
 
@@ -38,6 +39,16 @@ CREATE TABLE IF NOT EXISTS goals (
 
 CREATE TABLE IF NOT EXISTS spin_state (
   broadcaster_id   INTEGER PRIMARY KEY REFERENCES streamers(broadcaster_id),
+  pending_count    INTEGER DEFAULT 0,
+  last_spin_time   INTEGER DEFAULT 0,
+  spin_in_progress INTEGER DEFAULT 0,
+  updated_at       INTEGER DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS slots_state (
+  broadcaster_id   INTEGER PRIMARY KEY REFERENCES streamers(broadcaster_id),
+  bank             REAL DEFAULT 0,
+  claimed_json     TEXT DEFAULT '[]',
   pending_count    INTEGER DEFAULT 0,
   last_spin_time   INTEGER DEFAULT 0,
   spin_in_progress INTEGER DEFAULT 0,
@@ -139,6 +150,9 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("sub_counter_label")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_label TEXT DEFAULT 'aktywne subskrypcje'");
   }
+  if (!cols.includes("slots_prizes_json")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN slots_prizes_json TEXT DEFAULT '[]'");
+  }
 
   // bot_config migrations
   const botCols = sqlite.prepare("PRAGMA table_info(bot_config)").all().map(c => c.name);
@@ -197,8 +211,8 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, updated_at)
-      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, @sub_goal, @sub_counter_title, @sub_counter_label, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, slots_prizes_json, updated_at)
+      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, @sub_goal, @sub_counter_title, @sub_counter_label, @slots_prizes_json, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
         items_json          = excluded.items_json,
         tiers_json          = excluded.tiers_json,
@@ -209,9 +223,37 @@ export function openDatabase(dbPath = ":memory:") {
         sub_goal            = excluded.sub_goal,
         sub_counter_title   = excluded.sub_counter_title,
         sub_counter_label   = excluded.sub_counter_label,
+        slots_prizes_json   = excluded.slots_prizes_json,
         updated_at          = unixepoch()
     `),
     getConfig: sqlite.prepare(`SELECT * FROM wheel_configs WHERE broadcaster_id = ?`),
+    updateSlotsPrizes: sqlite.prepare(`
+      INSERT INTO wheel_configs (broadcaster_id, slots_prizes_json, updated_at)
+      VALUES (@broadcaster_id, @slots_prizes_json, unixepoch())
+      ON CONFLICT(broadcaster_id) DO UPDATE SET
+        slots_prizes_json = excluded.slots_prizes_json,
+        updated_at = unixepoch()
+    `),
+
+    // Slots state
+    upsertSlotsState: sqlite.prepare(`
+      INSERT INTO slots_state (broadcaster_id, bank, claimed_json, pending_count, last_spin_time, spin_in_progress, updated_at)
+      VALUES (@broadcaster_id, @bank, @claimed_json, @pending_count, @last_spin_time, @spin_in_progress, unixepoch())
+      ON CONFLICT(broadcaster_id) DO UPDATE SET
+        bank             = excluded.bank,
+        claimed_json     = excluded.claimed_json,
+        pending_count    = excluded.pending_count,
+        last_spin_time   = excluded.last_spin_time,
+        spin_in_progress = excluded.spin_in_progress,
+        updated_at       = unixepoch()
+    `),
+    getSlotsState: sqlite.prepare(`SELECT * FROM slots_state WHERE broadcaster_id = ?`),
+    getStreamersWithPendingSlots: sqlite.prepare(`
+      SELECT s.*, ss.pending_count, ss.last_spin_time, ss.spin_in_progress, ss.bank
+      FROM streamers s
+      JOIN slots_state ss ON s.broadcaster_id = ss.broadcaster_id
+      WHERE ss.pending_count > 0
+    `),
 
     // Goals
     upsertGoals: sqlite.prepare(`
@@ -358,8 +400,14 @@ export function openDatabase(dbPath = ":memory:") {
       const row = stmts.getConfig.get(broadcasterId);
       if (!row) return null;
       const tiers = row.tiers_json ? JSON.parse(row.tiers_json) : null;
+      let slots_prizes = [];
+      try {
+        slots_prizes = JSON.parse(row.slots_prizes_json || "[]");
+      } catch {
+        slots_prizes = [];
+      }
       return {
-        items: JSON.parse(row.items_json),
+        items: JSON.parse(row.items_json || "[]"),
         tiers: Array.isArray(tiers) ? tiers : null,
         accent_color: row.accent_color || "#7c3aed",
         secondary_color: row.secondary_color || "#121228",
@@ -368,11 +416,15 @@ export function openDatabase(dbPath = ":memory:") {
         sub_goal: row.sub_goal ?? 0,
         sub_counter_title: row.sub_counter_title ?? "Subskrybenci",
         sub_counter_label: row.sub_counter_label ?? "aktywne subskrypcje",
+        slots_prizes: Array.isArray(slots_prizes) ? slots_prizes : [],
       };
     },
 
-    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label }) {
+    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, slots_prizes }) {
       const prev = stmts.getConfig.get(broadcasterId);
+      const prizesJson = slots_prizes != null
+        ? JSON.stringify(slots_prizes)
+        : (prev?.slots_prizes_json ?? "[]");
       stmts.upsertConfig.run({
         broadcaster_id: broadcasterId,
         items_json: JSON.stringify(items),
@@ -384,7 +436,59 @@ export function openDatabase(dbPath = ":memory:") {
         sub_goal: sub_goal ?? prev?.sub_goal ?? 0,
         sub_counter_title: sub_counter_title ?? prev?.sub_counter_title ?? "Subskrybenci",
         sub_counter_label: sub_counter_label ?? prev?.sub_counter_label ?? "aktywne subskrypcje",
+        slots_prizes_json: prizesJson,
       });
+    },
+
+    saveSlotsPrizes(broadcasterId, prizes) {
+      stmts.updateSlotsPrizes.run({
+        broadcaster_id: broadcasterId,
+        slots_prizes_json: JSON.stringify(prizes || []),
+      });
+    },
+
+    getSlotsState(broadcasterId) {
+      const row = stmts.getSlotsState.get(broadcasterId);
+      if (!row) {
+        return {
+          broadcaster_id: broadcasterId,
+          bank: 0,
+          claimed: [],
+          pending_count: 0,
+          last_spin_time: 0,
+          spin_in_progress: 0,
+        };
+      }
+      let claimed = [];
+      try {
+        claimed = JSON.parse(row.claimed_json || "[]");
+      } catch {
+        claimed = [];
+      }
+      return {
+        broadcaster_id: broadcasterId,
+        bank: Number(row.bank) || 0,
+        claimed: Array.isArray(claimed) ? claimed : [],
+        pending_count: row.pending_count || 0,
+        last_spin_time: row.last_spin_time || 0,
+        spin_in_progress: row.spin_in_progress || 0,
+      };
+    },
+
+    saveSlotsState(broadcasterId, { bank, claimed, pending_count, last_spin_time, spin_in_progress }) {
+      const prev = this.getSlotsState(broadcasterId);
+      stmts.upsertSlotsState.run({
+        broadcaster_id: broadcasterId,
+        bank: bank ?? prev.bank ?? 0,
+        claimed_json: JSON.stringify(claimed ?? prev.claimed ?? []),
+        pending_count: pending_count ?? prev.pending_count ?? 0,
+        last_spin_time: last_spin_time ?? prev.last_spin_time ?? 0,
+        spin_in_progress: spin_in_progress ? 1 : 0,
+      });
+    },
+
+    getStreamersWithPendingSlots() {
+      return stmts.getStreamersWithPendingSlots.all();
     },
 
     // ── Goals ───────────────────────────────────────────────────

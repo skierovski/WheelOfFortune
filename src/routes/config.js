@@ -25,6 +25,7 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
     sub_goal: cfg?.sub_goal ?? 0,
     sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
     sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
+    slots_prizes: cfg?.slots_prizes ?? [],
     auth_ok: auth.auth_ok,
     auth_message: auth.auth_message,
   });

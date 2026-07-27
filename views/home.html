@@ -252,6 +252,16 @@
               <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
+          <div class="muted small" style="margin-top:8px;" data-i18n="urls_slots">Slots overlay:</div>
+          <div class="url-row">
+            <div class="overlay-url masked" id="slotsUrl" onclick="copyUrl(this)">
+              <span class="copy-hint">click to copy</span>
+            </div>
+            <button class="eye-btn" data-target="slotsUrl" onclick="toggleUrlVisibility(this)" title="Show / hide">
+              <svg class="ico-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
           <div class="muted small" style="margin-top:8px;" data-i18n="urls_delay">Delay timer overlay:</div>
           <div class="url-row">
             <div class="overlay-url masked" id="delayUrl" onclick="copyUrl(this)">
@@ -295,6 +305,12 @@
               <span data-i18n="actions_test_spin">Send Test Spin</span>
             </span>
           </button>
+          <button class="btn btn-accent" id="testSlotsBtn" style="padding:12px 20px; font-size:15px; font-weight:700; width:100%; background:linear-gradient(135deg,#f59e0b,#d97706);">
+            <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%;">
+              <span style="font-size:18px;">🎰</span>
+              <span data-i18n="actions_test_slots">Send Test Slots Spin</span>
+            </span>
+          </button>
           <button class="btn" id="resetDelayBtn" style="padding:12px 20px; font-size:15px; font-weight:600; width:100%;">
             <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
@@ -308,8 +324,37 @@
             </div>
             <button class="btn" id="sendGiftsBtn" style="padding:12px 20px; font-size:15px; font-weight:600; white-space:nowrap;" data-i18n="actions_send_gifts">Send Gifts</button>
           </div>
+          <button class="btn" id="simulateSubBtn" style="padding:12px 20px; font-size:15px; font-weight:600; width:100%;" data-i18n="actions_sim_sub">Simulate paid sub</button>
           <div id="actionResult" style="display:none; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:600; text-align:center;"></div>
         </div>
+      </div>
+
+      <!-- SLOTS PRIZES -->
+      <div class="card full-width">
+        <h2 data-i18n="slots_title">Fruit Slots — bank prizes</h2>
+        <div class="muted" data-i18n="slots_desc">Every gift and paid sub/renewal spins the fruit slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).</div>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; align-items:center;">
+          <div class="hud-box" style="background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:10px 16px;">
+            <div class="muted small" data-i18n="slots_bank_label">Current bank</div>
+            <div id="slotsBankVal" style="font-size:22px; font-weight:800; color:#fbbf24;">$0.00</div>
+          </div>
+          <button class="btn" id="resetSlotsBankBtn" data-i18n="slots_reset_bank">Reset bank</button>
+          <button class="btn" id="saveSlotsPrizesBtn" data-i18n="slots_save">Save slots prizes</button>
+        </div>
+        <div style="margin-top:14px; overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding:8px;" data-i18n="slots_col_min">Min bank $</th>
+                <th style="text-align:left; padding:8px;" data-i18n="slots_col_label">Prize label</th>
+                <th style="width:60px;"></th>
+              </tr>
+            </thead>
+            <tbody id="slotsPrizesBody"></tbody>
+          </table>
+          <button class="btn small" id="addSlotsPrizeBtn" style="margin-top:10px;" data-i18n="slots_add">+ Add threshold</button>
+        </div>
+        <div class="muted small" style="margin-top:10px;" data-i18n="slots_obs_hint">OBS size ~960×540. Open the Slots overlay URL, then use Send Test Slots Spin.</div>
       </div>
 
       <!-- TIPS & TRICKS -->
@@ -347,6 +392,10 @@
           <details>
             <summary data-i18n="tip8_q">What does "Reset Delay Timer" do?</summary>
             <p data-i18n-html="tip8_a">After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately with the correct tier.</p>
+          </details>
+          <details>
+            <summary data-i18n="tip_slots_q">How do fruit slots work?</summary>
+            <p data-i18n-html="tip_slots_a">Gifts <b>and</b> paid subs/renewals spin the slots (N gifts = N spins). Fruits pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.</p>
           </details>
         </div>
       </div>
@@ -529,9 +578,16 @@
       en: {
         title: "Wheel of Fortune", subtitle: "Streamer Dashboard", logout: "Logout",
         urls_title: "OBS Overlay URLs", urls_desc: "Copy into OBS as Browser Sources (transparent background).",
-        urls_wheel: "Wheel overlay:", urls_delay: "Delay timer overlay:", urls_ws: "WebSocket (custom integrations):",
-        actions_title: "Actions", actions_test_spin: "Send Test Spin", actions_reset_delay: "Reset Delay Timer",
-        actions_sim_label: "Simulate gifted subs", actions_send_gifts: "Send Gifts",
+        urls_wheel: "Wheel overlay:", urls_slots: "Slots overlay:", urls_delay: "Delay timer overlay:", urls_ws: "WebSocket (custom integrations):",
+        actions_title: "Actions", actions_test_spin: "Send Test Spin", actions_test_slots: "Send Test Slots Spin", actions_reset_delay: "Reset Delay Timer",
+        actions_sim_label: "Simulate gifted subs", actions_send_gifts: "Send Gifts", actions_sim_sub: "Simulate paid sub",
+        slots_title: "Fruit Slots — bank prizes",
+        slots_desc: "Every gift and paid sub/renewal spins the fruit slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).",
+        slots_bank_label: "Current bank", slots_reset_bank: "Reset bank", slots_save: "Save slots prizes",
+        slots_col_min: "Min bank $", slots_col_label: "Prize label", slots_add: "+ Add threshold",
+        slots_obs_hint: "OBS size ~960×540. Open the Slots overlay URL, then use Send Test Slots Spin.",
+        tip_slots_q: "How do fruit slots work?",
+        tip_slots_a: 'Gifts <b>and</b> paid subs/renewals spin the slots (N gifts = N spins). Fruits pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.',
         tips_title: "Tips & Tricks",
         tip1_q: "How to set up the wheel in OBS",
         tip1_a: 'Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>1920x1080</code> (match your stream resolution). The wheel auto-scales with padding to fit any size \u2014 using a smaller resolution may make the wheel appear too large for the source box. Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.',
@@ -584,9 +640,16 @@
       pl: {
         title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
         urls_title: "Adresy nakladek OBS", urls_desc: "Skopiuj do OBS jako Browser Source (przezroczyste tlo).",
-        urls_wheel: "Nakladka kola:", urls_delay: "Nakladka timera:", urls_ws: "WebSocket (integracje):",
-        actions_title: "Akcje", actions_test_spin: "Testowe losowanie", actions_reset_delay: "Resetuj timer",
-        actions_sim_label: "Symuluj podarowane suby", actions_send_gifts: "Wyslij gifty",
+        urls_wheel: "Nakladka kola:", urls_slots: "Nakladka slotsow:", urls_delay: "Nakladka timera:", urls_ws: "WebSocket (integracje):",
+        actions_title: "Akcje", actions_test_spin: "Testowe losowanie", actions_test_slots: "Testowe zakrecenie slotsa", actions_reset_delay: "Resetuj timer",
+        actions_sim_label: "Symuluj podarowane suby", actions_send_gifts: "Wyslij gifty", actions_sim_sub: "Symuluj platny sub",
+        slots_title: "Fruit Slots — nagrody z banku",
+        slots_desc: "Kazdy gift i platny sub/renewal kreci slotsami. Wygrane dodaja wirtualne $ do banku. Po osiagnieciu progu nagroda odblokowuje sie raz (do resetu).",
+        slots_bank_label: "Aktualny bank", slots_reset_bank: "Resetuj bank", slots_save: "Zapisz nagrody slots",
+        slots_col_min: "Min bank $", slots_col_label: "Nazwa nagrody", slots_add: "+ Dodaj prog",
+        slots_obs_hint: "OBS ~960×540. Otworz URL slotsow, potem kliknij Testowe zakrecenie slotsa.",
+        tip_slots_q: "Jak dzialaja slotsy owocki?",
+        tip_slots_a: 'Gifty <b>i</b> zwykle suby/renewale kreca slotsami (N giftow = N spinow). Owocki daja wirtualne <b>$</b> do banku. Ustaw progi nagrod — po osiagnieciu sumy wypada label. Kolo nadal dziala na giftach osobno.',
         tips_title: "Porady i wskazowki",
         tip1_q: "Jak skonfigurowac kolo w OBS",
         tip1_a: 'Skopiuj adres <b>nakladki kola</b> i dodaj go jako <b>Browser Source</b> w OBS. Ustaw wymiary na <code>1920x1080</code> (zgodnie z rozdzielczoscia streama). Kolo automatycznie skaluje sie z marginesami \u2014 mniejsza rozdzielczosc moze spowodowac, ze kolo bedzie za duze. Upewnij sie, ze opcja <em>"Shutdown source when not visible"</em> jest <b>odznaczona</b>, aby kolo bylo caly czas polaczone. Zrob to samo dla <b>nakladki timera</b>, jesli chcesz wyswietlac odliczanie.',
@@ -712,6 +775,7 @@
         const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
         const urls = {
           wheelUrl: `${base}/overlay/${overlayKey}`,
+          slotsUrl: `${base}/slots/${overlayKey}`,
           delayUrl: `${base}/delay/${overlayKey}`,
           subsUrl: `${base}/subs/${overlayKey}?key=${overlayKey}`,
           wsUrl: `${wsProto}://${location.host}/ws?key=${overlayKey}`,
@@ -989,6 +1053,28 @@
       }
     };
 
+    el("testSlotsBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/test-slots/1", { cache: "no-store" });
+        const j = await r.json();
+        showActionResult(j.ok, j.message || "Test slots spin sent.");
+        if (j.bank != null) el("slotsBankVal").textContent = "$" + Number(j.bank).toFixed(2);
+      } catch {
+        showActionResult(false, "Failed to send test slots spin.");
+      }
+    };
+
+    el("simulateSubBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/simulate-sub", { method: "POST", cache: "no-store" });
+        const j = await r.json();
+        showActionResult(j.ok, j.message || "Simulated sub.");
+        if (j.bank != null) el("slotsBankVal").textContent = "$" + Number(j.bank).toFixed(2);
+      } catch {
+        showActionResult(false, "Failed to simulate sub.");
+      }
+    };
+
     el("resetDelayBtn").onclick = async () => {
       try {
         const r = await fetch("/dashboard/reset-delay", { method: "POST", cache: "no-store" });
@@ -1009,10 +1095,95 @@
         });
         const j = await r.json();
         showActionResult(j.ok, j.message || `Sent ${n} gift(s).`);
+        refreshSlotsBank();
       } catch {
         showActionResult(false, "Failed to send gifts.");
       }
     };
+
+    // ==== Slots prizes editor ====
+    let slotsPrizes = [];
+
+    function refreshSlotsBank() {
+      fetch("/dashboard/slots", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j?.ok) return;
+          el("slotsBankVal").textContent = "$" + Number(j.bank || 0).toFixed(2);
+          if (Array.isArray(j.prizes)) {
+            slotsPrizes = j.prizes.map((p) => ({ min_bank: p.min_bank, label: p.label }));
+            renderSlotsPrizes();
+          }
+        })
+        .catch(() => {});
+    }
+
+    function renderSlotsPrizes() {
+      const body = el("slotsPrizesBody");
+      if (!body) return;
+      body.innerHTML = "";
+      slotsPrizes.forEach((p, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="padding:6px;"><input type="number" min="0.01" step="0.01" value="${p.min_bank}" data-idx="${idx}" data-field="min_bank" style="width:100px;" /></td>
+          <td style="padding:6px;"><input type="text" value="${String(p.label || "").replace(/"/g, "&quot;")}" data-idx="${idx}" data-field="label" style="width:100%;" /></td>
+          <td style="padding:6px;"><button class="btn small" data-del="${idx}" style="color:#f87171;">✕</button></td>
+        `;
+        body.appendChild(tr);
+      });
+      body.querySelectorAll("input").forEach((inp) => {
+        inp.addEventListener("change", () => {
+          const i = Number(inp.dataset.idx);
+          const field = inp.dataset.field;
+          if (field === "min_bank") slotsPrizes[i].min_bank = Number(inp.value) || 0;
+          else slotsPrizes[i].label = inp.value;
+        });
+      });
+      body.querySelectorAll("[data-del]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          slotsPrizes.splice(Number(btn.dataset.del), 1);
+          renderSlotsPrizes();
+        });
+      });
+    }
+
+    el("addSlotsPrizeBtn").onclick = () => {
+      const next = slotsPrizes.length ? Math.max(...slotsPrizes.map((p) => Number(p.min_bank) || 0)) + 5 : 5;
+      slotsPrizes.push({ min_bank: next, label: "New prize" });
+      renderSlotsPrizes();
+    };
+
+    el("saveSlotsPrizesBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/slots/prizes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slots_prizes: slotsPrizes }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "save failed");
+        slotsPrizes = j.prizes || slotsPrizes;
+        renderSlotsPrizes();
+        showActionResult(true, "Slots prizes saved.");
+      } catch (e) {
+        showActionResult(false, "Slots save error: " + e.message);
+      }
+    };
+
+    el("resetSlotsBankBtn").onclick = async () => {
+      try {
+        const r = await fetch("/dashboard/slots/reset-bank", { method: "POST" });
+        const j = await r.json();
+        if (j.ok) {
+          el("slotsBankVal").textContent = "$0.00";
+          showActionResult(true, "Slots bank reset.");
+        }
+      } catch {
+        showActionResult(false, "Failed to reset slots bank.");
+      }
+    };
+
+    refreshSlotsBank();
 
     // ==== Preview (glassmorphism mini wheel) ====
     const prevCanvas = el("previewCanvas");
