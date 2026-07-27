@@ -136,8 +136,29 @@ export function validateTiers(tiers) {
   return { valid: true, tiers: validated };
 }
 
+export const DEFAULT_SLOTS_TOKEN = "🪙";
+
 /**
- * Validate slots prize thresholds (bank $ → prize label).
+ * Validate streamer-chosen slots token emoji (replaces $ so wins don't look like money).
+ * @param {*} raw
+ * @returns {{ valid: boolean, error?: string, token?: string }}
+ */
+export function validateSlotsToken(raw) {
+  const token = String(raw ?? "").trim();
+  if (!token) {
+    return { valid: false, error: "Pick an emoji/token for the slots bank" };
+  }
+  if ([...token].length > 4) {
+    return { valid: false, error: "Token too long (max 4 characters / emoji)" };
+  }
+  if (token.includes("$")) {
+    return { valid: false, error: "Use an emoji instead of $" };
+  }
+  return { valid: true, token };
+}
+
+/**
+ * Validate slots prize thresholds (bank points → prize label).
  * @param {*} raw
  * @returns {{ valid: boolean, error?: string, prizes?: Array<{min_bank:number,label:string}> }}
  */

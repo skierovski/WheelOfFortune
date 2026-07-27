@@ -170,6 +170,13 @@ describe("database schema and queries", () => {
       expect(loaded.accent_color).toBe("#ff0000");
       expect(loaded.items).toHaveLength(1);
       expect(loaded.items[0].label).toBe("Prize");
+      expect(loaded.slots_token).toBe("🪙");
+    });
+
+    it("saves and loads slots_token", () => {
+      db.saveConfig(1, { items: [{ label: "A" }] });
+      db.saveSlotsToken(1, "🍕");
+      expect(db.getConfig(1).slots_token).toBe("🍕");
     });
 
     it("upserts config on save (overwrite)", () => {

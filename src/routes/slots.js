@@ -2,7 +2,7 @@ import { Router } from "express";
 import { slots } from "../services/slots.js";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { getDb } from "../db.js";
-import { validateSlotsPrizes } from "../utils/validate.js";
+import { validateSlotsPrizes, validateSlotsToken, DEFAULT_SLOTS_TOKEN } from "../utils/validate.js";
 import { announcePrize } from "../services/chatBot.js";
 
 const router = Router();
@@ -19,6 +19,7 @@ router.get("/overlay/:key/slots/state", resolveOverlayKey, (req, res) => {
     accent_color: cfg?.accent_color ?? "#7c3aed",
     secondary_color: cfg?.secondary_color ?? "#121228",
     wheel_opacity: cfg?.wheel_opacity ?? 0.9,
+    slots_token: cfg?.slots_token || DEFAULT_SLOTS_TOKEN,
     bet: slots.BET,
   });
 });
@@ -33,7 +34,13 @@ router.post("/overlay/:key/slots/complete", resolveOverlayKey, (req, res) => {
 
 router.get("/dashboard/slots", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
-  res.json({ ok: true, ...slots.getState(bid), bet: slots.BET });
+  const cfg = getDb().getConfig(bid);
+  res.json({
+    ok: true,
+    ...slots.getState(bid),
+    bet: slots.BET,
+    slots_token: cfg?.slots_token || DEFAULT_SLOTS_TOKEN,
+  });
 });
 
 router.post("/dashboard/slots/prizes", requireSession, (req, res) => {
@@ -42,7 +49,19 @@ router.post("/dashboard/slots/prizes", requireSession, (req, res) => {
   if (!result.valid) {
     return res.status(400).json({ ok: false, error: result.error });
   }
-  getDb().saveSlotsPrizes(bid, result.prizes);
+  const db = getDb();
+  db.saveSlotsPrizes(bid, result.prizes);
+
+  let token = db.getConfig(bid)?.slots_token || DEFAULT_SLOTS_TOKEN;
+  if (req.body?.slots_token != null) {
+    const tok = validateSlotsToken(req.body.slots_token);
+    if (!tok.valid) {
+      return res.status(400).json({ ok: false, error: tok.error });
+    }
+    db.saveSlotsToken(bid, tok.token);
+    token = tok.token;
+  }
+
   const wss = req.app.locals.wss;
   if (wss?.broadcastTo) {
     wss.broadcastTo(bid, {
@@ -50,9 +69,10 @@ router.post("/dashboard/slots/prizes", requireSession, (req, res) => {
       prizes: result.prizes,
       bank: slots.getBank(bid),
       claimed: slots.getState(bid).claimed,
+      slots_token: token,
     });
   }
-  res.json({ ok: true, prizes: result.prizes });
+  res.json({ ok: true, prizes: result.prizes, slots_token: token });
 });
 
 router.post("/dashboard/slots/reset-bank", requireSession, (req, res) => {

@@ -270,15 +270,15 @@
       <div class="hud">
         <div class="hud-box">
           <div class="label">BANK</div>
-          <div class="value" id="bankVal">$0.00</div>
+          <div class="value" id="bankVal">🪙0.00</div>
         </div>
         <div class="spin-btn" id="spinBtn">
           <span id="statusText">WAITING</span>
-          <span class="bet" id="betText">$0.20</span>
+          <span class="bet" id="betText">🪙0.20</span>
         </div>
         <div class="hud-box win">
           <div class="label">WIN</div>
-          <div class="value" id="winVal">$0.00</div>
+          <div class="value" id="winVal">🪙0.00</div>
         </div>
       </div>
     </div>
@@ -295,7 +295,7 @@
       plum: "🍑",
       melon: "🍉",
       grapes: "🍇",
-      dollar: "💵",
+      dollar: "🪙",
     };
     const SYMBOLS = Object.keys(SYMBOL_EMOJI);
     const REELS = 5;
@@ -311,6 +311,7 @@
     let spinning = false;
     let queue = [];
     let accent = "#f5a623";
+    let slotsToken = "🪙";
     let audioCtx = null;
     let reelEls = [];
     let stripEls = [];
@@ -318,7 +319,15 @@
     let hideTimer = null;
 
     function money(n) {
-      return "$" + (Number(n) || 0).toFixed(2);
+      return slotsToken + (Number(n) || 0).toFixed(2);
+    }
+
+    function setSlotsToken(token) {
+      const next = String(token || "").trim() || "🪙";
+      if (next === slotsToken) return false;
+      slotsToken = next;
+      SYMBOL_EMOJI.dollar = slotsToken;
+      return true;
     }
 
     function showOverlay() {
@@ -541,7 +550,7 @@
                     fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ label: `Slots prize: ${p.label} (bank $${result.bank})` }),
+                      body: JSON.stringify({ label: `Slots prize: ${p.label} (bank ${money(result.bank)})` }),
                     }).catch(() => {});
                   }
                 } else if (result.win > 0) {
@@ -549,7 +558,7 @@
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      label: `Slots win $${result.win.toFixed(2)}${result.bonus ? " (+bonus)" : ""} (bank $${Number(result.bank).toFixed(2)})`,
+                      label: `Slots win ${money(result.win)}${result.bonus ? " (+bonus)" : ""} (bank ${money(result.bank)})`,
                     }),
                   }).catch(() => {});
                 }
@@ -595,7 +604,14 @@
     function handleMessage(msg) {
       if (!msg) return;
       if (msg.type === "slots_config") {
-        if (msg.bank != null) updateHud({ bank: msg.bank });
+        if (msg.slots_token) {
+          const changed = setSlotsToken(msg.slots_token);
+          document.getElementById("betText").textContent = money(0.2);
+          updateHud({ bank: msg.bank != null ? msg.bank : bank, win: 0 });
+          if (changed && !spinning) buildReels();
+        } else if (msg.bank != null) {
+          updateHud({ bank: msg.bank });
+        }
         return;
       }
       if (msg.type === "slots_bank") {
@@ -607,6 +623,7 @@
         return;
       }
       if (msg.action === "slots" && msg.result) {
+        if (msg.result.slots_token) setSlotsToken(msg.result.slots_token);
         queue.push(msg);
         drain();
       }
@@ -629,9 +646,12 @@
         const j = await r.json();
         if (j.ok) {
           applyTheme(j);
+          if (j.slots_token) setSlotsToken(j.slots_token);
           // Keep bank in memory but do not show machine until a spin
           bank = j.bank || 0;
-          if (j.bet) document.getElementById("betText").textContent = money(j.bet);
+          document.getElementById("betText").textContent = money(j.bet ?? 0.2);
+          document.getElementById("bankVal").textContent = money(bank);
+          document.getElementById("winVal").textContent = money(0);
         }
       } catch {}
       try {

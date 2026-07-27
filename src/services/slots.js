@@ -213,6 +213,7 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
   const grid = rollGrid();
   const evalResult = evaluatePayline(grid);
   const { bank, prizes_hit } = applyWinAndPrizes(broadcasterId, evalResult.win);
+  const cfg = db.getConfig(broadcasterId);
 
   const newPending = state.pending_count - 1;
   markInProgress(broadcasterId, true);
@@ -224,6 +225,7 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
     spin_in_progress: 1,
   });
 
+  const token = cfg?.slots_token || "🪙";
   const msg = {
     action: "slots",
     times: 1,
@@ -239,13 +241,14 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
       bank,
       prizes_hit,
       bet: BET,
+      slots_token: token,
     },
   };
 
   const delivered = broadcast(broadcasterId, msg);
   if (delivered > 0) {
     console.log(
-      `[SLOTS] bid=${broadcasterId} delivered win=$${evalResult.win} bank=$${bank} pending=${newPending}` +
+      `[SLOTS] bid=${broadcasterId} delivered win=${token}${evalResult.win} bank=${token}${bank} pending=${newPending}` +
         (prizes_hit.length ? ` prizes=[${prizes_hit.map((p) => p.label).join(",")}]` : "")
     );
   } else {
@@ -298,6 +301,7 @@ export const slots = {
       pending_count: s.pending_count,
       timeUntilNext: Math.ceil(getTimeUntilNext(broadcasterId) / 1000),
       prizes: cfg?.slots_prizes || [],
+      slots_token: cfg?.slots_token || "🪙",
     };
   },
 

@@ -170,9 +170,6 @@ export function openDatabase(dbPath = ":memory:") {
   }
   if (!cols.includes("slots_token")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN slots_token TEXT DEFAULT '🪙'");
-  } else {
-    // One-shot: old temporary default was ⭐ — move to coin
-    sqlite.exec("UPDATE wheel_configs SET slots_token = '🪙' WHERE slots_token IS NULL OR slots_token = '' OR slots_token = '⭐'");
   }
   if (!cols.includes("sub_seed_offset")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_seed_offset INTEGER DEFAULT 0");

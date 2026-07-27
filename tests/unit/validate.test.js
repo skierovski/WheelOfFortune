@@ -239,3 +239,20 @@ describe("isValidOverlayKey", () => {
     expect(isValidOverlayKey(12345)).toBe(false);
   });
 });
+
+describe("validateSlotsToken", () => {
+  it("accepts emoji tokens", async () => {
+    const { validateSlotsToken, DEFAULT_SLOTS_TOKEN } = await import("../../src/utils/validate.js");
+    expect(DEFAULT_SLOTS_TOKEN).toBe("🪙");
+    expect(validateSlotsToken("🍕").valid).toBe(true);
+    expect(validateSlotsToken("🍕").token).toBe("🍕");
+    expect(validateSlotsToken(" 🔥 ").token).toBe("🔥");
+  });
+
+  it("rejects empty, $, and too-long tokens", async () => {
+    const { validateSlotsToken } = await import("../../src/utils/validate.js");
+    expect(validateSlotsToken("").valid).toBe(false);
+    expect(validateSlotsToken("$").valid).toBe(false);
+    expect(validateSlotsToken("abcde").valid).toBe(false);
+  });
+});
