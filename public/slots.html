@@ -99,18 +99,28 @@
       position: relative;
       overflow: hidden;
     }
-    .reels::before {
-      content: "";
+    .payline {
       position: absolute;
-      left: 0; right: 0;
-      top: calc(33.333% - 1px);
-      height: calc(33.333% + 2px);
-      border-top: 2px solid color-mix(in srgb, var(--gold) 70%, transparent);
-      border-bottom: 2px solid color-mix(in srgb, var(--gold) 70%, transparent);
-      background: color-mix(in srgb, var(--gold) 8%, transparent);
+      left: 8px;
+      right: 8px;
+      height: calc(33.333% - 8px);
+      border: 2px solid color-mix(in srgb, var(--accent) 85%, white 15%);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 65%, transparent);
+      opacity: 0;
+      transform: scale(0.985);
+      transition: opacity .2s ease, transform .2s ease;
       pointer-events: none;
-      z-index: 5;
+      z-index: 6;
     }
+    .payline.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .payline.r0 { top: 4px; }
+    .payline.r1 { top: calc(33.333% + 2px); }
+    .payline.r2 { top: calc(66.666% - 1px); }
 
     .reel {
       height: clamp(210px, 32vh, 280px);
@@ -139,8 +149,8 @@
       animation: winPulse .55s ease-in-out 3;
     }
     @keyframes winPulse {
-      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px var(--gold)); }
-      50% { transform: scale(1.18); filter: drop-shadow(0 0 16px var(--gold)); }
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 75%, white 25%)); }
+      50% { transform: scale(1.18); filter: drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 90%, white 10%)); }
     }
 
     .hud {
@@ -250,7 +260,11 @@
       <h1 class="title">SUB <span class="gem">💎</span> SLOTS</h1>
       <div class="reels-wrap">
         <div class="side-label">10 LINES FIXED</div>
-        <div class="reels" id="reels"></div>
+        <div class="reels" id="reels">
+          <div class="payline r0" id="payline0"></div>
+          <div class="payline r1" id="payline1"></div>
+          <div class="payline r2" id="payline2"></div>
+        </div>
         <div class="side-label">10 LINES FIXED</div>
       </div>
       <div class="hud">
@@ -300,6 +314,7 @@
     let audioCtx = null;
     let reelEls = [];
     let stripEls = [];
+    let paylineEls = [];
     let hideTimer = null;
 
     function money(n) {
@@ -368,7 +383,13 @@
 
     function buildReels() {
       const root = document.getElementById("reels");
+      paylineEls = [
+        document.getElementById("payline0"),
+        document.getElementById("payline1"),
+        document.getElementById("payline2"),
+      ].filter(Boolean);
       root.innerHTML = "";
+      for (const p of paylineEls) root.appendChild(p);
       reelEls = [];
       stripEls = [];
       for (let c = 0; c < REELS; c++) {
@@ -475,6 +496,7 @@
       return new Promise((resolve) => {
         spinning = true;
         showOverlay();
+        for (const p of paylineEls) p.classList.remove("show");
         updateHud({ win: 0, status: "SPINNING" });
         sfxSpinStart();
         const grid = result.grid;
@@ -492,6 +514,7 @@
                 for (const h of hits) {
                   const row = Number(h.row);
                   const count = Number(h.matchCount) || 3;
+                  if (paylineEls[row]) paylineEls[row].classList.add("show");
                   for (let c2 = 0; c2 < count; c2++) {
                     // base=10 → visible rows at 10,11,12
                     stripEls[c2].cells[10 + row]?.classList.add("win");
