@@ -32,6 +32,26 @@ export const PAYTABLE = {
 
 let broadcastFn = null;
 const inProgress = new Map();
+const inProgressAt = new Map();
+const SPIN_STALE_MS = 25 * 1000;
+
+function markInProgress(broadcasterId, value) {
+  inProgress.set(broadcasterId, value);
+  if (value) inProgressAt.set(broadcasterId, Date.now());
+  else inProgressAt.delete(broadcasterId);
+}
+
+function recoverIfStaleInProgress(broadcasterId) {
+  if (!inProgress.get(broadcasterId)) return false;
+  const startedAt = inProgressAt.get(broadcasterId) || 0;
+  const age = Date.now() - startedAt;
+  if (age < SPIN_STALE_MS) return false;
+  console.warn(`[SLOTS] bid=${broadcasterId} stale in_progress (${age}ms) -> recovering`);
+  markInProgress(broadcasterId, false);
+  const state = getDb().getSlotsState(broadcasterId);
+  getDb().saveSlotsState(broadcasterId, { ...state, spin_in_progress: 0 });
+  return true;
+}
 
 function broadcast(broadcasterId, msg) {
   if (!broadcastFn) return 0;
@@ -159,6 +179,7 @@ function applyWinAndPrizes(broadcasterId, win) {
 
 function deliverOne(broadcasterId, { skipDelay = false } = {}) {
   const db = getDb();
+  recoverIfStaleInProgress(broadcasterId);
   const state = db.getSlotsState(broadcasterId);
   if (state.pending_count <= 0) return 0;
   if (inProgress.get(broadcasterId)) return 0;
@@ -181,7 +202,7 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
   const { bank, prizes_hit } = applyWinAndPrizes(broadcasterId, evalResult.win);
 
   const newPending = state.pending_count - 1;
-  inProgress.set(broadcasterId, true);
+  markInProgress(broadcasterId, true);
   db.saveSlotsState(broadcasterId, {
     bank,
     claimed: db.getSlotsState(broadcasterId).claimed,
@@ -216,7 +237,7 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
     );
   } else {
     // No overlay connected — requeue and roll back bank/claimed from this attempt
-    inProgress.set(broadcasterId, false);
+    markInProgress(broadcasterId, false);
     // Simpler: keep bank update (money already "won") but requeue pending
     // Actually if no client, we should undo the bank change for fairness on retry.
     // Re-roll on next deliver is fine; undo bank:
@@ -282,6 +303,7 @@ export const slots = {
     if (!safe) return 0;
 
     const db = getDb();
+    recoverIfStaleInProgress(broadcasterId);
     const state = db.getSlotsState(broadcasterId);
     const newPending = state.pending_count + safe;
     db.saveSlotsState(broadcasterId, {
@@ -316,7 +338,7 @@ export const slots = {
    * @param {{ bonus?: boolean }} [opts]
    */
   markComplete(broadcasterId, opts = {}) {
-    inProgress.set(broadcasterId, false);
+    markInProgress(broadcasterId, false);
     const db = getDb();
     const state = db.getSlotsState(broadcasterId);
     const bonus = !!opts.bonus;
@@ -373,7 +395,7 @@ export const slots = {
   resetDelay(broadcasterId) {
     const db = getDb();
     const state = db.getSlotsState(broadcasterId);
-    inProgress.set(broadcasterId, false);
+    markInProgress(broadcasterId, false);
     db.saveSlotsState(broadcasterId, {
       ...state,
       last_spin_time: 0,
@@ -404,6 +426,7 @@ export function startSlotsChecker() {
     }
     for (const row of rows) {
       const bid = row.broadcaster_id;
+      recoverIfStaleInProgress(bid);
       if (inProgress.get(bid)) continue;
       deliverOne(bid);
     }
