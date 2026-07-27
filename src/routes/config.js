@@ -22,6 +22,9 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
     secondary_color: cfg?.secondary_color ?? "#121228",
     wheel_opacity: cfg?.wheel_opacity ?? 0.9,
     gifts_per_spin: cfg?.gifts_per_spin ?? 5,
+    sub_goal: cfg?.sub_goal ?? 0,
+    sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
+    sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
     auth_ok: auth.auth_ok,
     auth_message: auth.auth_message,
   });
@@ -30,9 +33,16 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
 // GET live subscriber count from Kick API (public overlay endpoint)
 router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
   const bid = req.streamer.broadcaster_id;
+  const cfg = loadConfig(bid);
   try {
     const info = await fetchChannelInfo(bid);
-    res.json({ ok: true, active_subscribers_count: info.active_subscribers_count });
+    res.json({
+      ok: true,
+      active_subscribers_count: info.active_subscribers_count,
+      sub_goal: cfg?.sub_goal ?? 0,
+      sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
+      sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
+    });
   } catch (e) {
     console.warn(`[/overlay/subs] bid=${bid} error:`, e?.message || e);
     res.status(502).json({ ok: false, error: "Failed to fetch subscriber count from Kick" });
