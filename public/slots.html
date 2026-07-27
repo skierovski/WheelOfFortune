@@ -514,10 +514,11 @@
                 for (const h of hits) {
                   const row = Number(h.row);
                   const count = Number(h.matchCount) || 3;
+                  const start = Math.max(0, Number(h.start) || 0);
                   if (paylineEls[row]) paylineEls[row].classList.add("show");
                   for (let c2 = 0; c2 < count; c2++) {
-                    // base=10 → visible rows at 10,11,12
-                    stripEls[c2].cells[10 + row]?.classList.add("win");
+                    // base=10 → visible rows at 10,11,12; start = first matched reel
+                    stripEls[start + c2]?.cells[10 + row]?.classList.add("win");
                   }
                 }
                 sfxWin();

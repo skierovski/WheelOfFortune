@@ -32,6 +32,24 @@ describe("slots paytable", () => {
     expect(r.win).toBe(Math.round(BET * PAYTABLE.cherry[3] * 100) / 100);
   });
 
+  it("pays for 4 lemons not starting from the left reel", async () => {
+    const { evaluatePayline, PAYTABLE, BET } = await import("../../src/services/slots.js");
+    // Visual: cherry | lemon | lemon | lemon | lemon  → must still win
+    const grid = [
+      ["cherry", "a", "b"],
+      ["lemon", "a", "b"],
+      ["lemon", "a", "b"],
+      ["lemon", "a", "b"],
+      ["lemon", "a", "b"],
+    ];
+    const r = evaluatePayline(grid);
+    expect(r.bonus).toBe(true);
+    expect(r.symbol).toBe("lemon");
+    expect(r.matchCount).toBe(4);
+    expect(r.hits[0].start).toBe(1);
+    expect(r.win).toBe(Math.round(BET * PAYTABLE.lemon[4] * 100) / 100);
+  });
+
   it("sums wins across multiple rows", async () => {
     const { evaluatePayline } = await import("../../src/services/slots.js");
     const grid = [

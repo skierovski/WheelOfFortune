@@ -83,22 +83,35 @@ export function rollGrid() {
 }
 
 /**
- * Evaluate one horizontal row: consecutive matching symbols from the left.
+ * Evaluate one horizontal row: any consecutive streak of 3+ matching symbols
+ * (not only left-to-right from reel 0 — e.g. X L L L L still pays).
  */
 function evaluateRow(grid, row) {
   const line = grid.map((col) => col[row]);
-  const symbol = line[0];
-  let matchCount = 1;
-  for (let i = 1; i < line.length; i++) {
-    if (line[i] === symbol) matchCount++;
-    else break;
+  let best = { win: 0, matchCount: 0, symbol: null, line, row, start: 0 };
+
+  let i = 0;
+  while (i < line.length) {
+    const symbol = line[i];
+    let matchCount = 1;
+    while (i + matchCount < line.length && line[i + matchCount] === symbol) {
+      matchCount++;
+    }
+    if (matchCount >= 3) {
+      const keyed = Math.min(matchCount, 5);
+      const mult = PAYTABLE[symbol]?.[keyed] || 0;
+      const win = Math.round(BET * mult * 100) / 100;
+      if (win > best.win || (win === best.win && matchCount > best.matchCount)) {
+        best = { win, matchCount, symbol, line, row, start: i };
+      }
+    }
+    i += matchCount;
   }
-  if (matchCount < 3) {
-    return { win: 0, matchCount, symbol: null, line, row };
+
+  if (best.matchCount < 3) {
+    return { win: 0, matchCount: 0, symbol: null, line, row, start: 0 };
   }
-  const mult = PAYTABLE[symbol]?.[matchCount] || 0;
-  const win = Math.round(BET * mult * 100) / 100;
-  return { win, matchCount, symbol, line, row };
+  return best;
 }
 
 /**
