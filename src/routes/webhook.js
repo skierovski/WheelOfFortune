@@ -5,6 +5,8 @@ import { spins } from "../services/spins.js";
 import { slots } from "../services/slots.js";
 import { getDb } from "../db.js";
 import { handleChatMessage } from "../services/chatBot.js";
+import { trackGiftEvent, resolveGiftExpiresAt } from "../services/giftTracker.js";
+import { loadConfig } from "../services/configStore.js";
 
 const router = Router();
 
@@ -111,6 +113,28 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
 
       const gifter = payload?.gifter || payload?.data?.gifter || {};
       console.log(`[WEBHOOK] Gifts bid=${broadcasterId}: ${gifter?.username || "Anon"} x${giftCount}`);
+
+      // Track gifted subs for hybrid sub counter (Kick API undercounts gifts)
+      if (giftCount > 0) {
+        const tracked = trackGiftEvent(broadcasterId, {
+          messageId: msgId,
+          giftCount,
+          gifterUsername: gifter?.username || gifter?.name || null,
+          expiresAt: resolveGiftExpiresAt(payload),
+        });
+        try {
+          const cfg = loadConfig(broadcasterId);
+          req.app?.locals?.wss?.broadcastTo?.(broadcasterId, {
+            type: "subs",
+            gift_delta: giftCount,
+            active_tracked_gifts: tracked.active_tracked,
+            sub_seed_offset: cfg?.sub_seed_offset ?? 0,
+            sub_goal: cfg?.sub_goal ?? 0,
+          });
+        } catch (e) {
+          console.warn("[WEBHOOK] subs broadcast failed:", e?.message || e);
+        }
+      }
 
       // Slots: every gifted sub = 1 slots spin
       if (giftCount > 0) {

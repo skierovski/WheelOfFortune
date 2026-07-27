@@ -332,12 +332,16 @@
       <!-- SLOTS PRIZES -->
       <div class="card full-width">
         <h2 data-i18n="slots_title">Sub Slots — bank prizes</h2>
-        <div class="muted" data-i18n="slots_desc">Every gift and paid sub/renewal spins Sub Slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).</div>
+        <div class="muted" data-i18n="slots_desc">Every gift and paid sub/renewal spins Sub Slots. Wins add virtual points (shown as your emoji) to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).</div>
         <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; align-items:center;">
           <div class="hud-box" style="background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:10px 16px;">
             <div class="muted small" data-i18n="slots_bank_label">Current bank</div>
-            <div id="slotsBankVal" style="font-size:22px; font-weight:800; color:#fbbf24;">$0.00</div>
+            <div id="slotsBankVal" style="font-size:22px; font-weight:800; color:#fbbf24;">🪙0.00</div>
           </div>
+          <label style="display:flex; flex-direction:column; gap:4px;">
+            <span class="muted small" data-i18n="slots_token_label">Bank emoji / token</span>
+            <input type="text" id="slotsTokenInput" value="🪙" maxlength="8" style="width:72px; font-size:22px; text-align:center; padding:6px 8px;" />
+          </label>
           <button class="btn" id="resetSlotsBankBtn" data-i18n="slots_reset_bank">Reset bank</button>
           <button class="btn" id="saveSlotsPrizesBtn" data-i18n="slots_save">Save slots prizes</button>
         </div>
@@ -345,7 +349,7 @@
           <table style="width:100%; border-collapse:collapse;">
             <thead>
               <tr>
-                <th style="text-align:left; padding:8px;" data-i18n="slots_col_min">Min bank $</th>
+                <th style="text-align:left; padding:8px;" data-i18n="slots_col_min">Min bank</th>
                 <th style="text-align:left; padding:8px;" data-i18n="slots_col_label">Prize label</th>
                 <th style="width:60px;"></th>
               </tr>
@@ -395,7 +399,7 @@
           </details>
           <details>
             <summary data-i18n="tip_slots_q">How do Sub Slots work?</summary>
-            <p data-i18n-html="tip_slots_a">Gifts <b>and</b> paid subs/renewals spin Sub Slots (N gifts = N spins). Wins pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.</p>
+            <p data-i18n-html="tip_slots_a">Gifts <b>and</b> paid subs/renewals spin Sub Slots (N gifts = N spins). Wins pay virtual points (your emoji token) into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.</p>
           </details>
         </div>
       </div>
@@ -469,7 +473,26 @@
       <!-- SUB COUNTER -->
       <div class="card full-width">
         <h2 data-i18n="sc_title">Sub Counter</h2>
-        <div class="muted" data-i18n="sc_desc">Overlay wyświetlający liczbę aktywnych subskrybentów z Kick. Dane odświeżają się co 60 sekund.</div>
+        <div class="muted" data-i18n="sc_desc">Kick API undercounts gifted subs. We track gifts live and let you seed the missing history.</div>
+
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px;">
+          <div style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+            <div class="muted small" data-i18n="sc_api_label">Kick API</div>
+            <div id="scApiCount" style="font-size:24px; font-weight:800; color:#94a3b8;">–</div>
+          </div>
+          <div style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+            <div class="muted small" data-i18n="sc_tracked_label">Tracked gifts (active)</div>
+            <div id="scTrackedCount" style="font-size:24px; font-weight:800; color:#34d399;">–</div>
+          </div>
+          <div style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+            <div class="muted small" data-i18n="sc_seed_label">Seed offset</div>
+            <div id="scSeedDisplay" style="font-size:24px; font-weight:800; color:#fbbf24;">–</div>
+          </div>
+          <div style="padding:12px; border-radius:10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.35);">
+            <div class="muted small" data-i18n="sc_est_label">Estimated total</div>
+            <div id="scLiveCount" style="font-size:28px; font-weight:800; color:var(--accent);">–</div>
+          </div>
+        </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
           <div>
@@ -485,16 +508,18 @@
             <input type="text" id="scLabel" maxlength="60" value="aktywne subskrypcje" style="width:100%;" />
           </div>
           <div>
-            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_live_label">Aktualna liczba subów (Kick API)</label>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span id="scLiveCount" style="font-size:28px; font-weight:800; color:var(--accent);">–</span>
-              <button class="btn" id="scRefreshBtn" style="font-size:12px; padding:6px 12px;" data-i18n="sc_refresh">Odśwież</button>
+            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_real_label">Kalibracja: realna liczba na Kicku</label>
+            <div style="display:flex; gap:8px;">
+              <input type="number" id="scRealTotal" min="0" max="1000000" step="1" placeholder="np. 69" style="flex:1;" />
+              <button class="btn" id="scCalibrateBtn" style="white-space:nowrap;" data-i18n="sc_calibrate">Ustaw seed</button>
             </div>
+            <div class="muted small" style="margin-top:4px;" data-i18n="sc_calibrate_hint">API + tracked + seed = ta liczba. Gifty od teraz doliczają się same.</div>
           </div>
         </div>
 
-        <div class="row" style="margin-top:16px;">
+        <div class="row" style="margin-top:16px; gap:8px;">
           <button class="btn btn-accent" id="scSaveBtn" data-i18n="sc_save">Zapisz ustawienia</button>
+          <button class="btn" id="scRefreshBtn" data-i18n="sc_refresh">Odśwież</button>
         </div>
         <div id="scSaveResult" style="display:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; margin-top:10px;"></div>
 
@@ -509,7 +534,7 @@
               <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
-          <div class="muted small" style="margin-top:6px;" data-i18n="sc_url_note">Wymiary OBS: ~320×120px. Tło: przezroczyste.</div>
+          <div class="muted small" style="margin-top:6px;" data-i18n="sc_url_note">Wymiary OBS: ~520×110px. Tło: przezroczyste.</div>
         </div>
       </div>
 
@@ -582,12 +607,13 @@
         actions_title: "Actions", actions_test_spin: "Send Test Spin", actions_test_slots: "Send Test Slots Spin", actions_reset_delay: "Reset Delay Timer",
         actions_sim_label: "Simulate gifted subs", actions_send_gifts: "Send Gifts", actions_sim_sub: "Simulate paid sub",
         slots_title: "Sub Slots — bank prizes",
-        slots_desc: "Every gift and paid sub/renewal spins Sub Slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).",
+        slots_desc: "Every gift and paid sub/renewal spins Sub Slots. Wins add virtual points (shown as your emoji) to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).",
         slots_bank_label: "Current bank", slots_reset_bank: "Reset bank", slots_save: "Save slots prizes",
-        slots_col_min: "Min bank $", slots_col_label: "Prize label", slots_add: "+ Add threshold",
+        slots_token_label: "Bank emoji / token",
+        slots_col_min: "Min bank", slots_col_label: "Prize label", slots_add: "+ Add threshold",
         slots_obs_hint: "OBS size ~960×540. Open the Sub Slots overlay URL, then use Send Test Slots Spin.",
         tip_slots_q: "How do Sub Slots work?",
-        tip_slots_a: 'Gifts <b>and</b> paid subs/renewals spin Sub Slots (N gifts = N spins). Wins pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.',
+        tip_slots_a: 'Gifts <b>and</b> paid subs/renewals spin Sub Slots (N gifts = N spins). Wins pay virtual points (your emoji token) into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.',
         tips_title: "Tips & Tricks",
         tip1_q: "How to set up the wheel in OBS",
         tip1_a: 'Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>1920x1080</code> (match your stream resolution). The wheel auto-scales with padding to fit any size \u2014 using a smaller resolution may make the wheel appear too large for the source box. Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.',
@@ -630,12 +656,16 @@
         bot_cmd_add: "Add Command", bot_cmd_del_confirm: "Delete command",
         bot_tbl_cmd: "Command", bot_tbl_resp: "Response", bot_tbl_cd: "CD (s)", bot_tbl_on: "On",
         bot_lang_note: "Bot responses (built-in commands) use the dashboard language (EN/PL).",
-        sc_title: "Sub Counter", sc_desc: "Overlay showing active subscriber count from Kick. Refreshes every 60 seconds.",
+        sc_title: "Sub Counter", sc_desc: "Kick API undercounts gifted subs. We track gifts live and let you seed the missing history.",
         sc_goal_label: "Subscriber goal (0 = hidden)", sc_title_label: "Overlay header", sc_label_label: "Label below count",
-        sc_live_label: "Live sub count (Kick API)", sc_refresh: "Refresh",
+        sc_live_label: "Estimated total", sc_refresh: "Refresh",
         sc_save: "Save settings", sc_saved: "Sub counter saved.", sc_save_err: "Save error: ",
-        sc_url_info: "Sub counter overlay URL (copy to OBS):", sc_url_note: "OBS size: ~320×120px. Background: transparent.",
+        sc_url_info: "Sub counter overlay URL (copy to OBS):", sc_url_note: "OBS size: ~520×110px. Background: transparent.",
         urls_subs: "Sub counter overlay:",
+        sc_api_label: "Kick API", sc_tracked_label: "Tracked gifts (active)", sc_seed_label: "Seed offset", sc_est_label: "Estimated total",
+        sc_real_label: "Calibrate: real Kick banner total", sc_calibrate: "Set seed",
+        sc_calibrate_hint: "API + tracked + seed = this number. New gifts are added automatically from now on.",
+        sc_calibrated: "Seed calibrated.",
       },
       pl: {
         title: "Kolo Fortuny", subtitle: "Panel Streamera", logout: "Wyloguj",
@@ -644,12 +674,13 @@
         actions_title: "Akcje", actions_test_spin: "Testowe losowanie", actions_test_slots: "Testowe zakrecenie slotsa", actions_reset_delay: "Resetuj timer",
         actions_sim_label: "Symuluj podarowane suby", actions_send_gifts: "Wyslij gifty", actions_sim_sub: "Symuluj platny sub",
         slots_title: "Sub Slots — nagrody z banku",
-        slots_desc: "Kazdy gift i platny sub/renewal kreci slotsami. Wygrane dodaja wirtualne $ do banku. Po osiagnieciu progu nagroda odblokowuje sie raz (do resetu).",
+        slots_desc: "Kazdy gift i platny sub/renewal kreci slotsami. Wygrane dodaja punkty (pokazywane jako Twoja emotka) do banku. Po osiagnieciu progu nagroda odblokowuje sie raz (do resetu).",
         slots_bank_label: "Aktualny bank", slots_reset_bank: "Resetuj bank", slots_save: "Zapisz nagrody slots",
-        slots_col_min: "Min bank $", slots_col_label: "Nazwa nagrody", slots_add: "+ Dodaj prog",
+        slots_token_label: "Emotka / token banku",
+        slots_col_min: "Min bank", slots_col_label: "Nazwa nagrody", slots_add: "+ Dodaj prog",
         slots_obs_hint: "OBS ~960×540. Otworz URL slotsow, potem kliknij Testowe zakrecenie slotsa.",
         tip_slots_q: "Jak dzialaja Sub Slots?",
-        tip_slots_a: 'Gifty <b>i</b> zwykle suby/renewale kreca Sub Slots (N giftow = N spinow). Wygrane daja wirtualne <b>$</b> do banku. Ustaw progi nagrod — po osiagnieciu sumy wypada label. Kolo nadal dziala na giftach osobno.',
+        tip_slots_a: 'Gifty <b>i</b> zwykle suby/renewale kreca Sub Slots (N giftow = N spinow). Wygrane daja punkty (Twoja emotka) do banku. Ustaw progi nagrod — po osiagnieciu sumy wypada label. Kolo nadal dziala na giftach osobno.',
         tips_title: "Porady i wskazowki",
         tip1_q: "Jak skonfigurowac kolo w OBS",
         tip1_a: 'Skopiuj adres <b>nakladki kola</b> i dodaj go jako <b>Browser Source</b> w OBS. Ustaw wymiary na <code>1920x1080</code> (zgodnie z rozdzielczoscia streama). Kolo automatycznie skaluje sie z marginesami \u2014 mniejsza rozdzielczosc moze spowodowac, ze kolo bedzie za duze. Upewnij sie, ze opcja <em>"Shutdown source when not visible"</em> jest <b>odznaczona</b>, aby kolo bylo caly czas polaczone. Zrob to samo dla <b>nakladki timera</b>, jesli chcesz wyswietlac odliczanie.',
@@ -692,12 +723,16 @@
         bot_cmd_add: "Dodaj komende", bot_cmd_del_confirm: "Usunac komende",
         bot_tbl_cmd: "Komenda", bot_tbl_resp: "Odpowiedz", bot_tbl_cd: "CD (s)", bot_tbl_on: "Wl.",
         bot_lang_note: "Odpowiedzi bota (wbudowane komendy) uzywaja jezyka panelu (EN/PL).",
-        sc_title: "Licznik subów", sc_desc: "Overlay wyswietlajacy liczbe aktywnych subskrybentow z Kick. Dane odswieza sie co 60 sekund.",
+        sc_title: "Licznik subów", sc_desc: "Kick API zaniża gifty. Trackujemy gifty na żywo i pozwalamy zaseedować brakującą historię.",
         sc_goal_label: "Cel subskrypcji (0 = ukryty)", sc_title_label: "Naglowek overlaya", sc_label_label: "Etykieta pod liczba",
-        sc_live_label: "Aktualna liczba subow (Kick API)", sc_refresh: "Odswiez",
+        sc_live_label: "Szacowana suma", sc_refresh: "Odswiez",
         sc_save: "Zapisz ustawienia", sc_saved: "Licznik zapisany.", sc_save_err: "Blad zapisu: ",
-        sc_url_info: "URL overlaya licznika subow (skopiuj do OBS):", sc_url_note: "Wymiary OBS: ~320x120px. Tlo: przezroczyste.",
+        sc_url_info: "URL overlaya licznika subow (skopiuj do OBS):", sc_url_note: "Wymiary OBS: ~520x110px. Tlo: przezroczyste.",
         urls_subs: "Overlay licznika subow:",
+        sc_api_label: "Kick API", sc_tracked_label: "Trackowane gifty (aktywne)", sc_seed_label: "Seed offset", sc_est_label: "Szacowana suma",
+        sc_real_label: "Kalibracja: realna liczba na Kicku", sc_calibrate: "Ustaw seed",
+        sc_calibrate_hint: "API + tracked + seed = ta liczba. Gifty od teraz doliczaja sie same.",
+        sc_calibrated: "Seed ustawiony.",
       }
     };
 
@@ -1058,7 +1093,7 @@
         const r = await fetch("/dashboard/test-slots/1", { cache: "no-store" });
         const j = await r.json();
         showActionResult(j.ok, j.message || "Test slots spin sent.");
-        if (j.bank != null) el("slotsBankVal").textContent = "$" + Number(j.bank).toFixed(2);
+        if (j.bank != null) el("slotsBankVal").textContent = formatSlotsBank(j.bank);
       } catch {
         showActionResult(false, "Failed to send test slots spin.");
       }
@@ -1069,7 +1104,7 @@
         const r = await fetch("/dashboard/simulate-sub", { method: "POST", cache: "no-store" });
         const j = await r.json();
         showActionResult(j.ok, j.message || "Simulated sub.");
-        if (j.bank != null) el("slotsBankVal").textContent = "$" + Number(j.bank).toFixed(2);
+        if (j.bank != null) el("slotsBankVal").textContent = formatSlotsBank(j.bank);
       } catch {
         showActionResult(false, "Failed to simulate sub.");
       }
@@ -1103,13 +1138,23 @@
 
     // ==== Slots prizes editor ====
     let slotsPrizes = [];
+    let slotsToken = "🪙";
+
+    function formatSlotsBank(n) {
+      return slotsToken + Number(n || 0).toFixed(2);
+    }
 
     function refreshSlotsBank() {
       fetch("/dashboard/slots", { cache: "no-store" })
         .then((r) => r.json())
         .then((j) => {
           if (!j?.ok) return;
-          el("slotsBankVal").textContent = "$" + Number(j.bank || 0).toFixed(2);
+          if (j.slots_token) {
+            slotsToken = j.slots_token;
+            const inp = el("slotsTokenInput");
+            if (inp) inp.value = slotsToken;
+          }
+          el("slotsBankVal").textContent = formatSlotsBank(j.bank || 0);
           if (Array.isArray(j.prizes)) {
             slotsPrizes = j.prizes.map((p) => ({ min_bank: p.min_bank, label: p.label }));
             renderSlotsPrizes();
@@ -1155,15 +1200,21 @@
 
     el("saveSlotsPrizesBtn").onclick = async () => {
       try {
+        const tokenVal = (el("slotsTokenInput")?.value || "🪙").trim();
         const r = await fetch("/dashboard/slots/prizes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slots_prizes: slotsPrizes }),
+          body: JSON.stringify({ slots_prizes: slotsPrizes, slots_token: tokenVal }),
         });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || "save failed");
         slotsPrizes = j.prizes || slotsPrizes;
+        if (j.slots_token) {
+          slotsToken = j.slots_token;
+          if (el("slotsTokenInput")) el("slotsTokenInput").value = slotsToken;
+        }
         renderSlotsPrizes();
+        refreshSlotsBank();
         showActionResult(true, "Slots prizes saved.");
       } catch (e) {
         showActionResult(false, "Slots save error: " + e.message);
@@ -1175,7 +1226,7 @@
         const r = await fetch("/dashboard/slots/reset-bank", { method: "POST" });
         const j = await r.json();
         if (j.ok) {
-          el("slotsBankVal").textContent = "$0.00";
+          el("slotsBankVal").textContent = formatSlotsBank(0);
           showActionResult(true, "Slots bank reset.");
         }
       } catch {
@@ -1458,11 +1509,11 @@
         box._rawUrl = url;
         box.innerHTML = `${url}<span class="copy-hint">${t("click_copy")}</span>`;
       }
-      // Also keep top-level subsUrl in sync
       const subsBox = el("subsUrl");
       if (subsBox) {
-        subsBox._rawUrl = `${base}/subs/${overlayKey}?key=${overlayKey}`;
-        subsBox.innerHTML = `${base}/subs/${overlayKey}?key=${overlayKey}<span class="copy-hint">${t("click_copy")}</span>`;
+        const simple = `${base}/subs/${overlayKey}?key=${overlayKey}`;
+        subsBox._rawUrl = simple;
+        subsBox.innerHTML = `${simple}<span class="copy-hint">${t("click_copy")}</span>`;
       }
     }
 
@@ -1476,31 +1527,31 @@
       box._timer = setTimeout(() => { box.style.display = "none"; }, 4000);
     }
 
+    function applySubCounterStats(j) {
+      if (!j) return;
+      if (j.sub_goal != null) el("scGoal").value = j.sub_goal ?? 0;
+      if (j.sub_counter_title != null) el("scTitle").value = j.sub_counter_title ?? "Subskrybenci";
+      if (j.sub_counter_label != null) el("scLabel").value = j.sub_counter_label ?? "aktywne subskrypcje";
+      el("scApiCount").textContent = j.api_count == null ? "–" : j.api_count;
+      el("scTrackedCount").textContent = j.active_tracked_gifts ?? 0;
+      el("scSeedDisplay").textContent = j.sub_seed_offset ?? 0;
+      el("scLiveCount").textContent = j.estimated_subscribers_count == null ? "–" : j.estimated_subscribers_count;
+      updateSubsUrl();
+    }
+
     async function loadSubCounterConfig() {
       try {
         const r = await fetch("/dashboard/sub-counter", { cache: "no-store" });
         const j = await r.json();
         if (!j?.ok) return;
-        el("scGoal").value = j.sub_goal ?? 0;
-        el("scTitle").value = j.sub_counter_title ?? "Subskrybenci";
-        el("scLabel").value = j.sub_counter_label ?? "aktywne subskrypcje";
-        updateSubsUrl();
+        applySubCounterStats(j);
       } catch (e) {
         console.warn("Failed to load sub counter config:", e);
       }
     }
 
     async function fetchLiveSubCount() {
-      try {
-        const r = await fetch(`/dashboard/status`, { cache: "no-store" });
-        const j = await r.json();
-        if (!j?.ok || !j.overlay_key) return;
-        const r2 = await fetch(`/overlay/${j.overlay_key}/subs`, { cache: "no-store" });
-        const j2 = await r2.json();
-        if (j2?.ok && Number.isFinite(j2.active_subscribers_count)) {
-          el("scLiveCount").textContent = j2.active_subscribers_count;
-        }
-      } catch {}
+      await loadSubCounterConfig();
     }
 
     el("scGoal").addEventListener("input", updateSubsUrl);
@@ -1508,6 +1559,32 @@
     el("scLabel").addEventListener("input", updateSubsUrl);
 
     el("scRefreshBtn").onclick = fetchLiveSubCount;
+
+    el("scCalibrateBtn").onclick = async () => {
+      const real = parseInt(el("scRealTotal").value, 10);
+      if (!Number.isFinite(real) || real < 0) {
+        showScResult(false, t("sc_save_err") + "invalid total");
+        return;
+      }
+      try {
+        const r = await fetch("/dashboard/sub-counter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sub_goal: parseInt(el("scGoal").value, 10) || 0,
+            sub_counter_title: (el("scTitle").value || "").trim(),
+            sub_counter_label: (el("scLabel").value || "").trim(),
+            real_total: real,
+          }),
+        });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error || "Failed");
+        applySubCounterStats(j);
+        showScResult(true, t("sc_calibrated") + ` (seed=${j.sub_seed_offset})`);
+      } catch (e) {
+        showScResult(false, t("sc_save_err") + e.message);
+      }
+    };
 
     el("scSaveBtn").onclick = async () => {
       try {
@@ -1522,7 +1599,7 @@
         });
         const j = await r.json();
         if (!j?.ok) throw new Error(j?.error || "Failed");
-        updateSubsUrl();
+        applySubCounterStats(j);
         showScResult(true, t("sc_saved"));
       } catch (e) {
         showScResult(false, t("sc_save_err") + e.message);

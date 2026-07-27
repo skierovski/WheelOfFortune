@@ -7,6 +7,8 @@ import { requireSession, resolveOverlayKey } from "../middleware/requireSession.
 import { env } from "../utils/env.js";
 import { getDb } from "../db.js";
 import { getOverlayAuthStatus } from "../services/authStatus.js";
+import { trackGiftEvent } from "../services/giftTracker.js";
+import { loadConfig } from "../services/configStore.js";
 
 const router = Router();
 
@@ -51,6 +53,23 @@ router.get("/dashboard/test/:n", requireSession, (req, res) => {
 router.post("/dashboard/simulate-gift", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const giftCount = Math.max(1, Math.min(100, Number(req.body?.gift_count) || 1));
+
+  // Track for hybrid sub counter
+  const tracked = trackGiftEvent(bid, {
+    messageId: `sim_${bid}_${Date.now()}`,
+    giftCount,
+    gifterUsername: "SimulateGift",
+  });
+  try {
+    const cfg = loadConfig(bid);
+    req.app?.locals?.wss?.broadcastTo?.(bid, {
+      type: "subs",
+      gift_delta: giftCount,
+      active_tracked_gifts: tracked.active_tracked,
+      sub_seed_offset: cfg?.sub_seed_offset ?? 0,
+      sub_goal: cfg?.sub_goal ?? 0,
+    });
+  } catch {}
 
   // Slots: every gifted sub = 1 slots spin
   const slotsDelivered = slots.deliverOrQueue(bid, giftCount);

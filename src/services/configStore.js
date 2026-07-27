@@ -27,6 +27,7 @@ export function saveConfig(broadcasterId, items, opts = {}) {
   const finalSubGoal = Number.isFinite(opts.sub_goal) ? opts.sub_goal : (prev?.sub_goal ?? 0);
   const finalSubTitle = typeof opts.sub_counter_title === "string" ? opts.sub_counter_title : (prev?.sub_counter_title ?? "Subskrybenci");
   const finalSubLabel = typeof opts.sub_counter_label === "string" ? opts.sub_counter_label : (prev?.sub_counter_label ?? "aktywne subskrypcje");
+  const finalSubSeed = Number.isFinite(opts.sub_seed_offset) ? opts.sub_seed_offset : (prev?.sub_seed_offset ?? 0);
 
   // Normalize tiers if provided
   let finalTiers = null;
@@ -53,10 +54,11 @@ export function saveConfig(broadcasterId, items, opts = {}) {
     sub_goal: finalSubGoal,
     sub_counter_title: finalSubTitle,
     sub_counter_label: finalSubLabel,
+    sub_seed_offset: finalSubSeed,
   });
   const tierCount = finalTiers ? finalTiers.length : 0;
   console.log(`[config] saved ${normalized.length} items, ${tierCount} tiers for broadcaster ${broadcasterId} accent=${finalAccent} secondary=${finalSecondary} opacity=${finalOpacity} gifts_per_spin=${finalGifts}`);
-  return { items: normalized, tiers: finalTiers, accent_color: finalAccent, secondary_color: finalSecondary, wheel_opacity: finalOpacity, gifts_per_spin: finalGifts, sub_goal: finalSubGoal, sub_counter_title: finalSubTitle, sub_counter_label: finalSubLabel };
+  return { items: normalized, tiers: finalTiers, accent_color: finalAccent, secondary_color: finalSecondary, wheel_opacity: finalOpacity, gifts_per_spin: finalGifts, sub_goal: finalSubGoal, sub_counter_title: finalSubTitle, sub_counter_label: finalSubLabel, sub_seed_offset: finalSubSeed };
 }
 
 /**

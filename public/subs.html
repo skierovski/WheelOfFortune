@@ -213,6 +213,9 @@
     const countTextEl = document.getElementById("countText");
 
     let lastValue = null;
+    let apiCount = 0;
+    let seedOffset = 0;
+    let activeTracked = 0;
 
     function remainingPhrase(remaining) {
       // Prefer dashboard title as prefix when custom; otherwise Kick-like default.
@@ -220,6 +223,10 @@
       if (remaining <= 0) return "Cel osiągnięty!";
       if (remaining === 1) return "Brakuje jeszcze 1 subskrybującego!";
       return `Brakuje jeszcze ${remaining} subskrybujących!`;
+    }
+
+    function estimatedCount() {
+      return Math.max(0, Math.round(apiCount) + Math.round(seedOffset) + Math.max(0, Math.round(activeTracked)));
     }
 
     function render(count) {
@@ -268,17 +275,32 @@
       if (!labelOverride && typeof cfg.sub_counter_label === "string" && cfg.sub_counter_label.trim()) {
         customLabel = cfg.sub_counter_label.trim();
       }
+      if (Number.isFinite(cfg.sub_seed_offset)) {
+        seedOffset = Number(cfg.sub_seed_offset) || 0;
+      }
+    }
+
+    function applySubsPayload(j) {
+      if (!j) return;
+      applyConfig(j);
+      if (Number.isFinite(j.active_subscribers_count)) apiCount = j.active_subscribers_count;
+      if (Number.isFinite(j.active_tracked_gifts)) activeTracked = j.active_tracked_gifts;
+      if (Number.isFinite(j.sub_seed_offset)) seedOffset = j.sub_seed_offset;
+      if (Number.isFinite(j.estimated_subscribers_count)) {
+        render(j.estimated_subscribers_count);
+      } else {
+        render(estimatedCount());
+      }
     }
 
     async function fetchSubCount() {
       if (!API_BASE) return;
       try {
         const r = await fetch(`${API_BASE}/subs`, { cache: "no-store" });
-        if (!r.ok) return;
-        const j = await r.json();
-        if (!j?.ok) return;
-        applyConfig(j);
-        if (Number.isFinite(j.active_subscribers_count)) render(j.active_subscribers_count);
+        const j = await r.json().catch(() => null);
+        if (!j) return;
+        // Even on 502 we may get tracked/seed fallback
+        if (j.ok || Number.isFinite(j.estimated_subscribers_count)) applySubsPayload(j);
       } catch (e) {
         console.warn("[SUBS] fetch error:", e);
       }
@@ -316,7 +338,10 @@
             const data = JSON.parse(evt.data);
             if (data.type === "config") {
               applyConfig(data);
-              if (lastValue !== null) render(lastValue);
+              render(estimatedCount());
+            }
+            if (data.type === "subs") {
+              applySubsPayload(data);
             }
           } catch {}
         };
