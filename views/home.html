@@ -331,8 +331,8 @@
 
       <!-- SLOTS PRIZES -->
       <div class="card full-width">
-        <h2 data-i18n="slots_title">Fruit Slots — bank prizes</h2>
-        <div class="muted" data-i18n="slots_desc">Every gift and paid sub/renewal spins the fruit slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).</div>
+        <h2 data-i18n="slots_title">Sub Slots — bank prizes</h2>
+        <div class="muted" data-i18n="slots_desc">Every gift and paid sub/renewal spins Sub Slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).</div>
         <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; align-items:center;">
           <div class="hud-box" style="background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:10px 16px;">
             <div class="muted small" data-i18n="slots_bank_label">Current bank</div>
@@ -394,8 +394,8 @@
             <p data-i18n-html="tip8_a">After each spin, there's a <b>5-minute cooldown</b> before the next spin fires. If you want to skip the wait (e.g. during testing), hit <b>Reset Delay Timer</b> to clear it. If there are pending spins, one will fire immediately with the correct tier.</p>
           </details>
           <details>
-            <summary data-i18n="tip_slots_q">How do fruit slots work?</summary>
-            <p data-i18n-html="tip_slots_a">Gifts <b>and</b> paid subs/renewals spin the slots (N gifts = N spins). Fruits pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.</p>
+            <summary data-i18n="tip_slots_q">How do Sub Slots work?</summary>
+            <p data-i18n-html="tip_slots_a">Gifts <b>and</b> paid subs/renewals spin Sub Slots (N gifts = N spins). Wins pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.</p>
           </details>
         </div>
       </div>
@@ -581,13 +581,13 @@
         urls_wheel: "Wheel overlay:", urls_slots: "Slots overlay:", urls_delay: "Delay timer overlay:", urls_ws: "WebSocket (custom integrations):",
         actions_title: "Actions", actions_test_spin: "Send Test Spin", actions_test_slots: "Send Test Slots Spin", actions_reset_delay: "Reset Delay Timer",
         actions_sim_label: "Simulate gifted subs", actions_send_gifts: "Send Gifts", actions_sim_sub: "Simulate paid sub",
-        slots_title: "Fruit Slots — bank prizes",
-        slots_desc: "Every gift and paid sub/renewal spins the fruit slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).",
+        slots_title: "Sub Slots — bank prizes",
+        slots_desc: "Every gift and paid sub/renewal spins Sub Slots. Wins add virtual $ to a bank. When the bank reaches a threshold, that prize unlocks once (until you reset).",
         slots_bank_label: "Current bank", slots_reset_bank: "Reset bank", slots_save: "Save slots prizes",
         slots_col_min: "Min bank $", slots_col_label: "Prize label", slots_add: "+ Add threshold",
-        slots_obs_hint: "OBS size ~960×540. Open the Slots overlay URL, then use Send Test Slots Spin.",
-        tip_slots_q: "How do fruit slots work?",
-        tip_slots_a: 'Gifts <b>and</b> paid subs/renewals spin the slots (N gifts = N spins). Fruits pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.',
+        slots_obs_hint: "OBS size ~960×540. Open the Sub Slots overlay URL, then use Send Test Slots Spin.",
+        tip_slots_q: "How do Sub Slots work?",
+        tip_slots_a: 'Gifts <b>and</b> paid subs/renewals spin Sub Slots (N gifts = N spins). Wins pay virtual <b>$</b> into a bank. Set prize thresholds below — when the bank hits a sum, that label unlocks. The wheel still runs on gifts separately.',
         tips_title: "Tips & Tricks",
         tip1_q: "How to set up the wheel in OBS",
         tip1_a: 'Copy the <b>Wheel overlay</b> URL above and add it as a <b>Browser Source</b> in OBS. Set the width and height to <code>1920x1080</code> (match your stream resolution). The wheel auto-scales with padding to fit any size \u2014 using a smaller resolution may make the wheel appear too large for the source box. Make sure <em>"Shutdown source when not visible"</em> is <b>unchecked</b> so the wheel stays connected. Do the same for the <b>Delay timer overlay</b> if you want viewers to see the cooldown countdown.',
@@ -643,13 +643,13 @@
         urls_wheel: "Nakladka kola:", urls_slots: "Nakladka slotsow:", urls_delay: "Nakladka timera:", urls_ws: "WebSocket (integracje):",
         actions_title: "Akcje", actions_test_spin: "Testowe losowanie", actions_test_slots: "Testowe zakrecenie slotsa", actions_reset_delay: "Resetuj timer",
         actions_sim_label: "Symuluj podarowane suby", actions_send_gifts: "Wyslij gifty", actions_sim_sub: "Symuluj platny sub",
-        slots_title: "Fruit Slots — nagrody z banku",
+        slots_title: "Sub Slots — nagrody z banku",
         slots_desc: "Kazdy gift i platny sub/renewal kreci slotsami. Wygrane dodaja wirtualne $ do banku. Po osiagnieciu progu nagroda odblokowuje sie raz (do resetu).",
         slots_bank_label: "Aktualny bank", slots_reset_bank: "Resetuj bank", slots_save: "Zapisz nagrody slots",
         slots_col_min: "Min bank $", slots_col_label: "Nazwa nagrody", slots_add: "+ Dodaj prog",
         slots_obs_hint: "OBS ~960×540. Otworz URL slotsow, potem kliknij Testowe zakrecenie slotsa.",
-        tip_slots_q: "Jak dzialaja slotsy owocki?",
-        tip_slots_a: 'Gifty <b>i</b> zwykle suby/renewale kreca slotsami (N giftow = N spinow). Owocki daja wirtualne <b>$</b> do banku. Ustaw progi nagrod — po osiagnieciu sumy wypada label. Kolo nadal dziala na giftach osobno.',
+        tip_slots_q: "Jak dzialaja Sub Slots?",
+        tip_slots_a: 'Gifty <b>i</b> zwykle suby/renewale kreca Sub Slots (N giftow = N spinow). Wygrane daja wirtualne <b>$</b> do banku. Ustaw progi nagrod — po osiagnieciu sumy wypada label. Kolo nadal dziala na giftach osobno.',
         tips_title: "Porady i wskazowki",
         tip1_q: "Jak skonfigurowac kolo w OBS",
         tip1_a: 'Skopiuj adres <b>nakladki kola</b> i dodaj go jako <b>Browser Source</b> w OBS. Ustaw wymiary na <code>1920x1080</code> (zgodnie z rozdzielczoscia streama). Kolo automatycznie skaluje sie z marginesami \u2014 mniejsza rozdzielczosc moze spowodowac, ze kolo bedzie za duze. Upewnij sie, ze opcja <em>"Shutdown source when not visible"</em> jest <b>odznaczona</b>, aby kolo bylo caly czas polaczone. Zrob to samo dla <b>nakladki timera</b>, jesli chcesz wyswietlac odliczanie.',

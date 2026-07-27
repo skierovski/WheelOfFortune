@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Fruit Slots Overlay</title>
+  <title>Sub Slots Overlay</title>
   <style>
     :root {
       --accent: #f5a623;
@@ -24,10 +24,15 @@
       width: 100vw; height: 100vh;
       display: flex; align-items: center; justify-content: center;
       opacity: 0;
-      transition: opacity .5s ease;
+      transform: translateY(24px) scale(0.96);
+      transition: opacity .85s ease, transform .85s ease;
       pointer-events: none;
     }
-    #stage.show { opacity: 1; }
+    #stage.show {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
 
     .machine {
       width: min(920px, 94vw);
@@ -242,7 +247,7 @@
 <body>
   <div id="stage">
     <div class="machine" id="machine">
-      <h1 class="title">FRUIT <span class="gem">💎</span> SLOTS</h1>
+      <h1 class="title">SUB <span class="gem">💎</span> SLOTS</h1>
       <div class="reels-wrap">
         <div class="side-label">10 LINES FIXED</div>
         <div class="reels" id="reels"></div>
@@ -295,9 +300,22 @@
     let audioCtx = null;
     let reelEls = [];
     let stripEls = [];
+    let hideTimer = null;
 
     function money(n) {
       return "$" + (Number(n) || 0).toFixed(2);
+    }
+
+    function showOverlay() {
+      clearTimeout(hideTimer);
+      document.getElementById("stage").classList.add("show");
+    }
+    function hideOverlay(afterMs = 1400) {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        document.getElementById("stage").classList.remove("show");
+        document.getElementById("toast").classList.remove("show");
+      }, afterMs);
     }
 
     function applyTheme(cfg) {
@@ -456,6 +474,7 @@
     function runSpin(result) {
       return new Promise((resolve) => {
         spinning = true;
+        showOverlay();
         updateHud({ win: 0, status: "SPINNING" });
         sfxSpinStart();
         const grid = result.grid;
@@ -465,23 +484,35 @@
           animateReelTo(c, grid[c], dur, () => {
             done++;
             if (done === REELS) {
-              // Highlight middle row if win
-              if (result.win > 0 && result.matchCount >= 3) {
-                for (let c2 = 0; c2 < result.matchCount; c2++) {
-                  stripEls[c2].cells[11]?.classList.add("win");
+              const hits = Array.isArray(result.hits) && result.hits.length
+                ? result.hits
+                : (result.win > 0 ? [{ row: 1, matchCount: result.matchCount || 3 }] : []);
+
+              if (hits.length) {
+                for (const h of hits) {
+                  const row = Number(h.row);
+                  const count = Number(h.matchCount) || 3;
+                  for (let c2 = 0; c2 < count; c2++) {
+                    // base=10 → visible rows at 10,11,12
+                    stripEls[c2].cells[10 + row]?.classList.add("win");
+                  }
                 }
                 sfxWin();
               }
-              updateHud({ bank: result.bank, win: result.win, status: "WAITING" });
+
+              updateHud({ bank: result.bank, win: result.win, status: result.bonus ? "BONUS!" : "WAITING" });
               if (result.win > 0) {
-                showToast(`WIN ${money(result.win)}<span class="sub">BANK ${money(result.bank)}</span>`);
+                const sym = result.symbol ? (SYMBOL_EMOJI[result.symbol] || "") + " " : "";
+                const bonusTag = result.bonus ? '<span class="sub">+ BONUS SPIN</span>' : "";
+                showToast(`${sym}WIN ${money(result.win)}${bonusTag}<span class="sub">BANK ${money(result.bank)}</span>`, result.bonus ? 2200 : 2800);
               }
+
               const prizes = result.prizes_hit || [];
-              if (prizes.length) {
-                setTimeout(() => {
+              const announceWin = () => {
+                if (prizes.length) {
                   sfxPrize();
                   const labels = prizes.map((p) => p.label).join(" · ");
-                  showToast(`🏆 ${labels}<span class="sub">BANK THRESHOLD</span>`, 4000);
+                  showToast(`🏆 ${labels}<span class="sub">BANK THRESHOLD</span>`, 3500);
                   for (const p of prizes) {
                     fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
                       method: "POST",
@@ -489,17 +520,34 @@
                       body: JSON.stringify({ label: `Slots prize: ${p.label} (bank $${result.bank})` }),
                     }).catch(() => {});
                   }
-                }, result.win > 0 ? 900 : 0);
-              } else if (result.win > 0) {
-                fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
+                } else if (result.win > 0) {
+                  fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      label: `Slots win $${result.win.toFixed(2)}${result.bonus ? " (+bonus)" : ""} (bank $${Number(result.bank).toFixed(2)})`,
+                    }),
+                  }).catch(() => {});
+                }
+              };
+
+              const finish = () => {
+                fetch(`/overlay/${OVERLAY_KEY}/slots/complete`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ label: `Slots win $${result.win.toFixed(2)} (bank $${result.bank.toFixed(2)})` }),
+                  body: JSON.stringify({ bonus: !!result.bonus }),
                 }).catch(() => {});
+                spinning = false;
+                resolve();
+              };
+
+              if (prizes.length && result.win > 0) {
+                setTimeout(() => { announceWin(); finish(); }, 900);
+              } else {
+                announceWin();
+                // Short pause so bonus toast is readable before next spin
+                setTimeout(finish, result.bonus ? 1100 : 200);
               }
-              fetch(`/overlay/${OVERLAY_KEY}/slots/complete`, { method: "POST" }).catch(() => {});
-              spinning = false;
-              resolve();
             }
           });
         }
@@ -508,16 +556,21 @@
 
     async function drain() {
       if (spinning) return;
+      if (queue.length) {
+        showOverlay();
+        await new Promise((r) => setTimeout(r, 350));
+      }
       while (queue.length) {
         const item = queue.shift();
         await runSpin(item.result);
+        if (queue.length) await new Promise((r) => setTimeout(r, 400));
       }
+      hideOverlay(1200);
     }
 
     function handleMessage(msg) {
       if (!msg) return;
       if (msg.type === "slots_config") {
-        // prizes live server-side; bank sync
         if (msg.bank != null) updateHud({ bank: msg.bank });
         return;
       }
@@ -552,7 +605,8 @@
         const j = await r.json();
         if (j.ok) {
           applyTheme(j);
-          updateHud({ bank: j.bank, win: 0, status: "WAITING" });
+          // Keep bank in memory but do not show machine until a spin
+          bank = j.bank || 0;
           if (j.bet) document.getElementById("betText").textContent = money(j.bet);
         }
       } catch {}
@@ -571,9 +625,8 @@
     buildReels();
     loadState();
     connectWs();
-    document.getElementById("stage").classList.add("show");
+    // Idle = hidden (like the wheel). Show only when a spin arrives.
     window.addEventListener("resize", () => {
-      // re-snap strips after resize
       setIdleGrid(randomIdleGrid());
     });
   })();

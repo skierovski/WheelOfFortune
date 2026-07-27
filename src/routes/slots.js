@@ -25,7 +25,7 @@ router.get("/overlay/:key/slots/state", resolveOverlayKey, (req, res) => {
 
 router.post("/overlay/:key/slots/complete", resolveOverlayKey, (req, res) => {
   const bid = req.streamer.broadcaster_id;
-  slots.markComplete(bid);
+  slots.markComplete(bid, { bonus: !!req.body?.bonus });
   res.json({ ok: true });
 });
 

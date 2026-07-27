@@ -63,11 +63,10 @@ export function rollGrid() {
 }
 
 /**
- * Evaluate middle payline: consecutive matching symbols from the left.
- * @returns {{ win: number, matchCount: number, symbol: string|null, line: string[] }}
+ * Evaluate one horizontal row: consecutive matching symbols from the left.
  */
-export function evaluatePayline(grid) {
-  const line = grid.map((col) => col[PAY_ROW]);
+function evaluateRow(grid, row) {
+  const line = grid.map((col) => col[row]);
   const symbol = line[0];
   let matchCount = 1;
   for (let i = 1; i < line.length; i++) {
@@ -75,11 +74,43 @@ export function evaluatePayline(grid) {
     else break;
   }
   if (matchCount < 3) {
-    return { win: 0, matchCount, symbol: null, line };
+    return { win: 0, matchCount, symbol: null, line, row };
   }
   const mult = PAYTABLE[symbol]?.[matchCount] || 0;
   const win = Math.round(BET * mult * 100) / 100;
-  return { win, matchCount, symbol, line };
+  return { win, matchCount, symbol, line, row };
+}
+
+/**
+ * Evaluate all 3 rows (paylines). Any 3+ in a row pays and grants a bonus spin.
+ * @returns {{ win: number, matchCount: number, symbol: string|null, line: string[], rows: number[], bonus: boolean, hits: Array }}
+ */
+export function evaluatePayline(grid) {
+  const hits = [];
+  let totalWin = 0;
+  let best = null;
+  for (let row = 0; row < ROWS; row++) {
+    const r = evaluateRow(grid, row);
+    if (r.win > 0) {
+      hits.push(r);
+      totalWin = roundMoney(totalWin + r.win);
+      if (!best || r.matchCount > best.matchCount || (r.matchCount === best.matchCount && r.win > best.win)) {
+        best = r;
+      }
+    }
+  }
+  if (!hits.length) {
+    return { win: 0, matchCount: 0, symbol: null, line: grid.map((c) => c[PAY_ROW]), rows: [], bonus: false, hits: [] };
+  }
+  return {
+    win: totalWin,
+    matchCount: best.matchCount,
+    symbol: best.symbol,
+    line: best.line,
+    rows: hits.map((h) => h.row),
+    bonus: true, // 3+ fruits in a row → free bonus spin
+    hits,
+  };
 }
 
 function getTimeUntilNext(broadcasterId) {
@@ -168,6 +199,9 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
       matchCount: evalResult.matchCount,
       symbol: evalResult.symbol,
       line: evalResult.line,
+      rows: evalResult.rows || [],
+      hits: evalResult.hits || [],
+      bonus: !!evalResult.bonus,
       bank,
       prizes_hit,
       bet: BET,
@@ -276,10 +310,30 @@ export const slots = {
     return this.deliverOrQueue(broadcasterId, n, { skipDelay: true });
   },
 
-  markComplete(broadcasterId) {
+  /**
+   * Mark spin complete. If bonus (3+ in a row), queue an immediate free spin (no delay).
+   * @param {number} broadcasterId
+   * @param {{ bonus?: boolean }} [opts]
+   */
+  markComplete(broadcasterId, opts = {}) {
     inProgress.set(broadcasterId, false);
     const db = getDb();
     const state = db.getSlotsState(broadcasterId);
+    const bonus = !!opts.bonus;
+
+    if (bonus) {
+      // Free re-spin: do not start the cooldown; queue + deliver now
+      db.saveSlotsState(broadcasterId, {
+        ...state,
+        last_spin_time: 0,
+        spin_in_progress: 0,
+        pending_count: state.pending_count + 1,
+      });
+      console.log(`[SLOTS] bid=${broadcasterId} WIN bonus → free spin queued`);
+      deliverOne(broadcasterId, { skipDelay: true });
+      return;
+    }
+
     const now = Date.now();
     db.saveSlotsState(broadcasterId, {
       ...state,

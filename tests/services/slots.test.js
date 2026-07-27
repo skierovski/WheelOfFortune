@@ -15,19 +15,36 @@ describe("slots paytable", () => {
     expect(r.win).toBe(0);
   });
 
-  it("pays for 3 cherries on middle line", async () => {
+  it("pays for 3 cherries on any row and sets bonus", async () => {
     const { evaluatePayline, PAYTABLE, BET } = await import("../../src/services/slots.js");
     const grid = [
-      ["a", "cherry", "b"],
-      ["a", "cherry", "b"],
-      ["a", "cherry", "b"],
-      ["a", "lemon", "b"],
-      ["a", "lemon", "b"],
+      ["cherry", "x", "y"],
+      ["cherry", "x", "y"],
+      ["cherry", "x", "y"],
+      ["lemon", "x", "y"],
+      ["lemon", "x", "y"],
     ];
     const r = evaluatePayline(grid);
     expect(r.matchCount).toBe(3);
     expect(r.symbol).toBe("cherry");
+    expect(r.bonus).toBe(true);
+    expect(r.rows).toContain(0);
     expect(r.win).toBe(Math.round(BET * PAYTABLE.cherry[3] * 100) / 100);
+  });
+
+  it("sums wins across multiple rows", async () => {
+    const { evaluatePayline } = await import("../../src/services/slots.js");
+    const grid = [
+      ["cherry", "dollar", "z"],
+      ["cherry", "dollar", "z"],
+      ["cherry", "dollar", "z"],
+      ["a", "dollar", "z"],
+      ["a", "dollar", "z"],
+    ];
+    const r = evaluatePayline(grid);
+    expect(r.bonus).toBe(true);
+    expect(r.hits.length).toBe(2);
+    expect(r.win).toBeGreaterThan(0);
   });
 
   it("rollGrid returns 5x3", async () => {
@@ -75,6 +92,21 @@ describe("slots service queue", () => {
     expect(slots.getPending(BID)).toBe(1);
 
     slots.markComplete(BID);
+  });
+
+  it("queues free spin on bonus complete", async () => {
+    const { slots } = await import("../../src/services/slots.js");
+    const broadcasts = [];
+    slots.setBroadcaster((_bid, msg) => {
+      broadcasts.push(msg);
+      return 1;
+    });
+
+    slots.testSpin(BID, 1);
+    expect(slots.getPending(BID)).toBe(0);
+    slots.markComplete(BID, { bonus: true });
+    const slotsMsgs = broadcasts.filter((m) => m.action === "slots");
+    expect(slotsMsgs.length).toBeGreaterThanOrEqual(2);
   });
 
   it("updates bank after a winning spin", async () => {
