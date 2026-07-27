@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
   <title>Wheel of Fortune</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; width:100vw; height:100vh; }
@@ -17,7 +18,8 @@
       font-family:system-ui,sans-serif; border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.08);
       z-index:9999; display:none; }
     .editor.show { display:block; }
-    .editor h2{ margin:0 0 10px 0; font-size:18px; }
+    .editor h2{ margin:0 0 10px 0; font-size:18px; display:flex; align-items:center; gap:8px; }
+    .editor-title-icon{ display:inline-flex; align-items:center; }
     .row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
     .row input[type="text"]{ flex:1; padding:8px 10px; border-radius:8px; border:1px solid #333; background:#141414; color:#fff; }
     .row input[type="number"]{ width:84px; padding:8px 10px; border-radius:8px; border:1px solid #333; background:#141414; color:#fff; }
@@ -64,7 +66,7 @@
 
   <!-- Admin/editor panel -->
   <div id="editor" class="editor" aria-hidden="true">
-    <h2>🎛️ Wheel editor <span class="pill">open via ?edit=1</span></h2>
+    <h2><span class="editor-title-icon"><i class="fi fi-rr-settings-sliders" aria-hidden="true"></i></span>Wheel editor <span class="pill">open via ?edit=1</span></h2>
     <div class="muted">Server-backed config. Viewers do not see this panel.</div>
 
     <div class="row" style="margin-top:6px;">
@@ -841,20 +843,20 @@
         const bonusTxt = document.createElement("span"); bonusTxt.textContent="Bonus spin";
         bonusWrap.appendChild(bonusChk); bonusWrap.appendChild(bonusTxt);
 
-        const up=document.createElement("button"); up.textContent="↑";
+        const up=document.createElement("button"); up.innerHTML='<i class="fi fi-rr-arrow-small-up" aria-hidden="true"></i>'; up.title = "Move up";
         up.onclick=()=>{ if(i>0){ [ITEMS[i-1],ITEMS[i]]=[ITEMS[i],ITEMS[i-1]]; CONFIG_VERSION++; renderList();
           if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
 
-        const down=document.createElement("button"); down.textContent="↓";
+        const down=document.createElement("button"); down.innerHTML='<i class="fi fi-rr-arrow-small-down" aria-hidden="true"></i>'; down.title = "Move down";
         down.onclick=()=>{ if(i<ITEMS.length-1){ [ITEMS[i+1],ITEMS[i]]=[ITEMS[i],ITEMS[i+1]]; CONFIG_VERSION++; renderList();
           if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } };
 
-        const edit=document.createElement("button"); edit.textContent="✎";
+        const edit=document.createElement("button"); edit.innerHTML='<i class="fi fi-rr-edit" aria-hidden="true"></i>'; edit.title = "Rename prize";
         edit.onclick=()=>{ const v=prompt("Rename prize:", ITEMS[i].label);
           if(v!==null){ const s=v.trim(); if(s){ ITEMS[i].label=s; CONFIG_VERSION++; renderList();
             if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag(); } } };
 
-        const del=document.createElement("button"); del.textContent="✕";
+        const del=document.createElement("button"); del.innerHTML='<i class="fi fi-rr-trash" aria-hidden="true"></i>'; del.title = "Delete prize";
         del.onclick=()=>{
           if (ITEMS.length <= 1) { alert("At least one prize must remain."); return; }
           ITEMS.splice(i,1); CONFIG_VERSION++; renderList(); if(!ACTIVE_SNAPSHOT) drawWheel(rotation); buildSpinBag();

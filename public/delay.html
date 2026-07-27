@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
   <title>Delay Timer</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
@@ -14,7 +15,7 @@
       box-shadow: 0 10px 40px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.1);
       backdrop-filter: blur(8px); }
     .delay-overlay.show { opacity: 1; }
-    .delay-overlay h3 { margin: 0 0 12px 0; font-size: 24px; font-weight: 700; color: var(--accent, #7c3aed); }
+    .delay-overlay h3 { margin: 0 0 12px 0; font-size: 24px; font-weight: 700; color: var(--accent, #7c3aed); display:flex; align-items:center; justify-content:center; gap:8px; }
     .delay-overlay .time { font-size: 48px; font-weight: 800; margin: 8px 0; color: #fff; 
       font-variant-numeric: tabular-nums; letter-spacing: 2px; }
     .delay-overlay .pending { font-size: 14px; color: #9ca3af; margin-top: 8px; }
@@ -40,7 +41,7 @@
 <body>
   <div id="authWarning" class="auth-warning" aria-hidden="true">Re-login re auth</div>
   <div id="delayOverlay" class="delay-overlay" aria-hidden="true">
-    <h3>⏱️ Nastepne koło za:</h3>
+    <h3><i class="fi fi-rr-time-forward" aria-hidden="true"></i><span>Nastepne koło za:</span></h3>
     <div class="time" id="delayTime">0:00</div>
     <div class="pending" id="delayPending"></div>
   </div>
@@ -207,23 +208,23 @@
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
-        console.log("[DELAY WS] ✅ Connected (nice-to-have for instant updates)");
+        console.log("[DELAY WS] Connected (nice-to-have for instant updates)");
         reconnectDelay = 1000;
       };
       
       ws.onmessage = (evt) => {
-        console.log("[DELAY WS] 📥 Got update:", evt.data);
+        console.log("[DELAY WS] Got update:", evt.data);
         try { handleServerMessage(JSON.parse(evt.data)); } 
         catch (e) { console.error("[DELAY WS] Bad message", e); }
       };
       
       ws.onerror = () => { 
-        console.log("[DELAY WS] ⚠️ Error (no problem, we have wake-up check)");
+        console.log("[DELAY WS] Error (no problem, we have wake-up check)");
         try { ws.close(); } catch {} 
       };
       
       ws.onclose = () => {
-        console.log("[DELAY WS] ❌ Disconnected (no problem)");
+        console.log("[DELAY WS] Disconnected (no problem)");
         setTimeout(connectWS, 10000); // Try again in 10 seconds
       };
     }
@@ -254,7 +255,7 @@
     // === SIMPLE WAKE-UP SYSTEM ===
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
-        console.log("[DELAY OBS] 👁️ Overlay visible - checking for updates");
+        console.log("[DELAY OBS] Overlay visible - checking for updates");
         checkDelayStatus(); // Simple: ask server once
       }
     });
@@ -262,7 +263,7 @@
     // OBS-specific event
     window.addEventListener("obsSourceActiveChanged", (event) => {
       if (event.detail?.active) {
-        console.log("[DELAY OBS] 🎬 Source activated - checking for updates");
+        console.log("[DELAY OBS] Source activated - checking for updates");
         checkDelayStatus(); // Simple: ask server once
       }
     });
