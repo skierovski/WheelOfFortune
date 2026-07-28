@@ -6,7 +6,7 @@
   <title>Sub Counter</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
-    :root { --counter-bg: rgba(20,22,24,0.88); --text:#f5f7fa; --muted:#d7dde7; }
+    :root { --text:#f5f7fa; --muted:#d7dde7; }
     .subs-overlay {
       position: fixed;
       left: 50%;
@@ -18,22 +18,18 @@
       max-width: 420px;
       padding: 8px 12px;
       border-radius: 10px;
-      background: var(--counter-bg);
       color: var(--text);
       font-family: "Segoe UI", system-ui, sans-serif;
-      box-shadow: 0 6px 20px rgba(0,0,0,.35);
-      backdrop-filter: blur(6px);
     }
     .row {
       display:flex;
       align-items:center;
+      justify-content:center;
       gap:8px;
       line-height:1;
     }
     .icon {
       width:26px; height:26px; border-radius:6px; object-fit:cover; flex:0 0 auto;
-      border:1px solid rgba(255,255,255,.18);
-      background: rgba(255,255,255,.08);
       display:none;
     }
     .icon.show { display:block; }
@@ -48,7 +44,7 @@
     .count.pop { color:#ffffff; }
     .label {
       margin-top: 2px;
-      margin-left: 34px;
+      margin-left: 0;
       font-size: 26px;
       line-height: 1;
       font-weight: 700;
@@ -57,6 +53,7 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      text-align:center;
     }
     .label.no-icon { margin-left: 0; text-align:center; }
   </style>
