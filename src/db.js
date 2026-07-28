@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS wheel_configs (
   slots_prizes_json TEXT DEFAULT '[]',
   slots_token      TEXT DEFAULT '🪙',
   sub_counter_image_url TEXT DEFAULT NULL,
+  sub_counter_image BLOB DEFAULT NULL,
+  sub_counter_image_mime TEXT DEFAULT NULL,
   updated_at       INTEGER DEFAULT (unixepoch())
 );
 
@@ -178,8 +180,48 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("sub_counter_image_url")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_image_url TEXT DEFAULT NULL");
   }
+  if (!cols.includes("sub_counter_image")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_image BLOB DEFAULT NULL");
+  }
+  if (!cols.includes("sub_counter_image_mime")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_image_mime TEXT DEFAULT NULL");
+  }
   // Clear leftover seed offsets (seed UI removed; stuck offsets inflated the overlay)
   sqlite.exec("UPDATE wheel_configs SET sub_seed_offset = 0 WHERE COALESCE(sub_seed_offset, 0) != 0");
+
+  // Migrate legacy filesystem uploads into SQLite (Render disk is ephemeral)
+  try {
+    const legacy = sqlite.prepare(`
+      SELECT c.broadcaster_id, c.sub_counter_image_url, s.overlay_key
+      FROM wheel_configs c
+      JOIN streamers s ON s.broadcaster_id = c.broadcaster_id
+      WHERE c.sub_counter_image IS NULL
+        AND c.sub_counter_image_url LIKE '/uploads/sub-counter/%'
+    `).all();
+    const updateImg = sqlite.prepare(`
+      UPDATE wheel_configs
+      SET sub_counter_image = ?, sub_counter_image_mime = ?, sub_counter_image_url = ?, updated_at = unixepoch()
+      WHERE broadcaster_id = ?
+    `);
+    for (const row of legacy) {
+      const rel = String(row.sub_counter_image_url || "").replace(/^\//, "");
+      const abs = path.join(process.cwd(), "public", rel);
+      if (!fs.existsSync(abs)) continue;
+      const data = fs.readFileSync(abs);
+      const lower = abs.toLowerCase();
+      const mime = lower.endsWith(".png")
+        ? "image/png"
+        : lower.endsWith(".webp")
+          ? "image/webp"
+          : lower.endsWith(".gif")
+            ? "image/gif"
+            : "image/jpeg";
+      const url = `/overlay/${row.overlay_key}/sub-counter-image?v=${Date.now()}`;
+      updateImg.run(data, mime, url, row.broadcaster_id);
+    }
+  } catch (e) {
+    console.warn("[db] sub-counter image migration skipped:", e?.message || e);
+  }
 
   // bot_config migrations
   const botCols = sqlite.prepare("PRAGMA table_info(bot_config)").all().map(c => c.name);
@@ -269,6 +311,19 @@ export function openDatabase(dbPath = ":memory:") {
       ON CONFLICT(broadcaster_id) DO UPDATE SET
         slots_token = excluded.slots_token,
         updated_at = unixepoch()
+    `),
+    upsertSubCounterImage: sqlite.prepare(`
+      INSERT INTO wheel_configs (broadcaster_id, sub_counter_image, sub_counter_image_mime, sub_counter_image_url, updated_at)
+      VALUES (@broadcaster_id, @sub_counter_image, @sub_counter_image_mime, @sub_counter_image_url, unixepoch())
+      ON CONFLICT(broadcaster_id) DO UPDATE SET
+        sub_counter_image = excluded.sub_counter_image,
+        sub_counter_image_mime = excluded.sub_counter_image_mime,
+        sub_counter_image_url = excluded.sub_counter_image_url,
+        updated_at = unixepoch()
+    `),
+    getSubCounterImage: sqlite.prepare(`
+      SELECT sub_counter_image, sub_counter_image_mime, sub_counter_image_url, updated_at
+      FROM wheel_configs WHERE broadcaster_id = ?
     `),
     updateSubSeedOffset: sqlite.prepare(`
       INSERT INTO wheel_configs (broadcaster_id, sub_seed_offset, updated_at)
@@ -564,6 +619,26 @@ export function openDatabase(dbPath = ":memory:") {
         broadcaster_id: broadcasterId,
         slots_token: token || "🪙",
       });
+    },
+
+    saveSubCounterImage(broadcasterId, { data, mime, url }) {
+      stmts.upsertSubCounterImage.run({
+        broadcaster_id: broadcasterId,
+        sub_counter_image: data,
+        sub_counter_image_mime: mime || "image/png",
+        sub_counter_image_url: url || null,
+      });
+    },
+
+    getSubCounterImage(broadcasterId) {
+      const row = stmts.getSubCounterImage.get(broadcasterId);
+      if (!row?.sub_counter_image) return null;
+      return {
+        data: row.sub_counter_image,
+        mime: row.sub_counter_image_mime || "image/png",
+        url: row.sub_counter_image_url || null,
+        updated_at: row.updated_at || 0,
+      };
     },
 
     getSlotsState(broadcasterId) {

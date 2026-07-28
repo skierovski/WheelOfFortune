@@ -1,6 +1,4 @@
 import { Router } from "express";
-import fs from "fs";
-import path from "path";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
 import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor, validateSecondaryColor, validateWheelOpacity } from "../utils/validate.js";
@@ -12,8 +10,22 @@ import {
   computeEstimatedSubCount,
   computeSeedOffset,
 } from "../services/giftTracker.js";
+import { getDb } from "../db.js";
 
 const router = Router();
+
+function subCounterImageUrl(overlayKey, version = Date.now()) {
+  return `/overlay/${overlayKey}/sub-counter-image?v=${version}`;
+}
+
+function resolveSubCounterImageUrl(streamer, cfg) {
+  const db = getDb();
+  const img = db.getSubCounterImage(streamer.broadcaster_id);
+  if (img?.data && streamer.overlay_key) {
+    return subCounterImageUrl(streamer.overlay_key, img.updated_at || Date.now());
+  }
+  return cfg?.sub_counter_image_url ?? null;
+}
 
 // ── Overlay endpoints (by overlay_key) ──────────────────────────────
 
@@ -34,7 +46,7 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
     sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
     sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
     sub_seed_offset: cfg?.sub_seed_offset ?? 0,
-    sub_counter_image_url: cfg?.sub_counter_image_url ?? null,
+    sub_counter_image_url: resolveSubCounterImageUrl(req.streamer, cfg),
     slots_prizes: cfg?.slots_prizes ?? [],
     auth_ok: auth.auth_ok,
     auth_message: auth.auth_message,
@@ -47,6 +59,7 @@ router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
   const cfg = loadConfig(bid);
   const activeTracked = getActiveTrackedGiftCount(bid);
   const seed = cfg?.sub_seed_offset ?? 0;
+  const imageUrl = resolveSubCounterImageUrl(req.streamer, cfg);
   try {
     const info = await fetchChannelInfo(bid);
     const apiCount = info.active_subscribers_count;
@@ -60,7 +73,7 @@ router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
       sub_goal: cfg?.sub_goal ?? 0,
       sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
       sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
-      sub_counter_image_url: cfg?.sub_counter_image_url ?? null,
+      sub_counter_image_url: imageUrl,
     });
   } catch (e) {
     console.warn(`[/overlay/subs] bid=${bid} error:`, e?.message || e);
@@ -72,8 +85,18 @@ router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
       active_tracked_gifts: activeTracked,
       sub_seed_offset: seed,
       estimated_subscribers_count: estimated,
+      sub_counter_image_url: imageUrl,
     });
   }
+});
+
+// Serve persisted sub-counter image from SQLite (survives Render restarts)
+router.get("/overlay/:key/sub-counter-image", resolveOverlayKey, (req, res) => {
+  const img = getDb().getSubCounterImage(req.streamer.broadcaster_id);
+  if (!img?.data) return res.status(404).send("Not found");
+  res.setHeader("Content-Type", img.mime || "image/png");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.send(Buffer.from(img.data));
 });
 
 // ── Dashboard endpoints (session-protected) ─────────────────────────
@@ -204,7 +227,10 @@ router.get("/dashboard/sub-counter", requireSession, async (req, res) => {
     sub_goal: cfg?.sub_goal ?? 0,
     sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
     sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
-    sub_counter_image_url: cfg?.sub_counter_image_url ?? null,
+    sub_counter_image_url: (() => {
+      const streamer = getDb().getStreamerById(bid);
+      return streamer ? resolveSubCounterImageUrl(streamer, cfg) : (cfg?.sub_counter_image_url ?? null);
+    })(),
     sub_seed_offset: seed,
     api_count: apiCount,
     active_tracked_gifts: stats.active_tracked,
@@ -308,7 +334,7 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
   });
 });
 
-// Upload sub counter image (base64 data URL)
+// Upload sub counter image — stored in SQLite (not ephemeral disk)
 router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const dataUrl = String(req.body?.image_data || "");
@@ -316,15 +342,8 @@ router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
   if (!match) {
     return res.status(400).json({ ok: false, error: "Invalid image format" });
   }
-  const mime = match[1].toLowerCase();
+  const mime = match[1].toLowerCase() === "image/jpg" ? "image/jpeg" : match[1].toLowerCase();
   const b64 = match[2];
-  const ext = mime.includes("png")
-    ? "png"
-    : mime.includes("webp")
-      ? "webp"
-      : mime.includes("gif")
-        ? "gif"
-        : "jpg";
 
   let buf;
   try {
@@ -336,13 +355,14 @@ router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
     return res.status(400).json({ ok: false, error: "Image too large (max 1.5MB)" });
   }
 
-  const relDir = path.join("uploads", "sub-counter");
-  const absDir = path.join(process.cwd(), "public", relDir);
-  fs.mkdirSync(absDir, { recursive: true });
-  const fileName = `${bid}-${Date.now()}.${ext}`;
-  const absPath = path.join(absDir, fileName);
-  fs.writeFileSync(absPath, buf);
-  const imageUrl = `/${relDir.replaceAll("\\", "/")}/${fileName}`;
+  const db = getDb();
+  const streamer = db.getStreamerById(bid);
+  if (!streamer?.overlay_key) {
+    return res.status(400).json({ ok: false, error: "Streamer not found" });
+  }
+
+  const imageUrl = subCounterImageUrl(streamer.overlay_key, Date.now());
+  db.saveSubCounterImage(bid, { data: buf, mime, url: imageUrl });
 
   const prev = loadConfig(bid);
   const saved = saveConfig(bid, prev?.items ?? [], {

@@ -179,6 +179,20 @@ describe("database schema and queries", () => {
       expect(db.getConfig(1).slots_token).toBe("🍕");
     });
 
+    it("persists sub-counter image in SQLite", () => {
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      db.saveSubCounterImage(1, {
+        data: png,
+        mime: "image/png",
+        url: "/overlay/abc/sub-counter-image?v=1",
+      });
+      const img = db.getSubCounterImage(1);
+      expect(img).toBeTruthy();
+      expect(Buffer.from(img.data).equals(png)).toBe(true);
+      expect(img.mime).toBe("image/png");
+      expect(db.getConfig(1).sub_counter_image_url).toContain("sub-counter-image");
+    });
+
     it("upserts config on save (overwrite)", () => {
       db.saveConfig(1, { items: [{ label: "A" }], accent_color: "#111111" });
       db.saveConfig(1, { items: [{ label: "B" }, { label: "C" }], accent_color: "#222222" });
