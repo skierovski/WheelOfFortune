@@ -473,25 +473,11 @@
       <!-- SUB COUNTER -->
       <div class="card full-width">
         <h2 data-i18n="sc_title">Sub Counter</h2>
-        <div class="muted" data-i18n="sc_desc">Kick API undercounts gifted subs. We track gifts live and let you seed the missing history.</div>
+        <div class="muted" data-i18n="sc_desc">Minimal overlay: image + active/goal + label below.</div>
 
-        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px;">
-          <div style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
-            <div class="muted small" data-i18n="sc_api_label">Kick API</div>
-            <div id="scApiCount" style="font-size:24px; font-weight:800; color:#94a3b8;">–</div>
-          </div>
-          <div style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
-            <div class="muted small" data-i18n="sc_tracked_label">Tracked gifts (active)</div>
-            <div id="scTrackedCount" style="font-size:24px; font-weight:800; color:#34d399;">–</div>
-          </div>
-          <div style="padding:12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
-            <div class="muted small" data-i18n="sc_seed_label">Seed offset</div>
-            <div id="scSeedDisplay" style="font-size:24px; font-weight:800; color:#fbbf24;">–</div>
-          </div>
-          <div style="padding:12px; border-radius:10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.35);">
-            <div class="muted small" data-i18n="sc_est_label">Estimated total</div>
-            <div id="scLiveCount" style="font-size:28px; font-weight:800; color:var(--accent);">–</div>
-          </div>
+        <div style="margin-top:14px; padding:12px 14px; border-radius:10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.35); display:flex; justify-content:space-between; align-items:center;">
+          <div class="muted small" data-i18n="sc_est_label">Estimated active subscribers</div>
+          <div id="scLiveCount" style="font-size:28px; font-weight:800; color:var(--accent);">–</div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
@@ -508,12 +494,16 @@
             <input type="text" id="scLabel" maxlength="60" value="aktywne subskrypcje" style="width:100%;" />
           </div>
           <div>
-            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_real_label">Kalibracja: realna liczba na Kicku</label>
-            <div style="display:flex; gap:8px;">
-              <input type="number" id="scRealTotal" min="0" max="1000000" step="1" placeholder="np. 69" style="flex:1;" />
-              <button class="btn" id="scCalibrateBtn" style="white-space:nowrap;" data-i18n="sc_calibrate">Ustaw seed</button>
+            <label class="muted small" style="display:block; margin-bottom:5px;" data-i18n="sc_image_label">Obrazek przy liczniku</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="file" id="scImageFile" accept="image/png,image/jpeg,image/webp,image/gif" style="flex:1;" />
+              <button class="btn" id="scUploadImageBtn" style="white-space:nowrap;" data-i18n="sc_upload">Upload</button>
             </div>
-            <div class="muted small" style="margin-top:4px;" data-i18n="sc_calibrate_hint">API + tracked + seed = ta liczba. Gifty od teraz doliczają się same.</div>
+            <div class="muted small" style="margin-top:4px;" data-i18n="sc_image_hint">PNG/JPG/WEBP/GIF, max 1.5MB.</div>
+            <div id="scImagePreviewWrap" style="margin-top:8px; display:none; align-items:center; gap:8px;">
+              <img id="scImagePreview" alt="sub image" style="width:28px; height:28px; border-radius:6px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);" />
+              <span id="scImagePath" class="muted small"></span>
+            </div>
           </div>
         </div>
 
@@ -534,7 +524,7 @@
               <svg class="ico-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
-          <div class="muted small" style="margin-top:6px;" data-i18n="sc_url_note">Wymiary OBS: ~520×110px. Tło: przezroczyste.</div>
+          <div class="muted small" style="margin-top:6px;" data-i18n="sc_url_note">Wymiary OBS: ~340×70px. Tło: przezroczyste.</div>
         </div>
       </div>
 
@@ -656,15 +646,14 @@
         bot_cmd_add: "Add Command", bot_cmd_del_confirm: "Delete command",
         bot_tbl_cmd: "Command", bot_tbl_resp: "Response", bot_tbl_cd: "CD (s)", bot_tbl_on: "On",
         bot_lang_note: "Bot responses (built-in commands) use the dashboard language (EN/PL).",
-        sc_title: "Sub Counter", sc_desc: "Kick API undercounts gifted subs. We track gifts live and let you seed the missing history.",
+        sc_title: "Sub Counter", sc_desc: "Minimal overlay: image + active/goal + label below.",
         sc_goal_label: "Subscriber goal (0 = hidden)", sc_title_label: "Overlay header", sc_label_label: "Label below count",
         sc_live_label: "Estimated total", sc_refresh: "Refresh",
         sc_save: "Save settings", sc_saved: "Sub counter saved.", sc_save_err: "Save error: ",
-        sc_url_info: "Sub counter overlay URL (copy to OBS):", sc_url_note: "OBS size: ~520×110px. Background: transparent.",
+        sc_url_info: "Sub counter overlay URL (copy to OBS):", sc_url_note: "OBS size: ~340×70px. Background: transparent.",
         urls_subs: "Sub counter overlay:",
-        sc_api_label: "Kick API", sc_tracked_label: "Tracked gifts (active)", sc_seed_label: "Seed offset", sc_est_label: "Estimated total",
-        sc_real_label: "Calibrate: real Kick banner total", sc_calibrate: "Set seed",
-        sc_calibrate_hint: "API + tracked + seed = this number. New gifts are added automatically from now on.",
+        sc_est_label: "Estimated active subscribers",
+        sc_image_label: "Counter image", sc_upload: "Upload", sc_image_hint: "PNG/JPG/WEBP/GIF, max 1.5MB.",
         sc_calibrated: "Seed calibrated.",
       },
       pl: {
@@ -723,15 +712,14 @@
         bot_cmd_add: "Dodaj komende", bot_cmd_del_confirm: "Usunac komende",
         bot_tbl_cmd: "Komenda", bot_tbl_resp: "Odpowiedz", bot_tbl_cd: "CD (s)", bot_tbl_on: "Wl.",
         bot_lang_note: "Odpowiedzi bota (wbudowane komendy) uzywaja jezyka panelu (EN/PL).",
-        sc_title: "Licznik subów", sc_desc: "Kick API zaniża gifty. Trackujemy gifty na żywo i pozwalamy zaseedować brakującą historię.",
+        sc_title: "Licznik subów", sc_desc: "Minimalny overlay: obrazek + aktywni/cel + napis pod spodem.",
         sc_goal_label: "Cel subskrypcji (0 = ukryty)", sc_title_label: "Naglowek overlaya", sc_label_label: "Etykieta pod liczba",
         sc_live_label: "Szacowana suma", sc_refresh: "Odswiez",
         sc_save: "Zapisz ustawienia", sc_saved: "Licznik zapisany.", sc_save_err: "Blad zapisu: ",
-        sc_url_info: "URL overlaya licznika subow (skopiuj do OBS):", sc_url_note: "Wymiary OBS: ~520x110px. Tlo: przezroczyste.",
+        sc_url_info: "URL overlaya licznika subow (skopiuj do OBS):", sc_url_note: "Wymiary OBS: ~340x70px. Tlo: przezroczyste.",
         urls_subs: "Overlay licznika subow:",
-        sc_api_label: "Kick API", sc_tracked_label: "Trackowane gifty (aktywne)", sc_seed_label: "Seed offset", sc_est_label: "Szacowana suma",
-        sc_real_label: "Kalibracja: realna liczba na Kicku", sc_calibrate: "Ustaw seed",
-        sc_calibrate_hint: "API + tracked + seed = ta liczba. Gifty od teraz doliczaja sie same.",
+        sc_est_label: "Szacowana liczba aktywnych subow",
+        sc_image_label: "Obrazek przy liczniku", sc_upload: "Upload", sc_image_hint: "PNG/JPG/WEBP/GIF, max 1.5MB.",
         sc_calibrated: "Seed ustawiony.",
       }
     };
@@ -1494,6 +1482,8 @@
     };
 
     // ── Sub Counter ─────────────────────────────────────────────
+    let scImageUrl = null;
+
     function updateSubsUrl() {
       if (!overlayKey) return;
       const base = location.origin;
@@ -1527,14 +1517,31 @@
       box._timer = setTimeout(() => { box.style.display = "none"; }, 4000);
     }
 
+    function applyScImage(url) {
+      scImageUrl = (typeof url === "string" && url.trim()) ? url.trim() : null;
+      const wrap = el("scImagePreviewWrap");
+      const img = el("scImagePreview");
+      const p = el("scImagePath");
+      if (!wrap || !img || !p) return;
+      if (scImageUrl) {
+        img.src = scImageUrl;
+        p.textContent = scImageUrl;
+        wrap.style.display = "flex";
+      } else {
+        img.removeAttribute("src");
+        p.textContent = "";
+        wrap.style.display = "none";
+      }
+    }
+
     function applySubCounterStats(j) {
       if (!j) return;
       if (j.sub_goal != null) el("scGoal").value = j.sub_goal ?? 0;
       if (j.sub_counter_title != null) el("scTitle").value = j.sub_counter_title ?? "Subskrybenci";
       if (j.sub_counter_label != null) el("scLabel").value = j.sub_counter_label ?? "aktywne subskrypcje";
-      el("scApiCount").textContent = j.api_count == null ? "–" : j.api_count;
-      el("scTrackedCount").textContent = j.active_tracked_gifts ?? 0;
-      el("scSeedDisplay").textContent = j.sub_seed_offset ?? 0;
+      if (Object.prototype.hasOwnProperty.call(j, "sub_counter_image_url")) {
+        applyScImage(j.sub_counter_image_url);
+      }
       el("scLiveCount").textContent = j.estimated_subscribers_count == null ? "–" : j.estimated_subscribers_count;
       updateSubsUrl();
     }
@@ -1560,27 +1567,41 @@
 
     el("scRefreshBtn").onclick = fetchLiveSubCount;
 
-    el("scCalibrateBtn").onclick = async () => {
-      const real = parseInt(el("scRealTotal").value, 10);
-      if (!Number.isFinite(real) || real < 0) {
-        showScResult(false, t("sc_save_err") + "invalid total");
+    el("scUploadImageBtn").onclick = async () => {
+      const file = el("scImageFile")?.files?.[0];
+      if (!file) {
+        showScResult(false, t("sc_save_err") + " no file selected");
         return;
       }
+      if (file.size > 1_500_000) {
+        showScResult(false, t("sc_save_err") + " file too large");
+        return;
+      }
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || ""));
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      }).catch(() => null);
+
+      if (!dataUrl) {
+        showScResult(false, t("sc_save_err") + " read file failed");
+        return;
+      }
+
       try {
-        const r = await fetch("/dashboard/sub-counter", {
+        const r = await fetch("/dashboard/sub-counter/image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sub_goal: parseInt(el("scGoal").value, 10) || 0,
-            sub_counter_title: (el("scTitle").value || "").trim(),
-            sub_counter_label: (el("scLabel").value || "").trim(),
-            real_total: real,
+            image_data: dataUrl,
           }),
         });
         const j = await r.json();
         if (!j?.ok) throw new Error(j?.error || "Failed");
-        applySubCounterStats(j);
-        showScResult(true, t("sc_calibrated") + ` (seed=${j.sub_seed_offset})`);
+        applyScImage(j.sub_counter_image_url || null);
+        showScResult(true, t("sc_saved"));
       } catch (e) {
         showScResult(false, t("sc_save_err") + e.message);
       }
@@ -1595,6 +1616,7 @@
             sub_goal: parseInt(el("scGoal").value, 10) || 0,
             sub_counter_title: (el("scTitle").value || "").trim(),
             sub_counter_label: (el("scLabel").value || "").trim(),
+            sub_counter_image_url: scImageUrl,
           }),
         });
         const j = await r.json();

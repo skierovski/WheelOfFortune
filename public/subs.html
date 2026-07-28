@@ -3,19 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
   <title>Sub Counter</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
-    :root {
-      --accent: #53fc18;
-      --secondary: #181a1b;
-      --wheel-opacity: 0.95;
-      --counter-bg: rgba(24,26,27,0.96);
-      --bar-a: #f97316;
-      --bar-b: #fdba74;
-    }
-
+    :root { --counter-bg: rgba(20,22,24,0.88); --text:#f5f7fa; --muted:#d7dde7; }
     .subs-overlay {
       position: fixed;
       left: 50%;
@@ -23,309 +14,141 @@
       transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 15;
-      width: min(520px, 92vw);
-      padding: 16px 18px 14px;
-      border-radius: 14px;
-      background: var(--counter-bg);
-      color: #fff;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      box-shadow: 0 10px 40px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08);
-      backdrop-filter: blur(8px);
-    }
-
-    .top-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    .headline {
-      flex: 1;
-      min-width: 0;
-      font-size: 18px;
-      font-weight: 800;
-      line-height: 1.25;
-      color: #fff;
-      letter-spacing: 0.1px;
-    }
-
-    .gift-badge {
-      flex-shrink: 0;
-      width: 42px;
-      height: 42px;
+      min-width: 240px;
+      max-width: 420px;
+      padding: 8px 12px;
       border-radius: 10px;
-      background: var(--accent);
-      color: #0b0b0b;
-      display: grid;
-      place-items: center;
-      font-size: 20px;
-      box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+      background: var(--counter-bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      box-shadow: 0 6px 20px rgba(0,0,0,.35);
+      backdrop-filter: blur(6px);
     }
-
-    .bottom-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .row {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      line-height:1;
     }
-
-    .bar-track {
-      position: relative;
-      flex: 1;
-      height: 18px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.12);
-      overflow: visible;
+    .icon {
+      width:26px; height:26px; border-radius:6px; object-fit:cover; flex:0 0 auto;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      display:none;
     }
-
-    .bar-fill {
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 0%;
-      border-radius: 999px;
-      overflow: hidden;
-      transition: width .7s cubic-bezier(.22,.8,.24,1);
-      background: repeating-linear-gradient(
-        -45deg,
-        var(--bar-a) 0 10px,
-        var(--bar-b) 10px 20px
-      );
-      background-size: 28px 28px;
-      animation: stripe-move 0.7s linear infinite;
-    }
-
-    @keyframes stripe-move {
-      from { background-position: 0 0; }
-      to { background-position: 28px 0; }
-    }
-
-    .bar-marker {
-      position: absolute;
-      top: 50%;
-      left: 0%;
-      width: 22px;
-      height: 22px;
-      margin-left: -11px;
-      transform: translateY(-50%);
-      border-radius: 50%;
-      background: #111;
-      border: 2px solid var(--accent);
-      box-shadow: 0 2px 8px rgba(0,0,0,.45);
-      transition: left .7s cubic-bezier(.22,.8,.24,1);
-      display: grid;
-      place-items: center;
-      z-index: 2;
-    }
-    .bar-marker i { font-size: 11px; color: var(--accent); line-height: 1; }
-
+    .icon.show { display:block; }
     .count {
-      flex-shrink: 0;
-      font-size: 16px;
-      font-weight: 800;
+      font-size:38px;
+      font-weight:800;
+      letter-spacing: .2px;
       font-variant-numeric: tabular-nums;
-      color: #fff;
-      min-width: 72px;
-      text-align: right;
-      transition: color .3s ease;
+      color:#e8edf7;
+      text-shadow: 0 1px 2px rgba(0,0,0,.35);
     }
-    .count.pop { color: var(--accent); }
-
-    .subs-overlay.no-target .bottom-row { display: none; }
-    .subs-overlay.no-target .headline { text-align: center; }
-    .subs-overlay.no-target .top-row { justify-content: center; }
-    .subs-overlay.no-target .gift-badge { display: none; }
-
-    .plain-count {
-      display: none;
-      text-align: center;
-      font-size: 44px;
-      font-weight: 800;
-      font-variant-numeric: tabular-nums;
+    .count.pop { color:#ffffff; }
+    .label {
       margin-top: 2px;
+      margin-left: 34px;
+      font-size: 26px;
+      line-height: 1;
+      font-weight: 700;
+      color: var(--muted);
+      text-shadow: 0 1px 2px rgba(0,0,0,.35);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .subs-overlay.no-target .plain-count { display: block; }
+    .label.no-icon { margin-left: 0; text-align:center; }
   </style>
 </head>
 <body>
-  <div id="subsOverlay" class="subs-overlay no-target">
-    <div class="top-row">
-      <div class="headline" id="headline">Subskrybenci</div>
-      <div class="gift-badge" aria-hidden="true"><i class="fi fi-rr-gift"></i></div>
+  <div id="subsOverlay" class="subs-overlay">
+    <div class="row">
+      <img id="counterIcon" class="icon" alt="">
+      <div id="countText" class="count">0</div>
     </div>
-    <div class="plain-count" id="plainCount">–</div>
-    <div class="bottom-row">
-      <div class="bar-track">
-        <div class="bar-fill" id="barFill"></div>
-        <div class="bar-marker" id="barMarker"><i class="fi fi-rr-star"></i></div>
-      </div>
-      <div class="count" id="countText">0 / 0</div>
-    </div>
+    <div id="subLabel" class="label">Na co</div>
   </div>
 
   <script>
     const params = new URLSearchParams(location.search);
-
     const OVERLAY_KEY = (() => {
       const m = location.pathname.match(/^\/subs\/([A-Za-z0-9_-]+)/);
       return m ? m[1] : params.get("key") || "";
     })();
     const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
 
-    // URL overrides (optional). Goal/title primarily come from dashboard config.
-    let target = parseInt(params.get("target"), 10);
-    if (!Number.isFinite(target) || target < 0) target = 0;
-    let titleOverride = params.get("title");
-    let labelOverride = params.get("label");
-    let customTitle = titleOverride || "Subskrybenci";
-    let customLabel = labelOverride || "aktywne subskrypcje";
-
-    const accentParam = params.get("accent");
-    const bgParam = params.get("bg");
-    const opParam = params.get("opacity");
-
-    function hexToRgba(hex, op) {
-      hex = hex.startsWith("#") ? hex : "#" + hex;
-      if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
-      const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-      return `rgba(${r},${g},${b},${Math.max(0.05, Math.min(1, parseFloat(op) || 0.96))})`;
-    }
-
-    function applyAccent(hex) {
-      if (typeof hex === "string" && /^#[0-9a-fA-F]{6}$/.test(hex)) {
-        document.documentElement.style.setProperty("--accent", hex);
-      }
-    }
-
-    if (accentParam) applyAccent(accentParam);
-    if (bgParam) {
-      const rgba = hexToRgba(bgParam, opParam ?? "0.96");
-      if (rgba) document.documentElement.style.setProperty("--counter-bg", rgba);
-    }
-
-    const overlayEl = document.getElementById("subsOverlay");
-    const headlineEl = document.getElementById("headline");
-    const plainCountEl = document.getElementById("plainCount");
-    const barFillEl = document.getElementById("barFill");
-    const barMarkerEl = document.getElementById("barMarker");
     const countTextEl = document.getElementById("countText");
+    const labelEl = document.getElementById("subLabel");
+    const iconEl = document.getElementById("counterIcon");
 
+    let target = 0;
+    let iconUrl = null;
     let lastValue = null;
-    let apiCount = 0;
-    let seedOffset = 0;
-    let activeTracked = 0;
-
-    function remainingPhrase(remaining) {
-      // Prefer dashboard title as prefix when custom; otherwise Kick-like default.
-      if (titleOverride) return customTitle;
-      if (remaining <= 0) return "Cel osiągnięty!";
-      if (remaining === 1) return "Brakuje jeszcze 1 subskrybującego!";
-      return `Brakuje jeszcze ${remaining} subskrybujących!`;
-    }
-
-    function estimatedCount() {
-      return Math.max(0, Math.round(apiCount) + Math.round(seedOffset) + Math.max(0, Math.round(activeTracked)));
-    }
-
-    function render(count) {
-      if (!Number.isFinite(count)) return;
-      const popped = lastValue !== null && count !== lastValue;
-      lastValue = count;
-
-      if (target > 0) {
-        overlayEl.classList.remove("no-target");
-        const remaining = Math.max(0, target - count);
-        const pct = Math.max(0, Math.min(100, (count / target) * 100));
-        headlineEl.textContent = remainingPhrase(remaining);
-        countTextEl.textContent = `${count} / ${target}`;
-        barFillEl.style.width = pct + "%";
-        barMarkerEl.style.left = pct + "%";
-      } else {
-        overlayEl.classList.add("no-target");
-        headlineEl.textContent = customTitle;
-        plainCountEl.textContent = count;
-      }
-
-      if (popped) {
-        countTextEl.classList.add("pop");
-        plainCountEl.classList.add("pop");
-        setTimeout(() => {
-          countTextEl.classList.remove("pop");
-          plainCountEl.classList.remove("pop");
-        }, 600);
-      }
-    }
 
     function applyConfig(cfg) {
       if (!cfg) return;
-      if (!accentParam && cfg.accent_color) applyAccent(cfg.accent_color);
-      if (!bgParam && cfg.secondary_color) {
-        const rgba = hexToRgba(cfg.secondary_color, cfg.wheel_opacity ?? 0.96);
-        if (rgba) document.documentElement.style.setProperty("--counter-bg", rgba);
+      if (Number.isFinite(cfg.sub_goal)) target = Math.max(0, Number(cfg.sub_goal) || 0);
+      if (typeof cfg.sub_counter_label === "string" && cfg.sub_counter_label.trim()) {
+        labelEl.textContent = cfg.sub_counter_label.trim();
       }
-      // Goal/title from backend unless URL explicitly overrides
-      if (!params.has("target") && Number.isFinite(cfg.sub_goal)) {
-        target = Math.max(0, Number(cfg.sub_goal) || 0);
-      }
-      if (!titleOverride && typeof cfg.sub_counter_title === "string" && cfg.sub_counter_title.trim()) {
-        customTitle = cfg.sub_counter_title.trim();
-      }
-      if (!labelOverride && typeof cfg.sub_counter_label === "string" && cfg.sub_counter_label.trim()) {
-        customLabel = cfg.sub_counter_label.trim();
-      }
-      if (Number.isFinite(cfg.sub_seed_offset)) {
-        seedOffset = Number(cfg.sub_seed_offset) || 0;
-      }
-    }
-
-    function applySubsPayload(j) {
-      if (!j) return;
-      applyConfig(j);
-      if (Number.isFinite(j.active_subscribers_count)) apiCount = j.active_subscribers_count;
-      if (Number.isFinite(j.active_tracked_gifts)) activeTracked = j.active_tracked_gifts;
-      if (Number.isFinite(j.sub_seed_offset)) seedOffset = j.sub_seed_offset;
-      if (Number.isFinite(j.estimated_subscribers_count)) {
-        render(j.estimated_subscribers_count);
+      if (typeof cfg.sub_counter_image_url === "string" && cfg.sub_counter_image_url.trim()) {
+        iconUrl = cfg.sub_counter_image_url.trim();
       } else {
-        render(estimatedCount());
+        iconUrl = null;
+      }
+      if (iconUrl) {
+        iconEl.src = iconUrl;
+        iconEl.classList.add("show");
+        labelEl.classList.remove("no-icon");
+      } else {
+        iconEl.removeAttribute("src");
+        iconEl.classList.remove("show");
+        labelEl.classList.add("no-icon");
       }
     }
 
-    async function fetchSubCount() {
+    function renderCount(estimated) {
+      if (!Number.isFinite(estimated)) return;
+      const n = Math.max(0, Math.round(Number(estimated) || 0));
+      countTextEl.textContent = target > 0 ? `${n}/${target}` : `${n}`;
+      if (lastValue !== null && n !== lastValue) {
+        countTextEl.classList.add("pop");
+        setTimeout(() => countTextEl.classList.remove("pop"), 500);
+      }
+      lastValue = n;
+    }
+
+    function applySubsPayload(payload) {
+      if (!payload) return;
+      applyConfig(payload);
+      if (Number.isFinite(payload.estimated_subscribers_count)) {
+        renderCount(payload.estimated_subscribers_count);
+      }
+    }
+
+    async function refresh() {
       if (!API_BASE) return;
       try {
         const r = await fetch(`${API_BASE}/subs`, { cache: "no-store" });
         const j = await r.json().catch(() => null);
-        if (!j) return;
-        // Even on 502 we may get tracked/seed fallback
-        if (j.ok || Number.isFinite(j.estimated_subscribers_count)) applySubsPayload(j);
-      } catch (e) {
-        console.warn("[SUBS] fetch error:", e);
-      }
+        if (j) applySubsPayload(j);
+      } catch {}
     }
 
     (async () => {
       if (!API_BASE) return;
       try {
-        const r = await fetch(`${API_BASE}/config`, { cache: "no-store" });
-        if (r.ok) {
-          const j = await r.json();
-          if (j?.ok) applyConfig(j);
-        }
+        const c = await fetch(`${API_BASE}/config`, { cache: "no-store" });
+        const cj = await c.json().catch(() => null);
+        if (cj?.ok) applyConfig(cj);
       } catch {}
-      await fetchSubCount();
+      await refresh();
     })();
 
-    setInterval(fetchSubCount, 60_000);
-
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) fetchSubCount();
-    });
-    window.addEventListener("obsSourceActiveChanged", (e) => {
-      if (e.detail?.active) fetchSubCount();
-    });
+    setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+    window.addEventListener("obsSourceActiveChanged", (e) => { if (e.detail?.active) refresh(); });
 
     if (OVERLAY_KEY) {
       const WS_URL = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws?key=" + encodeURIComponent(OVERLAY_KEY);
@@ -336,17 +159,13 @@
         ws.onmessage = (evt) => {
           try {
             const data = JSON.parse(evt.data);
-            if (data.type === "config") {
-              applyConfig(data);
-              render(estimatedCount());
-            }
-            if (data.type === "subs") {
+            if (data.type === "config" || data.type === "subs") {
               applySubsPayload(data);
             }
           } catch {}
         };
         ws.onerror = () => { try { ws.close(); } catch {} };
-        ws.onclose = () => setTimeout(connectWS, 10_000);
+        ws.onclose = () => setTimeout(connectWS, 10000);
       }
       connectWS();
     }

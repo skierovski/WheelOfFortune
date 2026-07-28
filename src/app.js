@@ -81,7 +81,8 @@ app.use("/webhook", webhookLimiter);
 app.use(webhookRoutes);
 
 // JSON body parser for everything else
-app.use(bodyParser.json());
+// 2MB allows sub-counter image uploads (base64 payload).
+app.use(bodyParser.json({ limit: "2mb" }));
 
 // Auth routes (rate limited)
 app.use("/auth", authLimiter);

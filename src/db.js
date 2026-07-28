@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS wheel_configs (
   gifts_per_spin   INTEGER DEFAULT 5,
   slots_prizes_json TEXT DEFAULT '[]',
   slots_token      TEXT DEFAULT '🪙',
+  sub_counter_image_url TEXT DEFAULT NULL,
   updated_at       INTEGER DEFAULT (unixepoch())
 );
 
@@ -174,6 +175,9 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("sub_seed_offset")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_seed_offset INTEGER DEFAULT 0");
   }
+  if (!cols.includes("sub_counter_image_url")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_image_url TEXT DEFAULT NULL");
+  }
 
   // bot_config migrations
   const botCols = sqlite.prepare("PRAGMA table_info(bot_config)").all().map(c => c.name);
@@ -232,8 +236,8 @@ export function openDatabase(dbPath = ":memory:") {
 
     // Wheel configs
     upsertConfig: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, sub_seed_offset, slots_prizes_json, updated_at)
-      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, @sub_goal, @sub_counter_title, @sub_counter_label, @sub_seed_offset, @slots_prizes_json, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, items_json, tiers_json, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, sub_seed_offset, sub_counter_image_url, slots_prizes_json, updated_at)
+      VALUES (@broadcaster_id, @items_json, @tiers_json, @accent_color, @secondary_color, @wheel_opacity, @gifts_per_spin, @sub_goal, @sub_counter_title, @sub_counter_label, @sub_seed_offset, @sub_counter_image_url, @slots_prizes_json, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
         items_json          = excluded.items_json,
         tiers_json          = excluded.tiers_json,
@@ -245,6 +249,7 @@ export function openDatabase(dbPath = ":memory:") {
         sub_counter_title   = excluded.sub_counter_title,
         sub_counter_label   = excluded.sub_counter_label,
         sub_seed_offset     = excluded.sub_seed_offset,
+        sub_counter_image_url = excluded.sub_counter_image_url,
         slots_prizes_json   = excluded.slots_prizes_json,
         updated_at          = unixepoch()
     `),
@@ -481,12 +486,13 @@ export function openDatabase(dbPath = ":memory:") {
         sub_counter_title: row.sub_counter_title ?? "Subskrybenci",
         sub_counter_label: row.sub_counter_label ?? "aktywne subskrypcje",
         sub_seed_offset: row.sub_seed_offset ?? 0,
+        sub_counter_image_url: row.sub_counter_image_url || null,
         slots_prizes: Array.isArray(slots_prizes) ? slots_prizes : [],
         slots_token: row.slots_token || "🪙",
       };
     },
 
-    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, sub_seed_offset, slots_prizes }) {
+    saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, sub_seed_offset, sub_counter_image_url, slots_prizes }) {
       const prev = stmts.getConfig.get(broadcasterId);
       const prizesJson = slots_prizes != null
         ? JSON.stringify(slots_prizes)
@@ -503,6 +509,7 @@ export function openDatabase(dbPath = ":memory:") {
         sub_counter_title: sub_counter_title ?? prev?.sub_counter_title ?? "Subskrybenci",
         sub_counter_label: sub_counter_label ?? prev?.sub_counter_label ?? "aktywne subskrypcje",
         sub_seed_offset: sub_seed_offset ?? prev?.sub_seed_offset ?? 0,
+        sub_counter_image_url: sub_counter_image_url ?? prev?.sub_counter_image_url ?? null,
         slots_prizes_json: prizesJson,
       });
     },

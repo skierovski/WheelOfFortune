@@ -1,4 +1,6 @@
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
 import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor, validateSecondaryColor, validateWheelOpacity } from "../utils/validate.js";
@@ -32,6 +34,7 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
     sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
     sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
     sub_seed_offset: cfg?.sub_seed_offset ?? 0,
+    sub_counter_image_url: cfg?.sub_counter_image_url ?? null,
     slots_prizes: cfg?.slots_prizes ?? [],
     auth_ok: auth.auth_ok,
     auth_message: auth.auth_message,
@@ -57,6 +60,7 @@ router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
       sub_goal: cfg?.sub_goal ?? 0,
       sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
       sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
+      sub_counter_image_url: cfg?.sub_counter_image_url ?? null,
     });
   } catch (e) {
     console.warn(`[/overlay/subs] bid=${bid} error:`, e?.message || e);
@@ -200,6 +204,7 @@ router.get("/dashboard/sub-counter", requireSession, async (req, res) => {
     sub_goal: cfg?.sub_goal ?? 0,
     sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
     sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
+    sub_counter_image_url: cfg?.sub_counter_image_url ?? null,
     sub_seed_offset: seed,
     api_count: apiCount,
     active_tracked_gifts: stats.active_tracked,
@@ -215,8 +220,10 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
   const sub_goal = Math.max(0, Math.min(1_000_000, Math.round(Number(req.body?.sub_goal) || 0)));
   const sub_counter_title = String(req.body?.sub_counter_title || "Subskrybenci").trim().slice(0, 60);
   const sub_counter_label = String(req.body?.sub_counter_label || "aktywne subskrypcje").trim().slice(0, 60);
-
   const prev = loadConfig(bid);
+  const sub_counter_image_url = typeof req.body?.sub_counter_image_url === "string"
+    ? req.body.sub_counter_image_url.slice(0, 300)
+    : (prev?.sub_counter_image_url ?? null);
   let sub_seed_offset = prev?.sub_seed_offset ?? 0;
 
   // Calibrate: user enters the real total shown on Kick banner → compute offset
@@ -246,6 +253,7 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
     sub_counter_title,
     sub_counter_label,
     sub_seed_offset,
+    sub_counter_image_url,
   });
 
   const activeTracked = getActiveTrackedGiftCount(bid);
@@ -270,6 +278,7 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
         sub_counter_title,
         sub_counter_label,
         sub_seed_offset,
+        sub_counter_image_url,
       });
       if (estimated != null) {
         app.locals.wss.broadcastTo(bid, {
@@ -291,11 +300,72 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
     sub_goal,
     sub_counter_title,
     sub_counter_label,
+    sub_counter_image_url,
     sub_seed_offset,
     api_count: apiCount,
     active_tracked_gifts: activeTracked,
     estimated_subscribers_count: estimated,
   });
+});
+
+// Upload sub counter image (base64 data URL)
+router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const dataUrl = String(req.body?.image_data || "");
+  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,(.+)$/i);
+  if (!match) {
+    return res.status(400).json({ ok: false, error: "Invalid image format" });
+  }
+  const mime = match[1].toLowerCase();
+  const b64 = match[2];
+  const ext = mime.includes("png")
+    ? "png"
+    : mime.includes("webp")
+      ? "webp"
+      : mime.includes("gif")
+        ? "gif"
+        : "jpg";
+
+  let buf;
+  try {
+    buf = Buffer.from(b64, "base64");
+  } catch {
+    return res.status(400).json({ ok: false, error: "Invalid base64 image data" });
+  }
+  if (!buf.length || buf.length > 1_500_000) {
+    return res.status(400).json({ ok: false, error: "Image too large (max 1.5MB)" });
+  }
+
+  const relDir = path.join("uploads", "sub-counter");
+  const absDir = path.join(process.cwd(), "public", relDir);
+  fs.mkdirSync(absDir, { recursive: true });
+  const fileName = `${bid}-${Date.now()}.${ext}`;
+  const absPath = path.join(absDir, fileName);
+  fs.writeFileSync(absPath, buf);
+  const imageUrl = `/${relDir.replaceAll("\\", "/")}/${fileName}`;
+
+  const prev = loadConfig(bid);
+  const saved = saveConfig(bid, prev?.items ?? [], {
+    accent_color: prev?.accent_color,
+    secondary_color: prev?.secondary_color,
+    wheel_opacity: prev?.wheel_opacity,
+    gifts_per_spin: prev?.gifts_per_spin,
+    tiers: prev?.tiers,
+    sub_goal: prev?.sub_goal,
+    sub_counter_title: prev?.sub_counter_title,
+    sub_counter_label: prev?.sub_counter_label,
+    sub_seed_offset: prev?.sub_seed_offset,
+    sub_counter_image_url: imageUrl,
+  });
+
+  try {
+    req.app?.locals?.wss?.broadcastTo?.(bid, {
+      type: "config",
+      sub_counter_image_url: saved.sub_counter_image_url,
+    });
+  } catch {}
+
+  return res.json({ ok: true, sub_counter_image_url: imageUrl });
 });
 
 // ── Goals ────────────────────────────────────────────────────────────
