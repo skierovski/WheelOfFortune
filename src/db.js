@@ -178,6 +178,8 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("sub_counter_image_url")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_image_url TEXT DEFAULT NULL");
   }
+  // Clear leftover seed offsets (seed UI removed; stuck offsets inflated the overlay)
+  sqlite.exec("UPDATE wheel_configs SET sub_seed_offset = 0 WHERE COALESCE(sub_seed_offset, 0) != 0");
 
   // bot_config migrations
   const botCols = sqlite.prepare("PRAGMA table_info(bot_config)").all().map(c => c.name);
