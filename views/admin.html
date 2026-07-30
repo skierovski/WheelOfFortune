@@ -322,6 +322,9 @@
         <div class="url-box" onclick="copyText('${base}/delay/${s.overlay_key}')">
           Delay: ${base}/delay/${s.overlay_key}
         </div>
+        <div class="url-box" onclick="copyText('${base}/subs/${s.overlay_key}')">
+          Subs: ${base}/subs/${s.overlay_key}
+        </div>
         <div class="url-box" onclick="copyText('${base}/counter/${s.overlay_key}')">
           Counter: ${base}/counter/${s.overlay_key}
         </div>
@@ -349,6 +352,7 @@
           <a class="btn btn-sm" href="/overlay/${s.overlay_key}" target="_blank">Open Overlay</a>
           <a class="btn btn-sm" href="/slots/${s.overlay_key}" target="_blank">Open Slots</a>
           <a class="btn btn-sm" href="/delay/${s.overlay_key}" target="_blank">Open Delay</a>
+          <a class="btn btn-sm" href="/subs/${s.overlay_key}" target="_blank">Open Subs</a>
           <a class="btn btn-sm" href="/counter/${s.overlay_key}" target="_blank">Open Counter</a>
           <button class="btn btn-danger btn-sm" onclick="deleteStreamer(${s.broadcaster_id})">Delete</button>
         </div>
