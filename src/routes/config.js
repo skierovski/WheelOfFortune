@@ -60,6 +60,7 @@ router.get("/overlay/:key/counter", resolveOverlayKey, (req, res) => {
     ok: true,
     count: cfg?.manual_count ?? 0,
     goal: cfg?.manual_goal ?? 0,
+    accent_color: cfg?.accent_color ?? "#7c3aed",
   });
 });
 
@@ -400,11 +401,16 @@ router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
 
 // ── Manual Counter (current / goal) ─────────────────────────────────
 
-function broadcastCounter(req, bid, count, goal) {
+function broadcastCounter(req, bid, count, goal, accent_color) {
   try {
     const wss = req.app?.locals?.wss;
     if (wss?.broadcastTo) {
-      wss.broadcastTo(bid, { type: "counter", count, goal });
+      wss.broadcastTo(bid, {
+        type: "counter",
+        count,
+        goal,
+        accent_color: accent_color || "#7c3aed",
+      });
     }
   } catch (e) {
     console.warn("[counter] ws broadcast failed:", e?.message || e);
@@ -422,6 +428,7 @@ router.get("/dashboard/counter", requireSession, (req, res) => {
     ok: true,
     count: cfg?.manual_count ?? 0,
     goal: cfg?.manual_goal ?? 0,
+    accent_color: cfg?.accent_color ?? "#7c3aed",
   });
 });
 
@@ -430,6 +437,7 @@ router.post("/dashboard/counter", requireSession, (req, res) => {
   const prev = loadConfig(bid);
   let count = prev?.manual_count ?? 0;
   let goal = prev?.manual_goal ?? 0;
+  const accent_color = prev?.accent_color ?? "#7c3aed";
 
   if (req.body?.delta != null && req.body.delta !== "") {
     count = clampCounterValue(count + Number(req.body.delta));
@@ -442,8 +450,8 @@ router.post("/dashboard/counter", requireSession, (req, res) => {
   }
 
   getDb().saveManualCounter(bid, { count, goal });
-  broadcastCounter(req, bid, count, goal);
-  res.json({ ok: true, count, goal });
+  broadcastCounter(req, bid, count, goal, accent_color);
+  res.json({ ok: true, count, goal, accent_color });
 });
 
 // ── Goals ────────────────────────────────────────────────────────────

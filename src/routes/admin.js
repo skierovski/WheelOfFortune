@@ -439,15 +439,16 @@ router.post("/admin/streamers/:bid/counter", requireAdmin, (req, res) => {
   }
 
   getDb().saveManualCounter(bid, { count, goal });
+  const accent_color = prev?.accent_color ?? "#7c3aed";
 
   try {
     const wss = req.app?.locals?.wss;
     if (wss?.broadcastTo) {
-      wss.broadcastTo(bid, { type: "counter", count, goal });
+      wss.broadcastTo(bid, { type: "counter", count, goal, accent_color });
     }
   } catch {}
 
-  res.json({ ok: true, count, goal });
+  res.json({ ok: true, count, goal, accent_color });
 });
 
 // ── Quick Setup (create dev streamer + login in one step) ───────────

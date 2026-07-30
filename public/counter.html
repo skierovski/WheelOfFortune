@@ -6,6 +6,7 @@
   <title>Counter</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
+    :root { --accent: #7c3aed; }
     .counter-overlay {
       position: fixed;
       left: 50%;
@@ -14,7 +15,6 @@
       pointer-events: none;
       z-index: 15;
       padding: 8px 16px;
-      color: #f5f7fa;
       font-family: "Segoe UI", system-ui, sans-serif;
       text-align: center;
     }
@@ -23,12 +23,13 @@
       font-weight: 800;
       letter-spacing: .5px;
       font-variant-numeric: tabular-nums;
-      color: #e8edf7;
+      color: var(--accent);
       text-shadow: 0 2px 4px rgba(0,0,0,.45);
       line-height: 1;
+      transition: filter .25s, transform .25s;
+      display: inline-block;
     }
-    .count.pop { color:#ffffff; transform: scale(1.06); }
-    .count { transition: color .25s, transform .25s; display:inline-block; }
+    .count.pop { filter: brightness(1.25); transform: scale(1.06); }
   </style>
 </head>
 <body>
@@ -47,6 +48,11 @@
     const countTextEl = document.getElementById("countText");
     let lastCount = null;
 
+    function applyAccent(hex) {
+      if (typeof hex !== "string" || !/^#[0-9a-fA-F]{6}$/.test(hex.trim())) return;
+      document.documentElement.style.setProperty("--accent", hex.trim());
+    }
+
     function render(count, goal) {
       const c = Math.max(0, Math.round(Number(count) || 0));
       const g = Math.max(0, Math.round(Number(goal) || 0));
@@ -58,12 +64,18 @@
       lastCount = c;
     }
 
+    function applyPayload(j) {
+      if (!j) return;
+      if (typeof j.accent_color === "string") applyAccent(j.accent_color);
+      if (j.count != null || j.goal != null) render(j.count, j.goal);
+    }
+
     async function refresh() {
       if (!API_BASE) return;
       try {
         const r = await fetch(`${API_BASE}/counter`, { cache: "no-store" });
         const j = await r.json().catch(() => null);
-        if (j?.ok) render(j.count, j.goal);
+        if (j?.ok) applyPayload(j);
       } catch {}
     }
 
@@ -81,7 +93,8 @@
         ws.onmessage = (evt) => {
           try {
             const data = JSON.parse(evt.data);
-            if (data.type === "counter") render(data.count, data.goal);
+            if (data.type === "counter") applyPayload(data);
+            if (data.type === "config" && typeof data.accent_color === "string") applyAccent(data.accent_color);
           } catch {}
         };
         ws.onerror = () => { try { ws.close(); } catch {} };
