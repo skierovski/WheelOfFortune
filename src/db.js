@@ -192,6 +192,9 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("manual_goal")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN manual_goal INTEGER DEFAULT 0");
   }
+  if (!cols.includes("manual_label")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN manual_label TEXT DEFAULT ''");
+  }
   // Clear leftover seed offsets (seed UI removed; stuck offsets inflated the overlay)
   sqlite.exec("UPDATE wheel_configs SET sub_seed_offset = 0 WHERE COALESCE(sub_seed_offset, 0) != 0");
 
@@ -332,11 +335,12 @@ export function openDatabase(dbPath = ":memory:") {
       FROM wheel_configs WHERE broadcaster_id = ?
     `),
     updateManualCounter: sqlite.prepare(`
-      INSERT INTO wheel_configs (broadcaster_id, manual_count, manual_goal, updated_at)
-      VALUES (@broadcaster_id, @manual_count, @manual_goal, unixepoch())
+      INSERT INTO wheel_configs (broadcaster_id, manual_count, manual_goal, manual_label, updated_at)
+      VALUES (@broadcaster_id, @manual_count, @manual_goal, @manual_label, unixepoch())
       ON CONFLICT(broadcaster_id) DO UPDATE SET
         manual_count = excluded.manual_count,
         manual_goal = excluded.manual_goal,
+        manual_label = excluded.manual_label,
         updated_at = unixepoch()
     `),
     updateSubSeedOffset: sqlite.prepare(`
@@ -560,16 +564,21 @@ export function openDatabase(dbPath = ":memory:") {
         sub_counter_image_url: row.sub_counter_image_url || null,
         manual_count: row.manual_count ?? 0,
         manual_goal: row.manual_goal ?? 0,
+        manual_label: row.manual_label ?? "",
         slots_prizes: Array.isArray(slots_prizes) ? slots_prizes : [],
         slots_token: row.slots_token || "🪙",
       };
     },
 
-    saveManualCounter(broadcasterId, { count, goal }) {
+    saveManualCounter(broadcasterId, { count, goal, label }) {
+      const prev = stmts.getConfig.get(broadcasterId);
       stmts.updateManualCounter.run({
         broadcaster_id: broadcasterId,
         manual_count: Math.max(0, Math.min(1_000_000, Math.round(Number(count) || 0))),
         manual_goal: Math.max(0, Math.min(1_000_000, Math.round(Number(goal) || 0))),
+        manual_label: label != null
+          ? String(label).trim().slice(0, 60)
+          : (prev?.manual_label ?? ""),
       });
       return this.getConfig(broadcasterId);
     },

@@ -7,7 +7,7 @@ import { loadConfig } from "./configStore.js";
  * @param {number} broadcasterId
  * @param {number} delta  — e.g. gift count or 1 for a paid sub
  * @param {{ broadcastTo?: Function } | null} [wss]
- * @returns {{ count: number, goal: number, accent_color: string } | null}
+ * @returns {{ count: number, goal: number, label: string, accent_color: string } | null}
  */
 export function bumpManualCounter(broadcasterId, delta, wss = null) {
   const amount = Math.round(Number(delta) || 0);
@@ -16,15 +16,17 @@ export function bumpManualCounter(broadcasterId, delta, wss = null) {
   const prev = loadConfig(broadcasterId);
   const count = prev?.manual_count ?? 0;
   const goal = Math.max(0, Math.min(1_000_000, (prev?.manual_goal ?? 0) + amount));
+  const label = prev?.manual_label ?? "";
   const accent_color = prev?.accent_color ?? "#7c3aed";
 
-  getDb().saveManualCounter(broadcasterId, { count, goal });
+  getDb().saveManualCounter(broadcasterId, { count, goal, label });
 
   try {
     wss?.broadcastTo?.(broadcasterId, {
       type: "counter",
       count,
       goal,
+      label,
       accent_color,
     });
   } catch (e) {
@@ -32,5 +34,5 @@ export function bumpManualCounter(broadcasterId, delta, wss = null) {
   }
 
   console.log(`[counter] bid=${broadcasterId} goal ${amount > 0 ? "+" : ""}${amount} → ${count}/${goal}`);
-  return { count, goal, accent_color };
+  return { count, goal, label, accent_color };
 }

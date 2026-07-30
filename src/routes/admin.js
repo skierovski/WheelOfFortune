@@ -61,6 +61,7 @@ router.get("/admin/overview", requireAdmin, (req, res) => {
         gifts_per_spin: config?.gifts_per_spin ?? 5,
         manual_count: config?.manual_count ?? 0,
         manual_goal: config?.manual_goal ?? 0,
+        manual_label: config?.manual_label ?? "",
       },
       spins: {
         pending: spinState.pending_count,
@@ -417,6 +418,7 @@ router.get("/admin/streamers/:bid/counter", requireAdmin, (req, res) => {
     ok: true,
     count: cfg?.manual_count ?? 0,
     goal: cfg?.manual_goal ?? 0,
+    label: cfg?.manual_label ?? "",
   });
 });
 
@@ -429,6 +431,7 @@ router.post("/admin/streamers/:bid/counter", requireAdmin, (req, res) => {
   const prev = loadConfig(bid);
   let count = prev?.manual_count ?? 0;
   let goal = prev?.manual_goal ?? 0;
+  let label = prev?.manual_label ?? "";
 
   if (req.body?.delta != null && req.body.delta !== "") {
     count = Math.max(0, Math.min(1_000_000, Math.round(count + Number(req.body.delta))));
@@ -439,18 +442,21 @@ router.post("/admin/streamers/:bid/counter", requireAdmin, (req, res) => {
   if (req.body?.goal != null && req.body.goal !== "") {
     goal = Math.max(0, Math.min(1_000_000, Math.round(Number(req.body.goal) || 0)));
   }
+  if (typeof req.body?.label === "string") {
+    label = req.body.label.trim().slice(0, 60);
+  }
 
-  getDb().saveManualCounter(bid, { count, goal });
+  getDb().saveManualCounter(bid, { count, goal, label });
   const accent_color = prev?.accent_color ?? "#7c3aed";
 
   try {
     const wss = req.app?.locals?.wss;
     if (wss?.broadcastTo) {
-      wss.broadcastTo(bid, { type: "counter", count, goal, accent_color });
+      wss.broadcastTo(bid, { type: "counter", count, goal, label, accent_color });
     }
   } catch {}
 
-  res.json({ ok: true, count, goal, accent_color });
+  res.json({ ok: true, count, goal, label, accent_color });
 });
 
 // ── Quick Setup (create dev streamer + login in one step) ───────────

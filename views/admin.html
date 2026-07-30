@@ -310,7 +310,7 @@
           <div class="key">Spins:</div><div>pending=${s.spins.pending}, in_progress=${s.spins.in_progress}</div>
           <div class="key">Goals:</div><div>${s.goals_count} goal(s)</div>
           <div class="key">Subs:</div><div>${s.subscriptions_count} active</div>
-          <div class="key">Counter:</div><div><span id="mc-disp-${s.broadcaster_id}">${s.config.manual_count ?? 0}/${s.config.manual_goal ?? 0}</span></div>
+          <div class="key">Counter:</div><div><span id="mc-disp-${s.broadcaster_id}">${s.config.manual_label ? `${s.config.manual_label} ` : ""}${s.config.manual_count ?? 0}/${s.config.manual_goal ?? 0}</span></div>
           <div class="key">Created:</div><div>${timeAgo(s.created_at)}</div>
         </div>
         <div class="url-box" onclick="copyText('${base}/overlay/${s.overlay_key}')">
@@ -326,6 +326,8 @@
           Counter: ${base}/counter/${s.overlay_key}
         </div>
         <div class="input-row" style="margin-top:10px;">
+          <label>Label:</label>
+          <input type="text" id="mc-label-${s.broadcaster_id}" value="${(s.config.manual_label || "").replace(/"/g, "&quot;")}" maxlength="60" style="width:140px;" placeholder="e.g. Deaths" />
           <label>Count:</label>
           <input type="number" id="mc-count-${s.broadcaster_id}" value="${s.config.manual_count ?? 0}" min="0" style="width:80px;" />
           <label>Goal:</label>
@@ -435,19 +437,23 @@
     const disp = document.getElementById(`mc-disp-${bid}`);
     const countEl = document.getElementById(`mc-count-${bid}`);
     const goalEl = document.getElementById(`mc-goal-${bid}`);
-    if (disp) disp.textContent = `${data.count}/${data.goal}`;
+    const labelEl = document.getElementById(`mc-label-${bid}`);
+    const label = data.label || "";
+    if (disp) disp.textContent = label ? `${label} ${data.count}/${data.goal}` : `${data.count}/${data.goal}`;
     if (countEl) countEl.value = data.count;
     if (goalEl) goalEl.value = data.goal;
+    if (labelEl && typeof data.label === "string") labelEl.value = data.label;
   }
 
   async function saveCounter(bid) {
     try {
       const count = Number(document.getElementById(`mc-count-${bid}`)?.value || 0);
       const goal = Number(document.getElementById(`mc-goal-${bid}`)?.value || 0);
-      const data = await api("POST", `/admin/streamers/${bid}/counter`, { count, goal });
+      const label = String(document.getElementById(`mc-label-${bid}`)?.value || "").trim();
+      const data = await api("POST", `/admin/streamers/${bid}/counter`, { count, goal, label });
       applyAdminCounter(bid, data);
-      log(`Counter bid=${bid}: ${data.count}/${data.goal}`);
-      toast(`Counter → ${data.count}/${data.goal}`);
+      log(`Counter bid=${bid}: ${data.label || ""} ${data.count}/${data.goal}`);
+      toast(`Counter → ${data.label ? data.label + " " : ""}${data.count}/${data.goal}`);
     } catch (e) {
       log("Error: " + e.message);
       toast("Error: " + e.message);

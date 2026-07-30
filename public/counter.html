@@ -16,8 +16,21 @@
       z-index: 15;
       padding: 8px 16px;
       font-family: "Segoe UI", system-ui, sans-serif;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      white-space: nowrap;
     }
+    .label {
+      font-size: 32px;
+      font-weight: 700;
+      color: #e8edf7;
+      text-shadow: 0 2px 4px rgba(0,0,0,.45);
+      line-height: 1;
+      display: none;
+    }
+    .label.show { display: inline-block; }
     .count {
       font-size: 48px;
       font-weight: 800;
@@ -34,6 +47,7 @@
 </head>
 <body>
   <div class="counter-overlay">
+    <div id="labelText" class="label"></div>
     <div id="countText" class="count">0/0</div>
   </div>
 
@@ -46,27 +60,43 @@
     const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
 
     const countTextEl = document.getElementById("countText");
+    const labelTextEl = document.getElementById("labelText");
     let lastCount = null;
+    let lastGoal = null;
 
     function applyAccent(hex) {
       if (typeof hex !== "string" || !/^#[0-9a-fA-F]{6}$/.test(hex.trim())) return;
       document.documentElement.style.setProperty("--accent", hex.trim());
     }
 
+    function applyLabel(text) {
+      if (typeof text !== "string") return;
+      const t = text.trim();
+      if (t) {
+        labelTextEl.textContent = t;
+        labelTextEl.classList.add("show");
+      } else {
+        labelTextEl.textContent = "";
+        labelTextEl.classList.remove("show");
+      }
+    }
+
     function render(count, goal) {
       const c = Math.max(0, Math.round(Number(count) || 0));
       const g = Math.max(0, Math.round(Number(goal) || 0));
       countTextEl.textContent = g > 0 ? `${c}/${g}` : `${c}`;
-      if (lastCount !== null && c !== lastCount) {
+      if (lastCount !== null && (c !== lastCount || g !== lastGoal)) {
         countTextEl.classList.add("pop");
         setTimeout(() => countTextEl.classList.remove("pop"), 400);
       }
       lastCount = c;
+      lastGoal = g;
     }
 
     function applyPayload(j) {
       if (!j) return;
       if (typeof j.accent_color === "string") applyAccent(j.accent_color);
+      if (typeof j.label === "string") applyLabel(j.label);
       if (j.count != null || j.goal != null) render(j.count, j.goal);
     }
 

@@ -60,6 +60,7 @@ router.get("/overlay/:key/counter", resolveOverlayKey, (req, res) => {
     ok: true,
     count: cfg?.manual_count ?? 0,
     goal: cfg?.manual_goal ?? 0,
+    label: cfg?.manual_label ?? "",
     accent_color: cfg?.accent_color ?? "#7c3aed",
   });
 });
@@ -401,7 +402,7 @@ router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
 
 // ── Manual Counter (current / goal) ─────────────────────────────────
 
-function broadcastCounter(req, bid, count, goal, accent_color) {
+function broadcastCounter(req, bid, count, goal, accent_color, label = "") {
   try {
     const wss = req.app?.locals?.wss;
     if (wss?.broadcastTo) {
@@ -409,6 +410,7 @@ function broadcastCounter(req, bid, count, goal, accent_color) {
         type: "counter",
         count,
         goal,
+        label,
         accent_color: accent_color || "#7c3aed",
       });
     }
@@ -428,6 +430,7 @@ router.get("/dashboard/counter", requireSession, (req, res) => {
     ok: true,
     count: cfg?.manual_count ?? 0,
     goal: cfg?.manual_goal ?? 0,
+    label: cfg?.manual_label ?? "",
     accent_color: cfg?.accent_color ?? "#7c3aed",
   });
 });
@@ -437,6 +440,7 @@ router.post("/dashboard/counter", requireSession, (req, res) => {
   const prev = loadConfig(bid);
   let count = prev?.manual_count ?? 0;
   let goal = prev?.manual_goal ?? 0;
+  let label = prev?.manual_label ?? "";
   const accent_color = prev?.accent_color ?? "#7c3aed";
 
   if (req.body?.delta != null && req.body.delta !== "") {
@@ -448,10 +452,13 @@ router.post("/dashboard/counter", requireSession, (req, res) => {
   if (req.body?.goal != null && req.body.goal !== "") {
     goal = clampCounterValue(req.body.goal);
   }
+  if (typeof req.body?.label === "string") {
+    label = req.body.label.trim().slice(0, 60);
+  }
 
-  getDb().saveManualCounter(bid, { count, goal });
-  broadcastCounter(req, bid, count, goal, accent_color);
-  res.json({ ok: true, count, goal, accent_color });
+  getDb().saveManualCounter(bid, { count, goal, label });
+  broadcastCounter(req, bid, count, goal, accent_color, label);
+  res.json({ ok: true, count, goal, label, accent_color });
 });
 
 // ── Goals ────────────────────────────────────────────────────────────
