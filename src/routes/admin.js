@@ -6,6 +6,7 @@ import { getDb } from "../db.js";
 import { spins } from "../services/spins.js";
 import { slots } from "../services/slots.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
+import { bumpManualCounter } from "../services/manualCounter.js";
 
 const router = Router();
 
@@ -317,6 +318,7 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
   const gifterName = String(req.body?.gifter_name || "TestGifter");
 
   const slotsDelivered = slots.deliverOrQueue(bid, giftCount);
+  bumpManualCounter(bid, giftCount, req.app?.locals?.wss);
 
   // Convert gifts to spins (tier-aware)
   const config = getDb().getConfig(bid);

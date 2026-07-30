@@ -9,6 +9,7 @@ import { getDb } from "../db.js";
 import { getOverlayAuthStatus } from "../services/authStatus.js";
 import { trackGiftEvent } from "../services/giftTracker.js";
 import { loadConfig } from "../services/configStore.js";
+import { bumpManualCounter } from "../services/manualCounter.js";
 
 const router = Router();
 
@@ -73,6 +74,7 @@ router.post("/dashboard/simulate-gift", requireSession, (req, res) => {
 
   // Slots: every gifted sub = 1 slots spin
   const slotsDelivered = slots.deliverOrQueue(bid, giftCount);
+  bumpManualCounter(bid, giftCount, req.app?.locals?.wss);
 
   const config = getDb().getConfig(bid);
   const configTiers = config?.tiers;

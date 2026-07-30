@@ -4,6 +4,7 @@ import { requireSession, resolveOverlayKey } from "../middleware/requireSession.
 import { getDb } from "../db.js";
 import { validateSlotsPrizes, validateSlotsToken, DEFAULT_SLOTS_TOKEN } from "../utils/validate.js";
 import { announcePrize } from "../services/chatBot.js";
+import { bumpManualCounter } from "../services/manualCounter.js";
 
 const router = Router();
 
@@ -104,6 +105,7 @@ router.get("/dashboard/test-slots/:n", requireSession, (req, res) => {
 router.post("/dashboard/simulate-sub", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const delivered = slots.deliverOrQueue(bid, 1);
+  bumpManualCounter(bid, 1, req.app?.locals?.wss);
   res.json({
     ok: true,
     message: `Simulated subscription → 1 slots spin (${delivered} delivered)`,

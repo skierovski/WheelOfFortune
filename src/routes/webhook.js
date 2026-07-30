@@ -7,6 +7,7 @@ import { getDb } from "../db.js";
 import { handleChatMessage } from "../services/chatBot.js";
 import { trackGiftEvent, resolveGiftExpiresAt } from "../services/giftTracker.js";
 import { loadConfig } from "../services/configStore.js";
+import { bumpManualCounter } from "../services/manualCounter.js";
 
 const router = Router();
 
@@ -139,6 +140,7 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       // Slots: every gifted sub = 1 slots spin
       if (giftCount > 0) {
         slots.deliverOrQueue(broadcasterId, giftCount);
+        bumpManualCounter(broadcasterId, giftCount, req.app?.locals?.wss);
       }
 
       // Determine tier and spin count based on gift count
@@ -194,6 +196,7 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       const subName = payload?.subscriber?.username || payload?.data?.subscriber?.username || "viewer";
       console.log(`[WEBHOOK] Sub ${type} bid=${broadcasterId} from=${subName} -> 1 slots spin`);
       slots.deliverOrQueue(broadcasterId, 1);
+      bumpManualCounter(broadcasterId, 1, req.app?.locals?.wss);
     } else if (type === "chat.message.sent") {
       const broadcasterId = Number(payload?.broadcaster?.user_id || 0);
       const content = payload?.content || "";
