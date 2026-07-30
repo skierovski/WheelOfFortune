@@ -53,6 +53,16 @@ router.get("/overlay/:key/config", resolveOverlayKey, (req, res) => {
   });
 });
 
+// GET manual counter (public overlay endpoint)
+router.get("/overlay/:key/counter", resolveOverlayKey, (req, res) => {
+  const cfg = loadConfig(req.streamer.broadcaster_id);
+  res.json({
+    ok: true,
+    count: cfg?.manual_count ?? 0,
+    goal: cfg?.manual_goal ?? 0,
+  });
+});
+
 // GET live subscriber count from Kick API (public overlay endpoint)
 router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
   const bid = req.streamer.broadcaster_id;
@@ -386,6 +396,54 @@ router.post("/dashboard/sub-counter/image", requireSession, (req, res) => {
   } catch {}
 
   return res.json({ ok: true, sub_counter_image_url: imageUrl });
+});
+
+// ── Manual Counter (current / goal) ─────────────────────────────────
+
+function broadcastCounter(req, bid, count, goal) {
+  try {
+    const wss = req.app?.locals?.wss;
+    if (wss?.broadcastTo) {
+      wss.broadcastTo(bid, { type: "counter", count, goal });
+    }
+  } catch (e) {
+    console.warn("[counter] ws broadcast failed:", e?.message || e);
+  }
+}
+
+function clampCounterValue(n) {
+  return Math.max(0, Math.min(1_000_000, Math.round(Number(n) || 0)));
+}
+
+router.get("/dashboard/counter", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const cfg = loadConfig(bid);
+  res.json({
+    ok: true,
+    count: cfg?.manual_count ?? 0,
+    goal: cfg?.manual_goal ?? 0,
+  });
+});
+
+router.post("/dashboard/counter", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const prev = loadConfig(bid);
+  let count = prev?.manual_count ?? 0;
+  let goal = prev?.manual_goal ?? 0;
+
+  if (req.body?.delta != null && req.body.delta !== "") {
+    count = clampCounterValue(count + Number(req.body.delta));
+  }
+  if (req.body?.count != null && req.body.count !== "") {
+    count = clampCounterValue(req.body.count);
+  }
+  if (req.body?.goal != null && req.body.goal !== "") {
+    goal = clampCounterValue(req.body.goal);
+  }
+
+  getDb().saveManualCounter(bid, { count, goal });
+  broadcastCounter(req, bid, count, goal);
+  res.json({ ok: true, count, goal });
 });
 
 // ── Goals ────────────────────────────────────────────────────────────

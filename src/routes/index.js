@@ -55,6 +55,13 @@ router.get("/subs/:key", resolveOverlayKey, (req, res) => {
   res.sendFile(file);
 });
 
+// Overlay: manual counter XXX/XXX (by overlay_key)
+router.get("/counter/:key", resolveOverlayKey, (req, res) => {
+  const file = path.join(publicDir, "counter.html");
+  if (!fs.existsSync(file)) return res.status(404).send("counter.html not found");
+  res.sendFile(file);
+});
+
 // Overlay: slots (by overlay_key)
 router.get("/slots/:key", resolveOverlayKey, (req, res) => {
   const file = path.join(publicDir, "slots.html");

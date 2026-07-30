@@ -58,6 +58,8 @@ router.get("/admin/overview", requireAdmin, (req, res) => {
         tiers: Array.isArray(config?.tiers) ? config.tiers.map(t => ({ name: t.name, min_gifts: t.min_gifts, items_count: t.items?.length || 0 })) : null,
         accent_color: config?.accent_color || "#7c3aed",
         gifts_per_spin: config?.gifts_per_spin ?? 5,
+        manual_count: config?.manual_count ?? 0,
+        manual_goal: config?.manual_goal ?? 0,
       },
       spins: {
         pending: spinState.pending_count,
@@ -399,6 +401,53 @@ router.post("/admin/streamers/:bid/config", requireAdmin, (req, res) => {
   } catch {}
 
   res.json({ ok: true, items: saved.items, accent_color: saved.accent_color, gifts_per_spin: saved.gifts_per_spin });
+});
+
+// ── Manual Counter ──────────────────────────────────────────────────
+
+router.get("/admin/streamers/:bid/counter", requireAdmin, (req, res) => {
+  const bid = Number(req.params.bid);
+  if (!getDb().getStreamerById(bid)) {
+    return res.status(404).json({ ok: false, error: "Streamer not found" });
+  }
+  const cfg = loadConfig(bid);
+  res.json({
+    ok: true,
+    count: cfg?.manual_count ?? 0,
+    goal: cfg?.manual_goal ?? 0,
+  });
+});
+
+router.post("/admin/streamers/:bid/counter", requireAdmin, (req, res) => {
+  const bid = Number(req.params.bid);
+  if (!getDb().getStreamerById(bid)) {
+    return res.status(404).json({ ok: false, error: "Streamer not found" });
+  }
+
+  const prev = loadConfig(bid);
+  let count = prev?.manual_count ?? 0;
+  let goal = prev?.manual_goal ?? 0;
+
+  if (req.body?.delta != null && req.body.delta !== "") {
+    count = Math.max(0, Math.min(1_000_000, Math.round(count + Number(req.body.delta))));
+  }
+  if (req.body?.count != null && req.body.count !== "") {
+    count = Math.max(0, Math.min(1_000_000, Math.round(Number(req.body.count) || 0)));
+  }
+  if (req.body?.goal != null && req.body.goal !== "") {
+    goal = Math.max(0, Math.min(1_000_000, Math.round(Number(req.body.goal) || 0)));
+  }
+
+  getDb().saveManualCounter(bid, { count, goal });
+
+  try {
+    const wss = req.app?.locals?.wss;
+    if (wss?.broadcastTo) {
+      wss.broadcastTo(bid, { type: "counter", count, goal });
+    }
+  } catch {}
+
+  res.json({ ok: true, count, goal });
 });
 
 // ── Quick Setup (create dev streamer + login in one step) ───────────

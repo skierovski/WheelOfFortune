@@ -186,6 +186,12 @@ export function openDatabase(dbPath = ":memory:") {
   if (!cols.includes("sub_counter_image_mime")) {
     sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN sub_counter_image_mime TEXT DEFAULT NULL");
   }
+  if (!cols.includes("manual_count")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN manual_count INTEGER DEFAULT 0");
+  }
+  if (!cols.includes("manual_goal")) {
+    sqlite.exec("ALTER TABLE wheel_configs ADD COLUMN manual_goal INTEGER DEFAULT 0");
+  }
   // Clear leftover seed offsets (seed UI removed; stuck offsets inflated the overlay)
   sqlite.exec("UPDATE wheel_configs SET sub_seed_offset = 0 WHERE COALESCE(sub_seed_offset, 0) != 0");
 
@@ -324,6 +330,14 @@ export function openDatabase(dbPath = ":memory:") {
     getSubCounterImage: sqlite.prepare(`
       SELECT sub_counter_image, sub_counter_image_mime, sub_counter_image_url, updated_at
       FROM wheel_configs WHERE broadcaster_id = ?
+    `),
+    updateManualCounter: sqlite.prepare(`
+      INSERT INTO wheel_configs (broadcaster_id, manual_count, manual_goal, updated_at)
+      VALUES (@broadcaster_id, @manual_count, @manual_goal, unixepoch())
+      ON CONFLICT(broadcaster_id) DO UPDATE SET
+        manual_count = excluded.manual_count,
+        manual_goal = excluded.manual_goal,
+        updated_at = unixepoch()
     `),
     updateSubSeedOffset: sqlite.prepare(`
       INSERT INTO wheel_configs (broadcaster_id, sub_seed_offset, updated_at)
@@ -544,9 +558,20 @@ export function openDatabase(dbPath = ":memory:") {
         sub_counter_label: row.sub_counter_label ?? "aktywne subskrypcje",
         sub_seed_offset: row.sub_seed_offset ?? 0,
         sub_counter_image_url: row.sub_counter_image_url || null,
+        manual_count: row.manual_count ?? 0,
+        manual_goal: row.manual_goal ?? 0,
         slots_prizes: Array.isArray(slots_prizes) ? slots_prizes : [],
         slots_token: row.slots_token || "🪙",
       };
+    },
+
+    saveManualCounter(broadcasterId, { count, goal }) {
+      stmts.updateManualCounter.run({
+        broadcaster_id: broadcasterId,
+        manual_count: Math.max(0, Math.min(1_000_000, Math.round(Number(count) || 0))),
+        manual_goal: Math.max(0, Math.min(1_000_000, Math.round(Number(goal) || 0))),
+      });
+      return this.getConfig(broadcasterId);
     },
 
     saveConfig(broadcasterId, { items, tiers, accent_color, secondary_color, wheel_opacity, gifts_per_spin, sub_goal, sub_counter_title, sub_counter_label, sub_seed_offset, sub_counter_image_url, slots_prizes }) {
