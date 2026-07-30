@@ -2,7 +2,8 @@ import { getDb } from "../db.js";
 import { loadConfig } from "./configStore.js";
 
 /**
- * Increment (or decrement) the manual counter for a streamer and broadcast.
+ * Increment the second number (goal) on sub/gift events and broadcast.
+ * Manual +1 on the dashboard still edits the first number (count).
  * @param {number} broadcasterId
  * @param {number} delta  — e.g. gift count or 1 for a paid sub
  * @param {{ broadcastTo?: Function } | null} [wss]
@@ -13,8 +14,8 @@ export function bumpManualCounter(broadcasterId, delta, wss = null) {
   if (!amount) return null;
 
   const prev = loadConfig(broadcasterId);
-  const count = Math.max(0, Math.min(1_000_000, (prev?.manual_count ?? 0) + amount));
-  const goal = prev?.manual_goal ?? 0;
+  const count = prev?.manual_count ?? 0;
+  const goal = Math.max(0, Math.min(1_000_000, (prev?.manual_goal ?? 0) + amount));
   const accent_color = prev?.accent_color ?? "#7c3aed";
 
   getDb().saveManualCounter(broadcasterId, { count, goal });
@@ -30,6 +31,6 @@ export function bumpManualCounter(broadcasterId, delta, wss = null) {
     console.warn(`[counter] broadcast failed bid=${broadcasterId}:`, e?.message || e);
   }
 
-  console.log(`[counter] bid=${broadcasterId} ${amount > 0 ? "+" : ""}${amount} → ${count}/${goal}`);
+  console.log(`[counter] bid=${broadcasterId} goal ${amount > 0 ? "+" : ""}${amount} → ${count}/${goal}`);
   return { count, goal, accent_color };
 }
