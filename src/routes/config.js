@@ -461,6 +461,63 @@ router.post("/dashboard/counter", requireSession, (req, res) => {
   res.json({ ok: true, count, goal, label, accent_color });
 });
 
+// ── Moderators ───────────────────────────────────────────────────────
+
+router.get("/dashboard/moderators", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  res.json({ ok: true, moderators: getDb().listModerators(bid) });
+});
+
+router.post("/dashboard/moderators", requireSession, async (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const raw = String(req.body?.username || req.body?.mod_kick_user_id || "").trim();
+  if (!raw) {
+    return res.status(400).json({ ok: false, error: "Provide a Kick username or user ID" });
+  }
+
+  try {
+    const { lookupKickUser } = await import("../services/kick.js");
+    let user;
+    try {
+      user = await lookupKickUser(bid, raw);
+    } catch (e) {
+      // Fallback: allow raw numeric ID when API lookup fails
+      const asId = Number(raw);
+      if (!Number.isFinite(asId) || !/^\d+$/.test(raw)) {
+        throw e;
+      }
+      user = { user_id: asId, username: raw, display_name: raw };
+    }
+
+    if (user.user_id === bid) {
+      return res.status(400).json({ ok: false, error: "You cannot add yourself as a moderator" });
+    }
+
+    getDb().addModerator(bid, {
+      mod_kick_user_id: user.user_id,
+      mod_username: user.username || raw,
+    });
+    console.log(`[MODS] bid=${bid} added mod=${user.user_id} (${user.username})`);
+    res.json({ ok: true, moderators: getDb().listModerators(bid) });
+  } catch (e) {
+    console.warn(`[MODS] add failed bid=${bid}:`, e?.message || e);
+    res.status(400).json({ ok: false, error: e?.message || "Failed to look up Kick user" });
+  }
+});
+
+router.delete("/dashboard/moderators/:modId", requireSession, (req, res) => {
+  const bid = req.session.broadcaster_user_id;
+  const modId = Number(req.params.modId);
+  if (!Number.isFinite(modId)) {
+    return res.status(400).json({ ok: false, error: "Invalid moderator id" });
+  }
+  const removed = getDb().removeModerator(bid, modId);
+  if (!removed) {
+    return res.status(404).json({ ok: false, error: "Moderator not found" });
+  }
+  res.json({ ok: true, moderators: getDb().listModerators(bid) });
+});
+
 // ── Goals ────────────────────────────────────────────────────────────
 
 router.get("/dashboard/goals", requireSession, (req, res) => {

@@ -48,9 +48,11 @@ router.get("/auth/login", async (req, res) => {
       return res.redirect(ret);
     }
 
-    // Validate invite code if required
+    // Validate invite code if required (moderators logging into /mod skip this gate)
     const inviteCode = req.query.invite || null;
-    if (env.REQUIRE_INVITE) {
+    const retTarget = String(req.query.ret || "/dashboard");
+    const modLogin = retTarget === "/mod" || retTarget.startsWith("/mod?") || retTarget.startsWith("/mod/");
+    if (env.REQUIRE_INVITE && !modLogin) {
       if (!inviteCode) {
         return res.status(400).send("Invite code required. Use /auth/login?invite=YOUR_CODE");
       }
@@ -122,6 +124,18 @@ router.get("/auth/callback", async (req, res) => {
 
     // Check if this is a new streamer vs returning streamer
     const existing = getDb().getStreamerById(bid);
+    const moderatorships = getDb().getModeratorships(bid);
+    const isModOnly = !existing && moderatorships.length > 0;
+
+    // Moderator-only login: no streamer row, no invite required
+    if (isModOnly) {
+      console.log(`[AUTH] Moderator login bid=${bid} username=${userInfo.username} channels=${moderatorships.length}`);
+      setSessionCookie(res, bid);
+      const ret = String(state_ret || req.query.ret || "/mod");
+      // Prefer /mod unless they explicitly asked for something else that isn't dashboard
+      if (!ret || ret === "/dashboard") return res.redirect("/mod");
+      return res.redirect(ret.startsWith("/") ? ret : "/mod");
+    }
 
     // For new streamers, validate and consume invite code
     if (!existing && env.REQUIRE_INVITE) {
@@ -155,7 +169,12 @@ router.get("/auth/callback", async (req, res) => {
     console.log(`[AUTH] ${existing ? "Returning" : "New"} streamer bid=${bid} username=${userInfo.username} overlay_key=${streamer.overlay_key}`);
 
     setSessionCookie(res, bid);
-    const ret = String(state_ret || req.query.ret || "/dashboard");
+    let ret = String(state_ret || req.query.ret || "/dashboard");
+    // If they only asked for /mod and they have moderatorships, honor it
+    if (ret === "/mod" && moderatorships.length > 0) {
+      return res.redirect("/mod");
+    }
+    if (!ret.startsWith("/")) ret = "/dashboard";
     res.redirect(ret);
   } catch (e) {
     console.error("Auth error:", e);

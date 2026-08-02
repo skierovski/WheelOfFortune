@@ -8,6 +8,7 @@ import { handleChatMessage } from "../services/chatBot.js";
 import { trackGiftEvent, resolveGiftExpiresAt } from "../services/giftTracker.js";
 import { loadConfig } from "../services/configStore.js";
 import { bumpManualCounter } from "../services/manualCounter.js";
+import { resolveGiftSpins } from "../services/giftSpins.js";
 
 const router = Router();
 
@@ -145,32 +146,12 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
 
       // Determine tier and spin count based on gift count
       const config = getDb().getConfig(broadcasterId);
-      const tiers = config?.tiers;
-
-      if (Array.isArray(tiers) && tiers.length > 0) {
-        // Tiered mode: find the highest tier this gift event qualifies for
-        // tiers are sorted by min_gifts ascending — pick the last one where giftCount >= min_gifts
-        let matchedTier = null;
-        for (let i = tiers.length - 1; i >= 0; i--) {
-          if (giftCount >= tiers[i].min_gifts) {
-            matchedTier = tiers[i];
-            break;
-          }
-        }
-        if (matchedTier) {
-          console.log(`[WEBHOOK] bid=${broadcasterId} ${giftCount} gifts -> tier "${matchedTier.name}" (min=${matchedTier.min_gifts})`);
-          spins.deliverSpinOrQueue(broadcasterId, 1, { tier: matchedTier.name });
-        } else {
-          console.log(`[WEBHOOK] bid=${broadcasterId} ${giftCount} gifts below minimum tier (${tiers[0].min_gifts}), no spin`);
-        }
+      const { spinCount, tier } = resolveGiftSpins(config, giftCount);
+      if (spinCount > 0) {
+        console.log(`[WEBHOOK] bid=${broadcasterId} ${giftCount} gifts -> ${spinCount} spin(s)${tier ? ` tier="${tier}"` : ""}`);
+        spins.deliverSpinOrQueue(broadcasterId, spinCount, tier ? { tier } : {});
       } else {
-        // Legacy single-tier mode
-        const giftsPerSpin = config?.gifts_per_spin || 5;
-        const spinCount = Math.floor(giftCount / giftsPerSpin);
-        if (spinCount > 0) {
-          console.log(`[WEBHOOK] bid=${broadcasterId} ${giftCount} gifts -> ${spinCount} spin(s)`);
-          spins.deliverSpinOrQueue(broadcasterId, spinCount);
-        }
+        console.log(`[WEBHOOK] bid=${broadcasterId} ${giftCount} gifts below minimum, no wheel spin`);
       }
     } else if (
       type === "channel.subscription.new" ||

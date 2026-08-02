@@ -50,6 +50,7 @@
     .btn:disabled { opacity: .4; cursor: not-allowed; }
     .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
     .btn-accent:hover { filter: brightness(1.15); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
 
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
@@ -214,6 +215,7 @@
       </div>
       <div style="display:flex; align-items:center; gap:8px;">
         <button class="btn" id="changelogBtn" style="font-size:12px; padding:6px 12px;" data-i18n="whats_new">What's New</button>
+        <a class="btn" id="modPanelLink" href="/mod" style="font-size:12px; padding:6px 12px; display:none;" data-i18n="mod_panel_link">Mod Panel</a>
         <div class="lang-toggle">
           <button class="lang-btn active" id="langEN" onclick="setLang('en')">EN</button>
           <button class="lang-btn" id="langPL" onclick="setLang('pl')">PL</button>
@@ -339,6 +341,18 @@
         </div>
       </div>
 
+      <!-- MODERATORS -->
+      <div class="card">
+        <h2 data-i18n="mods_title">Moderators</h2>
+        <div class="muted" data-i18n="mods_desc">Add Kick accounts that can open the moderator panel (spins, delay, gifts, counter) — no wheel config access.</div>
+        <div class="row" style="margin-top:12px;">
+          <input type="text" id="modUsername" placeholder="Kick username or user ID" data-i18n-placeholder="mods_placeholder" style="flex:1; min-width:160px;" />
+          <button class="btn btn-accent" id="addModBtn" type="button" data-i18n="mods_add">Add moderator</button>
+        </div>
+        <div id="modsList" style="margin-top:12px;"></div>
+        <div class="muted small" style="margin-top:8px;" data-i18n="mods_hint">Mods log in at /mod with Kick (no invite code needed).</div>
+      </div>
+
       <!-- SLOTS PRIZES -->
       <div class="card full-width">
         <h2 data-i18n="slots_title">Sub Slots — bank prizes</h2>
@@ -385,7 +399,7 @@
           </details>
           <details>
             <summary data-i18n="tip3_q">How do prize tiers work?</summary>
-            <p data-i18n-html="tip3_a">You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes, and <b>50 gifts</b> triggers a "Legendary" wheel with ridiculous rewards. When someone gifts subs, the app picks the <b>highest tier</b> their gift count qualifies for. Each tier has its own set of prizes — fully customizable.</p>
+            <p data-i18n-html="tip3_a">You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes. When someone gifts subs, the app picks the <b>highest tier</b> they qualify for, then queues <b>floor(gifts ÷ that tier's min)</b> spins — e.g. 30 gifts on a 5-gift tier → <b>6 spins</b> in the queue.</p>
           </details>
           <details>
             <summary data-i18n="tip4_q">How do weights work?</summary>
@@ -673,7 +687,15 @@
         tip2_q: "Why is there no sound on the wheel?",
         tip2_a: 'Browsers block audio until a user interacts with the page. In <b>OBS Browser Sources</b>, audio plays automatically. If you\'re testing in a regular browser, click anywhere on the page first to unlock audio. You can also enable <em>"Control audio via OBS"</em> in the Browser Source properties.',
         tip3_q: "How do prize tiers work?",
-        tip3_a: 'You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes, and <b>50 gifts</b> triggers a "Legendary" wheel with ridiculous rewards. When someone gifts subs, the app picks the <b>highest tier</b> their gift count qualifies for. Each tier has its own set of prizes \u2014 fully customizable.',
+        tip3_a: 'You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes. When someone gifts subs, the app picks the <b>highest tier</b> they qualify for, then queues <b>floor(gifts \u00f7 that tier\'s min)</b> spins \u2014 e.g. 30 gifts on a 5-gift tier \u2192 <b>6 spins</b> in the queue.',
+        mods_title: "Moderators",
+        mods_desc: "Add Kick accounts that can open the moderator panel (spins, delay, gifts, counter) — no wheel config access.",
+        mods_placeholder: "Kick username or user ID",
+        mods_add: "Add moderator",
+        mods_hint: "Mods log in at /mod with Kick (no invite code needed).",
+        mods_remove: "Remove",
+        mods_empty: "No moderators yet.",
+        mod_panel_link: "Mod Panel",
         tip4_q: "How do weights work?",
         tip4_a: 'Each prize has a <b>weight</b> that determines its probability. Weights are normalized to percentages (they always add up to 100%). A prize with weight 50 in a list totaling 200 has a 25% chance. Use the <b>"Normalize to 100%"</b> button to see the actual percentages. Weights are normalized <b>per tier</b>, so each tier is independent.',
         tip5_q: 'What is "Bonus spin"?',
@@ -745,7 +767,15 @@
         tip2_q: "Dlaczego nie slychac dzwieku kola?",
         tip2_a: 'Przegladarki blokuja dzwiek do momentu interakcji uzytkownika ze strona. W <b>OBS Browser Sources</b> dzwiek gra automatycznie. Jesli testujesz w zwyklej przegladarce, kliknij gdziekolwiek na stronie, aby odblokowac dzwiek. Mozesz tez wlaczyc <em>"Control audio via OBS"</em> we wlasciwosciach zrodla.',
         tip3_q: "Jak dzialaja zestawy nagrod?",
-        tip3_a: 'Mozesz utworzyc <b>wiele zestawow nagrod</b> na podstawie liczby giftow. Np. <b>5 giftow</b> uruchamia zestaw "Podstawowy", <b>25 giftow</b> \u2014 "Premium" z lepszymi nagrodami, a <b>50 giftow</b> \u2014 "Legendarny" z szalonymi nagrodami. Aplikacja wybiera <b>najwyzszy zestaw</b>, do ktorego kwalifikuje sie liczba giftow. Kazdy zestaw ma wlasne nagrody \u2014 w pelni konfigurowalne.',
+        tip3_a: 'Mozesz utworzyc <b>wiele zestawow nagrod</b> na podstawie liczby giftow. Np. <b>5 giftow</b> uruchamia zestaw "Podstawowy", <b>25 giftow</b> \u2014 "Premium". Aplikacja wybiera <b>najwyzszy zestaw</b>, a potem kolejkuje <b>floor(gifty \u00f7 min zestawu)</b> spinow \u2014 np. 30 giftow przy progu 5 \u2192 <b>6 spinow</b> w kolejce.',
+        mods_title: "Moderatorzy",
+        mods_desc: "Dodaj konta Kick, ktore moga otworzyc panel moderatora (spiny, delay, gifty, licznik) — bez edycji konfiguracji kola.",
+        mods_placeholder: "Nick Kick lub ID uzytkownika",
+        mods_add: "Dodaj moderatora",
+        mods_hint: "Moderatorzy loguja sie na /mod przez Kick (bez kodu zaproszenia).",
+        mods_remove: "Usun",
+        mods_empty: "Brak moderatorow.",
+        mod_panel_link: "Panel moda",
         tip4_q: "Jak dzialaja wagi?",
         tip4_a: 'Kazda nagroda ma <b>wage</b> okreslajaca jej prawdopodobienstwo. Wagi sa normalizowane do procentow (zawsze sumuja sie do 100%). Nagroda z waga 50 w liscie o sumie 200 ma 25% szans. Uzyj przycisku <b>"Normalizuj do 100%"</b>, aby zobaczyc rzeczywiste procenty. Wagi sa normalizowane <b>dla kazdego zestawu osobno</b>.',
         tip5_q: 'Co to "Bonus spin"?',
@@ -886,6 +916,9 @@
           box._rawUrl = url;
           box.innerHTML = `${url}<span class="copy-hint">${t("click_copy")}</span>`;
         }
+
+        const modLink = el("modPanelLink");
+        if (modLink) modLink.style.display = j.moderatorships > 0 ? "inline-block" : "none";
 
       } catch (e) {
         console.error("Failed to load status:", e.message);
@@ -1784,6 +1817,70 @@
       }
     };
 
+    // === MODERATORS
+    function renderMods(list) {
+      const box = el("modsList");
+      if (!box) return;
+      if (!list || !list.length) {
+        box.innerHTML = `<div class="muted small">${t("mods_empty")}</div>`;
+        return;
+      }
+      box.innerHTML = list.map((m) => `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div>
+            <div style="font-weight:600;">${escapeHtml(m.mod_username || ("ID " + m.mod_kick_user_id))}</div>
+            <div class="muted small mono">ID ${m.mod_kick_user_id}</div>
+          </div>
+          <button class="btn btn-sm" type="button" data-remove-mod="${m.mod_kick_user_id}">${t("mods_remove")}</button>
+        </div>
+      `).join("");
+      box.querySelectorAll("[data-remove-mod]").forEach((btn) => {
+        btn.onclick = async () => {
+          try {
+            const r = await fetch(`/dashboard/moderators/${btn.dataset.removeMod}`, { method: "DELETE" });
+            const j = await r.json();
+            if (!j.ok) throw new Error(j.error || "Failed");
+            renderMods(j.moderators);
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s || "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+    async function loadMods() {
+      try {
+        const r = await fetch("/dashboard/moderators", { cache: "no-store" });
+        const j = await r.json();
+        if (j.ok) renderMods(j.moderators);
+      } catch {}
+    }
+
+    el("addModBtn").onclick = async () => {
+      const username = (el("modUsername").value || "").trim();
+      if (!username) return;
+      el("addModBtn").disabled = true;
+      try {
+        const r = await fetch("/dashboard/moderators", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "Failed");
+        el("modUsername").value = "";
+        renderMods(j.moderators);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        el("addModBtn").disabled = false;
+      }
+    };
+
     // BOOT
     (async function(){
       applyLang();
@@ -1791,6 +1888,7 @@
       await loadWheel();
       await loadBotConfig();
       await loadCommands();
+      await loadMods();
       await loadChangelog();
       await loadSubCounterConfig();
       await loadManualCounter();

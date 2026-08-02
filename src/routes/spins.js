@@ -10,6 +10,7 @@ import { getOverlayAuthStatus } from "../services/authStatus.js";
 import { trackGiftEvent } from "../services/giftTracker.js";
 import { loadConfig } from "../services/configStore.js";
 import { bumpManualCounter } from "../services/manualCounter.js";
+import { resolveGiftSpins } from "../services/giftSpins.js";
 
 const router = Router();
 
@@ -77,28 +78,10 @@ router.post("/dashboard/simulate-gift", requireSession, (req, res) => {
   bumpManualCounter(bid, giftCount, req.app?.locals?.wss);
 
   const config = getDb().getConfig(bid);
-  const configTiers = config?.tiers;
+  const { spinCount, tier: tierUsed } = resolveGiftSpins(config, giftCount);
   let delivered = 0;
-  let spinCount = 0;
-  let tierUsed = null;
-
-  if (Array.isArray(configTiers) && configTiers.length > 0) {
-    for (let i = configTiers.length - 1; i >= 0; i--) {
-      if (giftCount >= configTiers[i].min_gifts) {
-        tierUsed = configTiers[i].name;
-        spinCount = 1;
-        break;
-      }
-    }
-    if (spinCount > 0) {
-      delivered = spins.deliverSpinOrQueue(bid, 1, { tier: tierUsed });
-    }
-  } else {
-    const giftsPerSpin = config?.gifts_per_spin || 5;
-    spinCount = Math.floor(giftCount / giftsPerSpin);
-    if (spinCount > 0) {
-      delivered = spins.deliverSpinOrQueue(bid, spinCount);
-    }
+  if (spinCount > 0) {
+    delivered = spins.deliverSpinOrQueue(bid, spinCount, tierUsed ? { tier: tierUsed } : {});
   }
 
   res.json({

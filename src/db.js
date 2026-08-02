@@ -112,6 +112,18 @@ CREATE TABLE IF NOT EXISTS tracked_gifts (
 
 CREATE INDEX IF NOT EXISTS idx_tracked_gifts_active
   ON tracked_gifts(broadcaster_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS streamer_moderators (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  broadcaster_id   INTEGER NOT NULL REFERENCES streamers(broadcaster_id),
+  mod_kick_user_id INTEGER NOT NULL,
+  mod_username     TEXT,
+  created_at       INTEGER DEFAULT (unixepoch()),
+  UNIQUE(broadcaster_id, mod_kick_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_streamer_moderators_mod
+  ON streamer_moderators(mod_kick_user_id);
 `;
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -478,6 +490,40 @@ export function openDatabase(dbPath = ":memory:") {
     getCommandById: sqlite.prepare(`SELECT * FROM chat_commands WHERE id = ? AND broadcaster_id = ?`),
     getEnabledCommands: sqlite.prepare(`SELECT * FROM chat_commands WHERE broadcaster_id = ? AND enabled = 1`),
     updateCommandCooldown: sqlite.prepare(`UPDATE chat_commands SET last_used_at = ? WHERE id = ?`),
+
+    // Moderators
+    insertModerator: sqlite.prepare(`
+      INSERT INTO streamer_moderators (broadcaster_id, mod_kick_user_id, mod_username)
+      VALUES (@broadcaster_id, @mod_kick_user_id, @mod_username)
+      ON CONFLICT(broadcaster_id, mod_kick_user_id) DO UPDATE SET
+        mod_username = excluded.mod_username
+    `),
+    deleteModerator: sqlite.prepare(`
+      DELETE FROM streamer_moderators
+      WHERE broadcaster_id = ? AND mod_kick_user_id = ?
+    `),
+    deleteModeratorsForStreamer: sqlite.prepare(`
+      DELETE FROM streamer_moderators WHERE broadcaster_id = ?
+    `),
+    listModerators: sqlite.prepare(`
+      SELECT id, broadcaster_id, mod_kick_user_id, mod_username, created_at
+      FROM streamer_moderators
+      WHERE broadcaster_id = ?
+      ORDER BY created_at
+    `),
+    getModeratorships: sqlite.prepare(`
+      SELECT m.id, m.broadcaster_id, m.mod_kick_user_id, m.mod_username, m.created_at,
+             s.kick_username AS streamer_username, s.display_name AS streamer_display_name
+      FROM streamer_moderators m
+      JOIN streamers s ON s.broadcaster_id = m.broadcaster_id
+      WHERE m.mod_kick_user_id = ?
+      ORDER BY s.kick_username
+    `),
+    isModerator: sqlite.prepare(`
+      SELECT 1 AS ok FROM streamer_moderators
+      WHERE broadcaster_id = ? AND mod_kick_user_id = ?
+      LIMIT 1
+    `),
   };
 
   // ── Public API ──────────────────────────────────────────────────
@@ -878,6 +924,40 @@ export function openDatabase(dbPath = ":memory:") {
 
     updateCommandCooldown(id, timestamp) {
       stmts.updateCommandCooldown.run(timestamp, id);
+    },
+
+    // ── Moderators ──────────────────────────────────────────────
+
+    addModerator(broadcasterId, { mod_kick_user_id, mod_username }) {
+      const modId = Number(mod_kick_user_id);
+      if (!broadcasterId || !Number.isFinite(modId)) return null;
+      stmts.insertModerator.run({
+        broadcaster_id: broadcasterId,
+        mod_kick_user_id: modId,
+        mod_username: mod_username ? String(mod_username).slice(0, 64) : null,
+      });
+      return stmts.listModerators.all(broadcasterId).find((m) => m.mod_kick_user_id === modId) || null;
+    },
+
+    removeModerator(broadcasterId, modKickUserId) {
+      const result = stmts.deleteModerator.run(broadcasterId, Number(modKickUserId));
+      return result.changes > 0;
+    },
+
+    deleteModeratorsForStreamer(broadcasterId) {
+      return stmts.deleteModeratorsForStreamer.run(broadcasterId);
+    },
+
+    listModerators(broadcasterId) {
+      return stmts.listModerators.all(broadcasterId);
+    },
+
+    getModeratorships(modKickUserId) {
+      return stmts.getModeratorships.all(Number(modKickUserId));
+    },
+
+    isModerator(broadcasterId, modKickUserId) {
+      return !!stmts.isModerator.get(broadcasterId, Number(modKickUserId));
     },
   };
 

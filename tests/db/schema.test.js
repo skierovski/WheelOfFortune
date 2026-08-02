@@ -28,6 +28,7 @@ describe("database schema and queries", () => {
       expect(tables).toContain("slots_state");
       expect(tables).toContain("subscriptions");
       expect(tables).toContain("invite_codes");
+      expect(tables).toContain("streamer_moderators");
     });
 
     it("has WAL journal mode (in-memory reports 'memory' which is expected)", () => {
@@ -415,6 +416,43 @@ describe("database schema and queries", () => {
 
       const result = db.validateInviteCode(code);
       expect(result.code.created_by).toBe(1);
+    });
+  });
+
+  // ── Moderators ──────────────────────────────────────────────────
+
+  describe("moderators", () => {
+    beforeEach(() => {
+      db.upsertStreamer({ broadcaster_id: 10, kick_username: "streamer", access_token: "t", refresh_token: "r" });
+      db.upsertStreamer({ broadcaster_id: 20, kick_username: "other", access_token: "t", refresh_token: "r" });
+    });
+
+    it("adds and lists moderators", () => {
+      db.addModerator(10, { mod_kick_user_id: 99, mod_username: "modguy" });
+      const list = db.listModerators(10);
+      expect(list).toHaveLength(1);
+      expect(list[0].mod_kick_user_id).toBe(99);
+      expect(list[0].mod_username).toBe("modguy");
+    });
+
+    it("upserts on duplicate and resolves moderatorships", () => {
+      db.addModerator(10, { mod_kick_user_id: 99, mod_username: "old" });
+      db.addModerator(10, { mod_kick_user_id: 99, mod_username: "new" });
+      expect(db.listModerators(10)).toHaveLength(1);
+      expect(db.listModerators(10)[0].mod_username).toBe("new");
+
+      db.addModerator(20, { mod_kick_user_id: 99, mod_username: "new" });
+      const mods = db.getModeratorships(99);
+      expect(mods).toHaveLength(2);
+      expect(db.isModerator(10, 99)).toBe(true);
+      expect(db.isModerator(10, 1)).toBe(false);
+    });
+
+    it("removes a moderator", () => {
+      db.addModerator(10, { mod_kick_user_id: 99, mod_username: "modguy" });
+      expect(db.removeModerator(10, 99)).toBe(true);
+      expect(db.listModerators(10)).toHaveLength(0);
+      expect(db.removeModerator(10, 99)).toBe(false);
     });
   });
 });

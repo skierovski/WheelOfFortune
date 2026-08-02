@@ -13,6 +13,7 @@ import spinsRoutes from "./routes/spins.js";
 import slotsRoutes from "./routes/slots.js";
 import adminRoutes from "./routes/admin.js";
 import commandsRoutes from "./routes/commands.js";
+import modRoutes from "./routes/mod.js";
 
 export const app = express();
 app.set("trust proxy", 1);
@@ -101,4 +102,5 @@ app.use(subscribeRoutes);
 app.use(spinsRoutes);
 app.use(slotsRoutes);
 app.use(commandsRoutes);
+app.use(modRoutes);
 app.use(adminRoutes);

@@ -2,7 +2,7 @@ import { Router } from "express";
 import path from "path";
 import fs from "fs";
 import { createRequire } from "module";
-import { requireSession, resolveOverlayKey } from "../middleware/requireSession.js";
+import { requireSession, resolveOverlayKey, requireModSession } from "../middleware/requireSession.js";
 import { getSessionBroadcasterId } from "../utils/cookies.js";
 import { getDb } from "../db.js";
 
@@ -16,8 +16,13 @@ const viewsDir = path.join(process.cwd(), "views");
 // Landing page (redirect to dashboard if already logged in)
 router.get("/", (req, res) => {
   const bid = getSessionBroadcasterId(req);
-  if (bid && getDb().getStreamerById(bid)) {
-    return res.redirect("/dashboard");
+  if (bid) {
+    if (getDb().getStreamerById(bid)) {
+      return res.redirect("/dashboard");
+    }
+    if (getDb().getModeratorships(bid).length > 0) {
+      return res.redirect("/mod");
+    }
   }
 
   const file = path.join(publicDir, "landing.html");
@@ -31,6 +36,13 @@ router.get("/", (req, res) => {
 router.get("/dashboard", requireSession, (req, res) => {
   const file = path.join(viewsDir, "home.html");
   if (!fs.existsSync(file)) return res.status(404).send("home.html not found");
+  res.sendFile(file);
+});
+
+// Moderator panel (Kick login + moderatorship)
+router.get("/mod", requireModSession, (req, res) => {
+  const file = path.join(viewsDir, "mod.html");
+  if (!fs.existsSync(file)) return res.status(404).send("mod.html not found");
   res.sendFile(file);
 });
 
@@ -87,6 +99,7 @@ router.get("/dashboard/status", requireSession, async (req, res) => {
       hasTokens: !!streamer.access_token,
       subscriptions: subs,
       pending_spins: spinState.pending_count,
+      moderatorships: getDb().getModeratorships(bid).length,
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });

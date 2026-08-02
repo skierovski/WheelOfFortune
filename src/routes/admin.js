@@ -7,6 +7,7 @@ import { spins } from "../services/spins.js";
 import { slots } from "../services/slots.js";
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
 import { bumpManualCounter } from "../services/manualCounter.js";
+import { resolveGiftSpins } from "../services/giftSpins.js";
 
 const router = Router();
 
@@ -201,6 +202,7 @@ router.delete("/admin/streamers/:bid", requireAdmin, (req, res) => {
     // Clean up all related data (invite_codes must be cleared before streamers due to FK)
     db.raw.prepare("UPDATE invite_codes SET created_by = NULL WHERE created_by = ?").run(bid);
     db.raw.prepare("UPDATE invite_codes SET used_by = NULL WHERE used_by = ?").run(bid);
+    db.raw.prepare("DELETE FROM streamer_moderators WHERE broadcaster_id = ?").run(bid);
     db.raw.prepare("DELETE FROM wheel_configs WHERE broadcaster_id = ?").run(bid);
     db.raw.prepare("DELETE FROM goals WHERE broadcaster_id = ?").run(bid);
     db.raw.prepare("DELETE FROM spin_state WHERE broadcaster_id = ?").run(bid);
@@ -323,29 +325,10 @@ router.post("/admin/streamers/:bid/simulate-gift", requireAdmin, (req, res) => {
 
   // Convert gifts to spins (tier-aware)
   const config = getDb().getConfig(bid);
-  const configTiers = config?.tiers;
+  const { spinCount, tier: tierUsed } = resolveGiftSpins(config, giftCount);
   let delivered = 0;
-  let spinCount = 0;
-  let tierUsed = null;
-
-  if (Array.isArray(configTiers) && configTiers.length > 0) {
-    // Tiered mode: find highest matching tier
-    for (let i = configTiers.length - 1; i >= 0; i--) {
-      if (giftCount >= configTiers[i].min_gifts) {
-        tierUsed = configTiers[i].name;
-        spinCount = 1;
-        break;
-      }
-    }
-    if (spinCount > 0) {
-      delivered = spins.deliverSpinOrQueue(bid, 1, { tier: tierUsed });
-    }
-  } else {
-    const giftsPerSpin = config?.gifts_per_spin || 5;
-    spinCount = Math.floor(giftCount / giftsPerSpin);
-    if (spinCount > 0) {
-      delivered = spins.deliverSpinOrQueue(bid, spinCount);
-    }
+  if (spinCount > 0) {
+    delivered = spins.deliverSpinOrQueue(bid, spinCount, tierUsed ? { tier: tierUsed } : {});
   }
 
   console.log(`[ADMIN] Simulated gift: bid=${bid} gifter=${gifterName} gifts=${giftCount} -> spins=${spinCount}${tierUsed ? ` tier="${tierUsed}"` : ""} slots=${giftCount}`);
@@ -525,6 +508,7 @@ router.post("/admin/reset-db", requireAdmin, (req, res) => {
   db.raw.exec("DELETE FROM wheel_configs");
   db.raw.exec("DELETE FROM goals");
   db.raw.exec("DELETE FROM subscriptions");
+  db.raw.exec("DELETE FROM streamer_moderators");
   db.raw.exec("DELETE FROM invite_codes");
   db.raw.exec("DELETE FROM streamers");
 

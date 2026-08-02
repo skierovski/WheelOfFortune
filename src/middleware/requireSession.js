@@ -67,3 +67,54 @@ export function resolveOverlayKey(req, res, next) {
   req.streamer = streamer;
   return next();
 }
+
+/**
+ * Middleware: logged-in Kick user who is a moderator of at least one streamer.
+ * Sets req.mod = { kick_user_id, moderatorships }.
+ * Does NOT require the user to be a registered streamer.
+ */
+export function requireModSession(req, res, next) {
+  const kickUserId = getSessionBroadcasterId(req);
+  if (!kickUserId) {
+    const base = `${(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim()}://${(req.headers["x-forwarded-host"] || req.get("host")).split(",")[0].trim()}`;
+    const ret = encodeURIComponent(req.originalUrl || "/mod");
+    return res.redirect(`${base}/auth/login?ret=${ret}`);
+  }
+
+  const moderatorships = getDb().getModeratorships(kickUserId);
+  if (!moderatorships.length) {
+    // Streamers who aren't mods of anyone get sent to their dashboard
+    if (getDb().getStreamerById(kickUserId)) {
+      return res.redirect("/dashboard");
+    }
+    return res.status(403).send("You are not a moderator for any streamer on this app.");
+  }
+
+  req.mod = { kick_user_id: kickUserId, moderatorships };
+  return next();
+}
+
+/**
+ * Middleware for /mod/:bid/* APIs — must be a moderator of that streamer.
+ * Sets req.modStreamer.
+ */
+export function requireModOfStreamer(req, res, next) {
+  const kickUserId = getSessionBroadcasterId(req);
+  if (!kickUserId) {
+    return res.status(401).json({ ok: false, error: "Not logged in" });
+  }
+  const bid = Number(req.params.bid);
+  if (!Number.isFinite(bid) || !bid) {
+    return res.status(400).json({ ok: false, error: "Invalid broadcaster id" });
+  }
+  if (!getDb().isModerator(bid, kickUserId)) {
+    return res.status(403).json({ ok: false, error: "Not a moderator for this streamer" });
+  }
+  const streamer = getDb().getStreamerById(bid);
+  if (!streamer) {
+    return res.status(404).json({ ok: false, error: "Streamer not found" });
+  }
+  req.mod = { kick_user_id: kickUserId, broadcaster_id: bid };
+  req.modStreamer = streamer;
+  return next();
+}
