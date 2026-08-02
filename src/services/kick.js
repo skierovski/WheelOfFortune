@@ -24,7 +24,10 @@ export async function fetchUserInfo(accessToken) {
 }
 
 /**
- * Look up a Kick user by slug/username (or numeric id) using a streamer's token.
+ * Look up a Kick user by channel slug/username or numeric user id.
+ * Official /users only accepts `id=` (slug/name are ignored and return self).
+ * Username resolution uses /channels?slug= → broadcaster_user_id.
+ *
  * @param {number} broadcasterId
  * @param {string|number} nameOrId
  * @returns {Promise<{ user_id: number, username: string, display_name: string }>}
@@ -34,39 +37,40 @@ export async function lookupKickUser(broadcasterId, nameOrId) {
   if (!raw) throw new Error("Missing username");
 
   const token = await ensureAccessToken(broadcasterId);
-  const asId = Number(raw);
-  const qs = Number.isFinite(asId) && /^\d+$/.test(raw)
-    ? `id=${asId}`
-    : `slug=${encodeURIComponent(raw.toLowerCase())}`;
 
-  const r = await fetch(`https://api.kick.com/public/v1/users?${qs}`, {
+  // Numeric Kick user ID → /users?id=
+  if (/^\d+$/.test(raw)) {
+    const asId = Number(raw);
+    const r = await fetch(`https://api.kick.com/public/v1/users?id=${asId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error(`Kick user lookup failed: ${r.status}`);
+    const data = await r.json();
+    const user = Array.isArray(data?.data) ? data.data[0] : data?.data;
+    if (!user?.user_id) throw new Error("Kick user not found for that ID");
+    const name = user.name || user.username || raw;
+    return { user_id: Number(user.user_id), username: name, display_name: name };
+  }
+
+  // Username / channel slug → /channels?slug=
+  const slug = raw.toLowerCase().slice(0, 25);
+  const r = await fetch(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(slug)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) {
-    // Fallback: some Kick deployments accept `name=` instead of `slug=`
-    if (!/^\d+$/.test(raw)) {
-      const r2 = await fetch(`https://api.kick.com/public/v1/users?name=${encodeURIComponent(raw)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (r2.ok) {
-        const data2 = await r2.json();
-        const user2 = Array.isArray(data2?.data) ? data2.data[0] : data2?.data;
-        if (user2?.user_id) {
-          const name2 = user2.name || user2.username || user2.slug || raw;
-          return { user_id: Number(user2.user_id), username: name2, display_name: name2 };
-        }
-      }
-    }
-    throw new Error(`Kick user lookup failed: ${r.status}`);
+    throw new Error(`Kick channel lookup failed: ${r.status}. Try the numeric Kick user ID instead.`);
   }
   const data = await r.json();
-  const user = Array.isArray(data?.data) ? data.data[0] : data?.data;
-  if (!user?.user_id) throw new Error("Kick user not found");
-  const name = user.name || user.username || user.slug || raw;
+  const ch = Array.isArray(data?.data) ? data.data[0] : data?.data;
+  const userId = Number(ch?.broadcaster_user_id);
+  if (!Number.isFinite(userId) || !userId) {
+    throw new Error(`No Kick channel found for "${raw}". Use their numeric Kick user ID.`);
+  }
+  const username = ch.slug || raw;
   return {
-    user_id: Number(user.user_id),
-    username: name,
-    display_name: name,
+    user_id: userId,
+    username,
+    display_name: username,
   };
 }
 

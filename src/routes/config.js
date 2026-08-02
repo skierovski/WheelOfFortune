@@ -490,7 +490,10 @@ router.post("/dashboard/moderators", requireSession, async (req, res) => {
     }
 
     if (user.user_id === bid) {
-      return res.status(400).json({ ok: false, error: "You cannot add yourself as a moderator" });
+      return res.status(400).json({
+        ok: false,
+        error: "That resolved to your own account. Enter the moderator's Kick username (channel slug) or their numeric Kick user ID — not yours.",
+      });
     }
 
     getDb().addModerator(bid, {

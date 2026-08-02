@@ -346,11 +346,11 @@
         <h2 data-i18n="mods_title">Moderators</h2>
         <div class="muted" data-i18n="mods_desc">Add Kick accounts that can open the moderator panel (spins, delay, gifts, counter) — no wheel config access.</div>
         <div class="row" style="margin-top:12px;">
-          <input type="text" id="modUsername" placeholder="Kick username or user ID" data-i18n-placeholder="mods_placeholder" style="flex:1; min-width:160px;" />
+          <input type="text" id="modUsername" placeholder="Kick username (slug) or user ID" data-i18n-placeholder="mods_placeholder" style="flex:1; min-width:160px;" />
           <button class="btn btn-accent" id="addModBtn" type="button" data-i18n="mods_add">Add moderator</button>
         </div>
         <div id="modsList" style="margin-top:12px;"></div>
-        <div class="muted small" style="margin-top:8px;" data-i18n="mods_hint">Mods log in at /mod with Kick (no invite code needed).</div>
+        <div class="muted small" style="margin-top:8px;" data-i18n="mods_hint">Use their Kick channel name (kick.com/name) or numeric user ID. Mods log in at /mod with Kick (no invite).</div>
       </div>
 
       <!-- SLOTS PRIZES -->
@@ -690,9 +690,9 @@
         tip3_a: 'You can create <b>multiple prize tiers</b> based on gift amounts. For example: <b>5 gifts</b> triggers a "Basic" wheel, <b>25 gifts</b> triggers a "Premium" wheel with better prizes. When someone gifts subs, the app picks the <b>highest tier</b> they qualify for, then queues <b>floor(gifts \u00f7 that tier\'s min)</b> spins \u2014 e.g. 30 gifts on a 5-gift tier \u2192 <b>6 spins</b> in the queue.',
         mods_title: "Moderators",
         mods_desc: "Add Kick accounts that can open the moderator panel (spins, delay, gifts, counter) — no wheel config access.",
-        mods_placeholder: "Kick username or user ID",
+        mods_placeholder: "Kick username (slug) or user ID",
         mods_add: "Add moderator",
-        mods_hint: "Mods log in at /mod with Kick (no invite code needed).",
+        mods_hint: "Use their Kick channel name (kick.com/name) or numeric user ID. Mods log in at /mod with Kick (no invite).",
         mods_remove: "Remove",
         mods_empty: "No moderators yet.",
         mod_panel_link: "Mod Panel",
@@ -770,9 +770,9 @@
         tip3_a: 'Mozesz utworzyc <b>wiele zestawow nagrod</b> na podstawie liczby giftow. Np. <b>5 giftow</b> uruchamia zestaw "Podstawowy", <b>25 giftow</b> \u2014 "Premium". Aplikacja wybiera <b>najwyzszy zestaw</b>, a potem kolejkuje <b>floor(gifty \u00f7 min zestawu)</b> spinow \u2014 np. 30 giftow przy progu 5 \u2192 <b>6 spinow</b> w kolejce.',
         mods_title: "Moderatorzy",
         mods_desc: "Dodaj konta Kick, ktore moga otworzyc panel moderatora (spiny, delay, gifty, licznik) — bez edycji konfiguracji kola.",
-        mods_placeholder: "Nick Kick lub ID uzytkownika",
+        mods_placeholder: "Nick Kick (slug) lub ID",
         mods_add: "Dodaj moderatora",
-        mods_hint: "Moderatorzy loguja sie na /mod przez Kick (bez kodu zaproszenia).",
+        mods_hint: "Podaj nick kanalu (kick.com/nick) albo numeryczne ID Kick. Moderatorzy loguja sie na /mod przez Kick (bez kodu).",
         mods_remove: "Usun",
         mods_empty: "Brak moderatorow.",
         mod_panel_link: "Panel moda",
