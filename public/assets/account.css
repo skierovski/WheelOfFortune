@@ -1,0 +1,2 @@
+.session-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 600px) { .session-actions { display: grid; } }

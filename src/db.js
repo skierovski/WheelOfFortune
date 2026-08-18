@@ -122,6 +122,46 @@ CREATE TABLE IF NOT EXISTS streamer_moderators (
   UNIQUE(broadcaster_id, mod_kick_user_id)
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash       TEXT PRIMARY KEY,
+  broadcaster_id   INTEGER NOT NULL,
+  csrf_secret      TEXT NOT NULL,
+  created_at       INTEGER NOT NULL,
+  last_seen_at     INTEGER NOT NULL,
+  expires_at       INTEGER NOT NULL,
+  revoked_at       INTEGER,
+  user_agent       TEXT,
+  ip_hash          TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_broadcaster
+  ON sessions(broadcaster_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS webhook_receipts (
+  message_id       TEXT PRIMARY KEY,
+  event_type       TEXT,
+  payload_hash     TEXT NOT NULL,
+  received_at      INTEGER NOT NULL,
+  expires_at       INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_receipts_expiry
+  ON webhook_receipts(expires_at);
+
+CREATE TABLE IF NOT EXISTS oauth_transactions (
+  state_hash       TEXT PRIMARY KEY,
+  code_verifier    TEXT NOT NULL,
+  redirect_uri     TEXT NOT NULL,
+  return_path      TEXT NOT NULL,
+  invite_code      TEXT,
+  binding_hash     TEXT NOT NULL,
+  created_at       INTEGER NOT NULL,
+  expires_at       INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_transactions_expiry
+  ON oauth_transactions(expires_at);
+
 CREATE INDEX IF NOT EXISTS idx_streamer_moderators_mod
   ON streamer_moderators(mod_kick_user_id);
 `;
@@ -524,6 +564,45 @@ export function openDatabase(dbPath = ":memory:") {
       WHERE broadcaster_id = ? AND mod_kick_user_id = ?
       LIMIT 1
     `),
+
+    insertSession: sqlite.prepare(`
+      INSERT INTO sessions (token_hash, broadcaster_id, csrf_secret, created_at, last_seen_at, expires_at, user_agent, ip_hash)
+      VALUES (@token_hash, @broadcaster_id, @csrf_secret, @created_at, @last_seen_at, @expires_at, @user_agent, @ip_hash)
+    `),
+    getSession: sqlite.prepare(`
+      SELECT * FROM sessions
+      WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?
+    `),
+    touchSession: sqlite.prepare(`UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?`),
+    revokeSession: sqlite.prepare(`UPDATE sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`),
+    revokeAllSessions: sqlite.prepare(`UPDATE sessions SET revoked_at = ? WHERE broadcaster_id = ? AND revoked_at IS NULL`),
+    listSessions: sqlite.prepare(`
+      SELECT token_hash, created_at, last_seen_at, expires_at, user_agent, ip_hash
+      FROM sessions WHERE broadcaster_id = ? AND revoked_at IS NULL AND expires_at > ?
+      ORDER BY last_seen_at DESC
+    `),
+    deleteExpiredSessions: sqlite.prepare(`DELETE FROM sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL`),
+    insertWebhookReceipt: sqlite.prepare(`
+      INSERT OR IGNORE INTO webhook_receipts (message_id, event_type, payload_hash, received_at, expires_at)
+      VALUES (@message_id, @event_type, @payload_hash, @received_at, @expires_at)
+    `),
+    deleteExpiredWebhookReceipts: sqlite.prepare(`DELETE FROM webhook_receipts WHERE expires_at <= ?`),
+    insertOAuthTransaction: sqlite.prepare(`
+      INSERT INTO oauth_transactions
+        (state_hash, code_verifier, redirect_uri, return_path, invite_code, binding_hash, created_at, expires_at)
+      VALUES (@state_hash, @code_verifier, @redirect_uri, @return_path, @invite_code, @binding_hash, @created_at, @expires_at)
+      ON CONFLICT(state_hash) DO UPDATE SET
+        code_verifier = excluded.code_verifier,
+        redirect_uri = excluded.redirect_uri,
+        return_path = excluded.return_path,
+        invite_code = excluded.invite_code,
+        binding_hash = excluded.binding_hash,
+        created_at = excluded.created_at,
+        expires_at = excluded.expires_at
+    `),
+    getOAuthTransaction: sqlite.prepare(`SELECT * FROM oauth_transactions WHERE state_hash = ?`),
+    deleteOAuthTransaction: sqlite.prepare(`DELETE FROM oauth_transactions WHERE state_hash = ?`),
+    deleteExpiredOAuthTransactions: sqlite.prepare(`DELETE FROM oauth_transactions WHERE expires_at <= ?`),
   };
 
   // ── Public API ──────────────────────────────────────────────────
@@ -958,6 +1037,68 @@ export function openDatabase(dbPath = ":memory:") {
 
     isModerator(broadcasterId, modKickUserId) {
       return !!stmts.isModerator.get(broadcasterId, Number(modKickUserId));
+    },
+
+    createSession(session) {
+      stmts.insertSession.run(session);
+      return stmts.getSession.get(session.token_hash, session.created_at) || null;
+    },
+
+    getSession(tokenHash, now = Date.now()) {
+      return stmts.getSession.get(tokenHash, now) || null;
+    },
+
+    touchSession(tokenHash, now = Date.now()) {
+      return stmts.touchSession.run(now, tokenHash).changes > 0;
+    },
+
+    revokeSession(tokenHash, now = Date.now()) {
+      return stmts.revokeSession.run(now, tokenHash).changes > 0;
+    },
+
+    revokeAllSessions(broadcasterId, now = Date.now()) {
+      return stmts.revokeAllSessions.run(now, broadcasterId).changes;
+    },
+
+    listSessions(broadcasterId, now = Date.now()) {
+      return stmts.listSessions.all(broadcasterId, now);
+    },
+
+    deleteExpiredSessions(now = Date.now()) {
+      return stmts.deleteExpiredSessions.run(now).changes;
+    },
+
+    claimWebhookReceipt({ messageId, eventType = null, payloadHash, now = Date.now(), ttlMs = 24 * 60 * 60 * 1000 }) {
+      const tx = sqlite.transaction(() => {
+        stmts.deleteExpiredWebhookReceipts.run(now);
+        const result = stmts.insertWebhookReceipt.run({
+          message_id: String(messageId),
+          event_type: eventType ? String(eventType).slice(0, 100) : null,
+          payload_hash: String(payloadHash),
+          received_at: now,
+          expires_at: now + ttlMs,
+        });
+        return result.changes > 0;
+      });
+      return tx();
+    },
+
+    storeOAuthTransaction(transaction) {
+      const tx = sqlite.transaction(() => {
+        stmts.deleteExpiredOAuthTransactions.run(transaction.created_at);
+        stmts.insertOAuthTransaction.run(transaction);
+      });
+      tx();
+    },
+
+    consumeOAuthTransaction(stateHash, now = Date.now()) {
+      const tx = sqlite.transaction(() => {
+        stmts.deleteExpiredOAuthTransactions.run(now);
+        const row = stmts.getOAuthTransaction.get(stateHash) || null;
+        if (row) stmts.deleteOAuthTransaction.run(stateHash);
+        return row;
+      });
+      return tx();
     },
   };
 

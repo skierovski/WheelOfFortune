@@ -2,14 +2,17 @@ import "dotenv/config";
 import http from "http";
 import { app } from "./src/app.js";
 import { createWSS, attachUpgrade } from "./src/ws.js";
-import { env } from "./src/utils/env.js";
+import { assertSafeProductionEnv, env } from "./src/utils/env.js";
 import { initDb } from "./src/db.js";
 import { startWatchdogs } from "./src/services/watchdogs.js";
 import { startSpinChecker } from "./src/services/spins.js";
 import { startSlotsChecker } from "./src/services/slots.js";
 
+assertSafeProductionEnv();
+
 // Initialize database
 const db = initDb(env.DB_PATH);
+app.locals.db = db;
 console.log(`[DB] Initialized at ${env.DB_PATH}`);
 
 // Create HTTP server and WebSocket

@@ -1,4 +1,5 @@
 import { getDb } from "../db.js";
+import { issueOverlayTicket } from "./overlayTickets.js";
 
 export const SLOTS_DELAY_MS = 30 * 1000; // 30s between slot spins
 export const BET = 0.2;
@@ -226,9 +227,21 @@ function deliverOne(broadcasterId, { skipDelay = false } = {}) {
   });
 
   const token = cfg?.slots_token || "🪙";
+  const prizeLabels = prizes_hit.map((prize) => prize.label).filter(Boolean);
+  const announceLabel = prizeLabels.length
+    ? `Slots prize: ${prizeLabels.join(" · ")} (bank ${token}${bank})`
+    : evalResult.win > 0
+      ? `Slots win ${token}${evalResult.win}${evalResult.bonus ? " (+bonus)" : ""} (bank ${token}${bank})`
+      : "";
   const msg = {
     action: "slots",
     times: 1,
+    ticket: issueOverlayTicket({
+      broadcasterId,
+      kind: "slots",
+      announceLabel,
+      metadata: { bonus: !!evalResult.bonus },
+    }),
     result: {
       grid,
       win: evalResult.win,

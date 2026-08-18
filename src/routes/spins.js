@@ -11,6 +11,7 @@ import { trackGiftEvent } from "../services/giftTracker.js";
 import { loadConfig } from "../services/configStore.js";
 import { bumpManualCounter } from "../services/manualCounter.js";
 import { resolveGiftSpins } from "../services/giftSpins.js";
+import { consumeOverlayTicket } from "../services/overlayTickets.js";
 
 const router = Router();
 
@@ -33,7 +34,13 @@ router.get("/overlay/:key/spins/pending", resolveOverlayKey, (req, res) => {
 // Spin complete callback from overlay
 router.post("/overlay/:key/spins/complete", resolveOverlayKey, (req, res) => {
   const bid = req.streamer.broadcaster_id;
+  const ticket = consumeOverlayTicket(req.get("x-overlay-ticket"), { broadcasterId: bid, kind: "wheel", action: "complete" });
+  if (!ticket) return res.status(401).json({ ok: false, error: "Invalid or expired execution ticket" });
   spins.markSpinComplete(bid);
+  if (ticket.metadata?.bonus) {
+    spins.deliverSpinOrQueue(bid, 1, ticket.metadata.tier ? { tier: ticket.metadata.tier } : {});
+    spins.resetDelay(bid);
+  }
   res.json({ ok: true });
 });
 
@@ -144,9 +151,9 @@ router.get("/trigger/spin", (req, res) => {
 router.post("/overlay/:key/chat/announce", resolveOverlayKey, async (req, res) => {
   try {
     const bid = req.streamer.broadcaster_id;
-    const label = String(req.body?.label || "").trim();
-    if (!label) return res.status(400).json({ ok: false, error: "Missing label" });
-    await announcePrize(bid, label);
+    const ticket = consumeOverlayTicket(req.get("x-overlay-ticket"), { broadcasterId: bid, kind: "wheel", action: "announce" });
+    if (!ticket) return res.status(401).json({ ok: false, error: "Invalid or expired execution ticket" });
+    await announcePrize(bid, ticket.announceLabel);
     return res.json({ ok: true });
   } catch (e) {
     console.error("[chat/announce] error:", e);

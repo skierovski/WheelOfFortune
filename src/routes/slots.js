@@ -5,6 +5,7 @@ import { getDb } from "../db.js";
 import { validateSlotsPrizes, validateSlotsToken, DEFAULT_SLOTS_TOKEN } from "../utils/validate.js";
 import { announcePrize } from "../services/chatBot.js";
 import { bumpManualCounter } from "../services/manualCounter.js";
+import { consumeOverlayTicket } from "../services/overlayTickets.js";
 
 const router = Router();
 
@@ -27,7 +28,9 @@ router.get("/overlay/:key/slots/state", resolveOverlayKey, (req, res) => {
 
 router.post("/overlay/:key/slots/complete", resolveOverlayKey, (req, res) => {
   const bid = req.streamer.broadcaster_id;
-  slots.markComplete(bid, { bonus: !!req.body?.bonus });
+  const ticket = consumeOverlayTicket(req.get("x-overlay-ticket"), { broadcasterId: bid, kind: "slots", action: "complete" });
+  if (!ticket) return res.status(401).json({ ok: false, error: "Invalid or expired execution ticket" });
+  slots.markComplete(bid, { bonus: !!ticket.metadata?.bonus });
   res.json({ ok: true });
 });
 
@@ -118,9 +121,9 @@ router.post("/dashboard/simulate-sub", requireSession, (req, res) => {
 router.post("/overlay/:key/slots/announce", resolveOverlayKey, async (req, res) => {
   try {
     const bid = req.streamer.broadcaster_id;
-    const label = String(req.body?.label || "").trim();
-    if (!label) return res.status(400).json({ ok: false, error: "Missing label" });
-    await announcePrize(bid, label);
+    const ticket = consumeOverlayTicket(req.get("x-overlay-ticket"), { broadcasterId: bid, kind: "slots", action: "announce" });
+    if (!ticket) return res.status(401).json({ ok: false, error: "Invalid or expired execution ticket" });
+    await announcePrize(bid, ticket.announceLabel);
     return res.json({ ok: true });
   } catch (e) {
     console.error("[slots/announce] error:", e);

@@ -3,6 +3,26 @@ import { getDb } from "./db.js";
 import { spins } from "./services/spins.js";
 import { slots } from "./services/slots.js";
 import { getOverlayAuthStatus } from "./services/authStatus.js";
+import { env } from "./utils/env.js";
+
+const MAX_CONNECTIONS_PER_IP = 12;
+const MAX_CONNECTIONS_PER_BROADCASTER = 24;
+
+export function isAllowedWebSocketOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return env.NODE_ENV !== "production";
+  try {
+    const actual = new URL(origin).origin;
+    if (env.PUBLIC_BASE_URL && actual === new URL(env.PUBLIC_BASE_URL).origin) return true;
+    if (env.NODE_ENV !== "production") {
+      const host = String(req.headers.host || "").split(",")[0].trim();
+      return actual === `http://${host}` || actual === `https://${host}`;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Create the WebSocket server with per-streamer room support.
@@ -15,6 +35,7 @@ export function createWSS() {
 
   // Room map: broadcasterId -> Set<WebSocket>
   const rooms = new Map();
+  const connectionsByIp = new Map();
 
   function addToRoom(broadcasterId, ws) {
     if (!rooms.has(broadcasterId)) rooms.set(broadcasterId, new Set());
@@ -34,6 +55,8 @@ export function createWSS() {
     console.log(`WS client connected: bid=${bid} ip=${req.socket.remoteAddress}`);
 
     ws.isAlive = true;
+    const ip = req.socket.remoteAddress || "unknown";
+    connectionsByIp.set(ip, (connectionsByIp.get(ip) || 0) + 1);
     ws.on("pong", () => { ws.isAlive = true; });
 
     // Send current state on connect
@@ -55,6 +78,8 @@ export function createWSS() {
 
     ws.on("close", () => {
       removeFromRoom(bid, ws);
+      const next = Math.max(0, (connectionsByIp.get(ip) || 1) - 1);
+      if (next) connectionsByIp.set(ip, next); else connectionsByIp.delete(ip);
       console.log(`WS closed: bid=${bid}`);
     });
 
@@ -110,6 +135,8 @@ export function createWSS() {
 
   // Store addToRoom for use in upgrade handler
   wss._addToRoom = addToRoom;
+  wss._rooms = rooms;
+  wss._connectionsByIp = connectionsByIp;
 
   return wss;
 }
@@ -119,6 +146,19 @@ export function attachUpgrade(server, wss) {
     // Parse URL: /ws?key={overlay_key}
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     if (url.pathname !== "/ws") {
+      socket.destroy();
+      return;
+    }
+
+    if (!isAllowedWebSocketOrigin(req)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    const ip = req.socket.remoteAddress || "unknown";
+    if ((wss._connectionsByIp?.get(ip) || 0) >= MAX_CONNECTIONS_PER_IP) {
+      socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
       socket.destroy();
       return;
     }
@@ -138,6 +178,12 @@ export function attachUpgrade(server, wss) {
 
     if (!streamer) {
       socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    if ((wss._rooms?.get(streamer.broadcaster_id)?.size || 0) >= MAX_CONNECTIONS_PER_BROADCASTER) {
+      socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
       socket.destroy();
       return;
     }

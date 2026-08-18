@@ -424,16 +424,18 @@
     }
 
     function drawPointer(ac, rimOuter) {
-      const ptrTip = CY - rimOuter - 4;
-      const ptrBase = CY - R + 6;
+      // The narrow tip must point into the wheel. Keeping the wide base outside
+      // makes the selected sector unambiguous even on narrow slices.
+      const ptrTip = CY - R + 14;
+      const ptrBase = CY - rimOuter - 8;
       ctx.save();
       ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.5)`;
       ctx.shadowBlur = 12;
       ctx.fillStyle = ACCENT_COLOR;
       ctx.beginPath();
       ctx.moveTo(CX, ptrTip);
-      ctx.lineTo(CX - 14, ptrBase);
-      ctx.lineTo(CX + 14, ptrBase);
+      ctx.lineTo(CX - 16, ptrBase);
+      ctx.lineTo(CX + 16, ptrBase);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,0.5)";
@@ -580,20 +582,35 @@
       const picked = sectors[pickedIdx];
 
       const POINTER_ANGLE = -Math.PI/2; const TAU = 2*Math.PI;
-      const startAngle = modTau(rotation); let baseTarget = POINTER_ANGLE - picked.center;
+      const startAngle = modTau(rotation); let centeredTarget = POINTER_ANGLE - picked.center;
 
-      while (baseTarget <= startAngle) baseTarget += TAU;
+      while (centeredTarget <= startAngle) centeredTarget += TAU;
       const roundsInt = Math.floor(FULL_ROUNDS_MIN + Math.random()*(FULL_ROUNDS_MAX - FULL_ROUNDS_MIN + 1));
-      const targetAngle = baseTarget + Math.max(FULL_ROUNDS_MIN, roundsInt) * TAU;
+      centeredTarget += Math.max(FULL_ROUNDS_MIN, roundsInt) * TAU;
 
-      const totalDuration = 9000; const t0 = performance.now();
+      // Finish the fast phase safely inside the winning sector, then visibly
+      // settle its exact centre under the pointer. The offset never approaches
+      // a divider, including on very small weighted sectors.
+      const halfArc = Math.max(0, (picked.end - picked.start) / 2);
+      const settleOffset = Math.min(halfArc * 0.28, 0.14) * (Math.random() < 0.5 ? -1 : 1);
+      const approachTarget = centeredTarget + settleOffset;
+
+      const spinDuration = 8500;
+      const settleDuration = 650;
+      const t0 = performance.now();
 
       lastTickSegment = -1;
       return new Promise(resolve=>{
         function frame(t){
-          const p = Math.min(1, (t - t0) / totalDuration);
-          const eased = easeOutSeptic(p);
-          rotation = startAngle + (targetAngle - startAngle) * eased;
+          const elapsed = t - t0;
+          const inSettle = elapsed > spinDuration;
+          if (!inSettle) {
+            const p = Math.min(1, elapsed / spinDuration);
+            rotation = startAngle + (approachTarget - startAngle) * easeOutSeptic(p);
+          } else {
+            const settleP = Math.min(1, (elapsed - spinDuration) / settleDuration);
+            rotation = approachTarget + (centeredTarget - approachTarget) * easeOutQuint(settleP);
+          }
           drawWheel(rotation);
 
           // Tick sound on segment boundary cross
@@ -601,9 +618,9 @@
           if (curSeg !== lastTickSegment && lastTickSegment !== -1) playTick();
           lastTickSegment = curSeg;
 
-          if (p < 1) requestAnimationFrame(frame);
+          if (elapsed < spinDuration + settleDuration) requestAnimationFrame(frame);
           else {
-            rotation = targetAngle;
+            rotation = centeredTarget;
             drawWheel(rotation);
             const winIdx = sectorUnderPointer(rotation, sectors);
             const winSec = sectors[winIdx];
@@ -669,6 +686,8 @@
       while (queue.length) {
         const entry = queue[0];
         const tierName = (typeof entry === "object" && entry !== null) ? entry.tier : null;
+        const serverPickedId = (typeof entry === "object" && entry !== null) ? entry.pickedId : null;
+        const executionTicket = (typeof entry === "object" && entry !== null) ? entry.ticket : null;
 
         // If a tier is specified, temporarily swap items for this spin
         let savedItems = null;
@@ -686,21 +705,18 @@
           }
         }
 
-        const pickedId = nextFromBag();
+        // Production spins carry a server-selected prize. The local bag remains
+        // only as a compatibility fallback for older servers and preview mode.
+        const pickedId = serverPickedId || nextFromBag();
         const result = await spinToId(pickedId);
         if (result.label) {
           showResult(result.label, 1800, result.bonus);
           playSound();
           speak(result.label);
 
-          // BONUS: add one extra spin (same tier if tiered)
-          if (result.bonus) {
-            queue.push(tierName ? { times: 1, tier: tierName } : 1);
-          }
-
           fetch(`${API_BASE}/chat/announce`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label: result.label + (result.bonus ? " (+bonus)" : "") + (tierName ? ` [${tierName}]` : "") })
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Overlay-Ticket': executionTicket || '' },
+            body: JSON.stringify({})
           }).catch(()=>{});
         }
 
@@ -717,7 +733,10 @@
         
         // Notify server after EACH spin completes (not just at the end)
         // This ensures 5-minute delay between each spin, even if multiple are queued
-        fetch(`${API_BASE}/spins/complete`, { method: 'POST' }).catch(()=>{});
+        fetch(`${API_BASE}/spins/complete`, {
+          method: 'POST',
+          headers: { 'X-Overlay-Ticket': executionTicket || '' }
+        }).catch(()=>{});
       }
       spinning=false;
       hideOverlay(1000);
@@ -757,7 +776,7 @@
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
         const tierName = data.tier || null;
-        queue.push({ times: 1, tier: tierName });
+        queue.push({ times: 1, tier: tierName, pickedId: data.pickedId || null, ticket: data.ticket || null });
         showOverlay(); runQueue(); return;
       }
     }

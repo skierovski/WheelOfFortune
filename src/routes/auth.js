@@ -6,6 +6,11 @@ import { fetchUserInfo } from "../services/kick.js";
 import { saveTokens, tokenStore } from "../services/tokens.js";
 import { getDb } from "../db.js";
 import { encrypt } from "../utils/crypto.js";
+import { parseCookies } from "../utils/cookies.js";
+import { safeReturnPath } from "../utils/redirects.js";
+import { consumeOAuthTransaction, storeOAuthTransaction } from "../services/oauthTransactions.js";
+import { createSession, revokeCurrentSession } from "../services/sessions.js";
+import { requireSession } from "../middleware/requireSession.js";
 
 function isDevBypassAllowed(req) {
   if (env.NODE_ENV === "production") return false;
@@ -18,7 +23,19 @@ function isDevBypassAllowed(req) {
 }
 
 const router = Router();
-const authState = new Map();
+const OAUTH_BINDING_COOKIE = "wheel_oauth";
+
+function setOAuthBindingCookie(res, value, maxAge = 600) {
+  const parts = [
+    `${OAUTH_BINDING_COOKIE}=${encodeURIComponent(value)}`,
+    "Path=/auth/callback",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${maxAge}`,
+  ];
+  if (env.NODE_ENV === "production") parts.push("Secure");
+  res.append("Set-Cookie", parts.join("; "));
+}
 
 function getBaseUrl(req) {
   const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
@@ -42,15 +59,15 @@ router.get("/auth/login", async (req, res) => {
           refresh_token: null,
         });
       }
-      setSessionCookie(res, fake);
-      const ret = String(req.query.ret || "/dashboard");
+      createSession(req, res, fake);
+      const ret = safeReturnPath(req.query.ret);
       console.warn(`[AUTH][DEV] Skip OAuth -> fake session ${fake}, redirect ${ret}`);
       return res.redirect(ret);
     }
 
     // Validate invite code if required (moderators logging into /mod skip this gate)
     const inviteCode = req.query.invite || null;
-    const retTarget = String(req.query.ret || "/dashboard");
+    const retTarget = safeReturnPath(req.query.ret);
     const modLogin = retTarget === "/mod" || retTarget.startsWith("/mod?") || retTarget.startsWith("/mod/");
     if (env.REQUIRE_INVITE && !modLogin) {
       if (!inviteCode) {
@@ -62,19 +79,7 @@ router.get("/auth/login", async (req, res) => {
       }
     }
 
-    const desiredScopes = [
-      "user:read",
-      "channel:read",
-      "channel:write",
-      "channel:rewards:read",
-      "channel:rewards:write",
-      "chat:write",
-      "streamkey:read",
-      "events:subscribe",
-      "moderation:ban",
-      "moderation:chat_message:manage",
-      "kicks:read",
-    ];
+    const desiredScopes = ["user:read"];
     const redirectUri = env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
     const authClient = new KickAuthClient({
       clientId: env.KICK_CLIENT_ID,
@@ -87,11 +92,9 @@ router.get("/auth/login", async (req, res) => {
     if (url.includes("scope=")) url = url.replace(/([?&])scope=[^&]*/i, `$1scope=${scopeParam}`);
     else url += (url.includes("?") ? "&" : "?") + `scope=${scopeParam}`;
     if (!/([?&])prompt=/.test(url)) url += "&prompt=consent";
-    const ret = String(req.query.ret || "/dashboard");
-    url += `&state_ret=${encodeURIComponent(ret)}`;
-
-    // Store state for callback
-    authState.set(state, { codeVerifier, redirectUri, inviteCode });
+    const ret = safeReturnPath(req.query.ret);
+    const tx = storeOAuthTransaction({ state, codeVerifier, redirectUri, returnPath: ret, inviteCode });
+    setOAuthBindingCookie(res, tx.browserBinding);
 
     res.redirect(url);
   } catch (e) {
@@ -102,12 +105,13 @@ router.get("/auth/login", async (req, res) => {
 
 router.get("/auth/callback", async (req, res) => {
   try {
-    const { code, state, state_ret } = req.query;
+    const { code, state } = req.query;
     if (!code || !state) return res.status(400).send("Missing code/state");
 
-    const stored = authState.get(state);
-    if (!stored?.codeVerifier || !stored?.redirectUri) return res.status(400).send("Invalid state");
-    authState.delete(state);
+    const binding = parseCookies(req)[OAUTH_BINDING_COOKIE];
+    const stored = consumeOAuthTransaction(String(state), binding);
+    setOAuthBindingCookie(res, "", 0);
+    if (!stored?.codeVerifier || !stored?.redirectUri) return res.status(400).send("Invalid or expired state");
 
     const authClient = new KickAuthClient({
       clientId: env.KICK_CLIENT_ID,
@@ -130,8 +134,8 @@ router.get("/auth/callback", async (req, res) => {
     // Moderator-only login: no streamer row, no invite required
     if (isModOnly) {
       console.log(`[AUTH] Moderator login bid=${bid} username=${userInfo.username} channels=${moderatorships.length}`);
-      setSessionCookie(res, bid);
-      const ret = String(state_ret || req.query.ret || "/mod");
+      createSession(req, res, bid);
+      const ret = stored.returnPath || "/mod";
       // Prefer /mod unless they explicitly asked for something else that isn't dashboard
       if (!ret || ret === "/dashboard") return res.redirect("/mod");
       return res.redirect(ret.startsWith("/") ? ret : "/mod");
@@ -166,15 +170,14 @@ router.get("/auth/callback", async (req, res) => {
       console.log(`[AUTH] Invite code used by bid=${bid}`);
     }
 
-    console.log(`[AUTH] ${existing ? "Returning" : "New"} streamer bid=${bid} username=${userInfo.username} overlay_key=${streamer.overlay_key}`);
+    console.log(`[AUTH] ${existing ? "Returning" : "New"} streamer bid=${bid} username=${userInfo.username}`);
 
-    setSessionCookie(res, bid);
-    let ret = String(state_ret || req.query.ret || "/dashboard");
+    createSession(req, res, bid);
+    const ret = stored.returnPath || "/dashboard";
     // If they only asked for /mod and they have moderatorships, honor it
     if (ret === "/mod" && moderatorships.length > 0) {
       return res.redirect("/mod");
     }
-    if (!ret.startsWith("/")) ret = "/dashboard";
     res.redirect(ret);
   } catch (e) {
     console.error("Auth error:", e);
@@ -206,9 +209,9 @@ router.get("/auth/dev-login", (req, res) => {
     });
   }
 
-  setSessionCookie(res, bid);
-  const ret = String(req.query.ret || "/dashboard");
-  console.warn(`[AUTH][DEV] Manual dev-login bid=${bid} -> redirect ${ret}`);
+  createSession(req, res, bid);
+  const ret = safeReturnPath(req.query.ret);
+  console.warn(`[AUTH][DEV] Manual dev-login bid=${bid}`);
   return res.redirect(ret);
 });
 
@@ -216,8 +219,30 @@ router.get("/auth/dev-login", (req, res) => {
 import { clearSessionCookie } from "../utils/cookies.js";
 
 router.get("/auth/logout", (req, res) => {
-  clearSessionCookie(res);
+  revokeCurrentSession(req, res);
   res.redirect("/");
+});
+
+router.post("/auth/logout", (req, res) => {
+  revokeCurrentSession(req, res);
+  res.json({ ok: true, redirect: "/" });
+});
+
+router.get("/account/sessions", requireSession, (req, res) => {
+  const sessions = getDb().listSessions(req.session.broadcaster_user_id).map((session) => ({
+    created_at: session.created_at,
+    last_seen_at: session.last_seen_at,
+    expires_at: session.expires_at,
+    user_agent: session.user_agent,
+    current: session.token_hash === req.session.tokenHash,
+  }));
+  res.json({ ok: true, sessions });
+});
+
+router.post("/auth/logout-all", requireSession, (req, res) => {
+  const revoked = getDb().revokeAllSessions(req.session.broadcaster_user_id);
+  clearSessionCookie(res);
+  res.json({ ok: true, revoked, redirect: "/" });
 });
 
 export default router;

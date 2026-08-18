@@ -14,6 +14,7 @@ import slotsRoutes from "./routes/slots.js";
 import adminRoutes from "./routes/admin.js";
 import commandsRoutes from "./routes/commands.js";
 import modRoutes from "./routes/mod.js";
+import { csrfProtection } from "./middleware/csrf.js";
 
 export const app = express();
 app.set("trust proxy", 1);
@@ -84,6 +85,7 @@ app.use(webhookRoutes);
 // JSON body parser for everything else
 // 2MB allows sub-counter image uploads (base64 payload).
 app.use(bodyParser.json({ limit: "2mb" }));
+app.use(csrfProtection);
 
 // Auth routes (rate limited)
 app.use("/auth", authLimiter);

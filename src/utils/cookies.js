@@ -13,12 +13,12 @@ export function parseCookies(req) {
 export function hmacHex(str) {
   return crypto.createHmac("sha256", env.SESSION_SECRET).update(str, "utf8").digest("hex");
 }
-export function setSessionCookie(res, broadcasterId) {
-  const val = String(broadcasterId);
-  const sig = hmacHex(val);
-  const cookieVal = `${val}.${sig}`;
+export function sessionTokenHash(token) {
+  return crypto.createHash("sha256").update(String(token), "utf8").digest("hex");
+}
+export function setSessionCookie(res, token) {
   const parts = [
-    `wheel_sess=${encodeURIComponent(cookieVal)}`,
+    `wheel_sess=${encodeURIComponent(String(token))}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
@@ -40,10 +40,11 @@ export function clearSessionCookie(res) {
 export function getSessionBroadcasterId(req) {
   const { wheel_sess } = parseCookies(req);
   if (!wheel_sess) return null;
-  const [val, sig] = String(wheel_sess).split(".");
-  if (!val || !sig) return null;
-  if (hmacHex(val) !== sig) return null;
-  const id = Number(val);
-  if (!Number.isFinite(id)) return null;
-  return id;
+  try {
+    const db = req.app?.locals?.db;
+    const session = db?.getSession(sessionTokenHash(wheel_sess));
+    return session?.broadcaster_id ?? null;
+  } catch {
+    return null;
+  }
 }

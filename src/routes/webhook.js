@@ -9,6 +9,7 @@ import { trackGiftEvent, resolveGiftExpiresAt } from "../services/giftTracker.js
 import { loadConfig } from "../services/configStore.js";
 import { bumpManualCounter } from "../services/manualCounter.js";
 import { resolveGiftSpins } from "../services/giftSpins.js";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -20,16 +21,6 @@ router.get("/webhook", (req, res) => {
 router.head("/webhook", (req, res) => {
   res.status(200).end();
 });
-
-const SEEN_IDS = new Set();
-const MAX_SEEN = 500;
-function rememberId(id) {
-  SEEN_IDS.add(id);
-  if (SEEN_IDS.size > MAX_SEEN) {
-    const it = SEEN_IDS.values().next();
-    if (!it.done) SEEN_IDS.delete(it.value);
-  }
-}
 
 // RAW body parser for webhook signature verification
 router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res) => {
@@ -46,10 +37,6 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       return res.status(400).send("Missing signature headers");
     }
 
-    if (SEEN_IDS.has(msgId)) {
-      return res.status(200).send("ok-duplicate");
-    }
-
     // Timestamp skew check (5 minutes)
     const sentAt = Date.parse(timestamp);
     if (!Number.isFinite(sentAt) || Math.abs(Date.now() - sentAt) > 5 * 60 * 1000) {
@@ -63,7 +50,9 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       return res.status(401).send("Invalid signature");
     }
 
-    rememberId(msgId);
+    const payloadHash = crypto.createHash("sha256").update(rawBody).digest("hex");
+    const claimed = getDb().claimWebhookReceipt({ messageId: msgId, eventType: eType, payloadHash });
+    if (!claimed) return res.status(200).send("ok-duplicate");
 
     let payload = {};
     try {

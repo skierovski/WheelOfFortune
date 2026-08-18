@@ -34,6 +34,12 @@ router.get("/", (req, res) => {
 
 // Streamer dashboard (session-protected)
 router.get("/dashboard", requireSession, (req, res) => {
+  const file = path.join(viewsDir, "dashboard.html");
+  if (!fs.existsSync(file)) return res.status(404).send("dashboard.html not found");
+  res.sendFile(file);
+});
+
+router.get("/advanced", requireSession, (req, res) => {
   const file = path.join(viewsDir, "home.html");
   if (!fs.existsSync(file)) return res.status(404).send("home.html not found");
   res.sendFile(file);

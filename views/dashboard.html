@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Studio — SpinDeck</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/dashboard.css">
+  <link rel="stylesheet" href="/assets/account.css">
+  <script src="/assets/dashboard.js" defer></script>
+  <script src="/assets/account.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Przejdź do obszaru roboczego</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand app-brand" href="/dashboard" aria-label="SpinDeck Studio"><span class="brand-mark" aria-hidden="true"><span></span></span><span>SpinDeck</span></a>
+      <nav class="app-nav" aria-label="Panel streamera">
+        <button type="button" class="nav-item is-active" data-view="overview"><span>01</span>Overview</button>
+        <button type="button" class="nav-item" data-view="wheel"><span>02</span>Wheel</button>
+        <button type="button" class="nav-item" data-view="counter"><span>03</span>Counter</button>
+        <button type="button" class="nav-item" data-view="obs"><span>04</span>OBS Setup</button>
+        <button type="button" class="nav-item" data-view="account"><span>05</span>Account</button>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="/advanced">Advanced settings</a>
+        <span class="connection-state"><i aria-hidden="true"></i> Studio online</span>
+      </div>
+    </aside>
+
+    <header class="mobile-header">
+      <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><span></span></span><span>SpinDeck</span></a>
+      <button class="icon-button" id="menuToggle" type="button" aria-expanded="false" aria-controls="mobileNav">Menu</button>
+    </header>
+    <nav class="mobile-nav" id="mobileNav" aria-label="Nawigacja mobilna" hidden>
+      <button type="button" data-view="overview">Overview</button><button type="button" data-view="wheel">Wheel</button><button type="button" data-view="counter">Counter</button><button type="button" data-view="obs">OBS Setup</button><button type="button" data-view="account">Account</button><a href="/advanced">Advanced</a>
+    </nav>
+
+    <main id="workspace" class="workspace" tabindex="-1">
+      <div class="topbar">
+        <div><p class="eyebrow" id="viewEyebrow">STUDIO / OVERVIEW</p><h1 id="viewTitle">Witaj w swoim studio.</h1></div>
+        <div class="profile-chip"><span class="avatar" id="avatar">S</span><span><b id="displayName">Streamer</b><small id="username">Kick account</small></span></div>
+      </div>
+
+      <div class="notice notice-error" id="globalError" role="alert" hidden></div>
+      <div class="notice notice-success" id="globalStatus" role="status" aria-live="polite" hidden></div>
+
+      <section class="view is-active" data-view-panel="overview" aria-labelledby="overview-title">
+        <h2 class="sr-only" id="overview-title">Overview</h2>
+        <div class="readiness">
+          <div><p class="eyebrow">STATUS TRANSMISJI</p><h2>Najpierw skonfiguruj. Potem nadaj.</h2><p>Twój zestaw składa się z dwóch niezależnych źródeł OBS. Każde możesz przetestować przed streamem.</p></div>
+          <div class="readiness-score"><strong id="readyCount">0/2</strong><span>narzędzia gotowe</span></div>
+        </div>
+        <div class="overview-grid">
+          <article class="tool-status"><div class="tool-status-head"><span>WHEEL</span><span class="state-badge" id="wheelState">Do konfiguracji</span></div><div class="status-wheel" aria-hidden="true"></div><h3>Koło nagród</h3><p id="wheelSummary">Dodaj minimum dwie pozycje, aby rozpocząć.</p><button class="text-action" type="button" data-open-view="wheel">Konfiguruj Wheel →</button></article>
+          <article class="tool-status"><div class="tool-status-head"><span>COUNTER</span><span class="state-badge" id="counterState">Do konfiguracji</span></div><div class="status-counter"><strong id="overviewCount">0</strong><span id="overviewGoal">bez celu</span></div><h3>Manual Counter</h3><p id="counterSummary">Ustaw etykietę i cel dla widzów.</p><button class="text-action" type="button" data-open-view="counter">Konfiguruj Counter →</button></article>
+        </div>
+        <div class="next-step"><span class="step-marker">NEXT</span><div><h3>Dodaj źródła do OBS</h3><p>Gdy konfiguracja będzie gotowa, skopiuj prywatne adresy Browser Source.</p></div><button class="button button-secondary" type="button" data-open-view="obs">Otwórz OBS Setup</button></div>
+      </section>
+
+      <section class="view" data-view-panel="wheel" aria-labelledby="wheel-title" hidden>
+        <div class="view-heading"><div><h2 id="wheel-title">Wheel</h2><p>Nagrody, wagi i wygląd koła w jednym miejscu.</p></div><button class="button button-secondary" id="testWheel" type="button">Testuj losowanie</button></div>
+        <div class="config-layout">
+          <form class="config-panel" id="wheelForm">
+            <div class="panel-heading"><span>Pozycje koła</span><button class="text-action" id="addWheelItem" type="button">+ Dodaj pozycję</button></div>
+            <p class="field-hint">Wagi są automatycznie przeliczane do 100%. Zalecane: 6–30 pozycji.</p>
+            <div class="wheel-items" id="wheelItems"></div>
+            <div class="appearance-grid">
+              <label>Kolor akcentu<input id="accentColor" name="accent_color" type="color" value="#53fc18"></label>
+              <label>Kolor tła<input id="secondaryColor" name="secondary_color" type="color" value="#12161b"></label>
+              <label>Przezroczystość<input id="wheelOpacity" name="wheel_opacity" type="range" min="0.1" max="1" step="0.05" value="0.9"></label>
+            </div>
+            <div class="form-actions"><span id="wheelSaveState" class="save-state">Zmiany niezapisane</span><button class="button button-primary" type="submit">Zapisz Wheel</button></div>
+          </form>
+          <div class="preview-panel"><div class="preview-label"><span>LIVE PREVIEW</span><span><i></i> Gotowy</span></div><div class="live-wheel" id="liveWheel"><span id="wheelEmpty">Dodaj pozycje</span></div><p class="result-output" id="wheelResult" aria-live="polite">Wynik testu pojawi się tutaj.</p></div>
+        </div>
+      </section>
+
+      <section class="view" data-view-panel="counter" aria-labelledby="counter-title" hidden>
+        <div class="view-heading"><div><h2 id="counter-title">Counter</h2><p>Aktualna wartość, cel i etykieta aktualizowane na żywo.</p></div></div>
+        <div class="config-layout">
+          <form class="config-panel counter-form" id="counterForm">
+            <label for="counterLabel">Etykieta<span class="field-hint">Maksymalnie 60 znaków</span></label><input id="counterLabel" name="label" maxlength="60" placeholder="np. Wspólny cel">
+            <div class="field-row"><label for="counterValue">Aktualna wartość</label><label for="counterGoal">Cel</label><input id="counterValue" name="count" type="number" min="0" max="1000000"><input id="counterGoal" name="goal" type="number" min="0" max="1000000"></div>
+            <div class="counter-controls"><button class="button button-secondary" type="button" data-counter-delta="-1">−1</button><button class="button button-secondary" type="button" data-counter-delta="1">+1</button></div>
+            <div class="form-actions"><span class="save-state">Aktualizacje są wysyłane do OBS</span><button class="button button-primary" type="submit">Zapisz Counter</button></div>
+          </form>
+          <div class="preview-panel counter-preview"><div class="preview-label"><span>OBS PREVIEW</span><span><i></i> Live</span></div><div class="counter-display"><span id="counterPreviewLabel">WSPÓLNY CEL</span><strong><b id="counterPreviewValue">0</b><small id="counterPreviewGoal"></small></strong><span class="counter-progress"><i id="counterProgress"></i></span></div></div>
+        </div>
+      </section>
+
+      <section class="view" data-view-panel="obs" aria-labelledby="obs-title" hidden>
+        <div class="view-heading"><div><h2 id="obs-title">OBS Setup</h2><p>Skopiuj adres i wklej go jako nowe źródło Browser Source.</p></div></div>
+        <div class="obs-list">
+          <article><div class="obs-index">01</div><div><span class="tool-index">WHEEL OVERLAY</span><h3>Koło nagród</h3><p>Zalecany rozmiar: 600 × 600 px.</p></div><div class="url-field"><code id="wheelUrl">Ładowanie…</code><button type="button" data-copy="wheelUrl">Kopiuj</button></div><a id="wheelOpen" class="button button-quiet" target="_blank" rel="noreferrer">Otwórz test</a></article>
+          <article><div class="obs-index">02</div><div><span class="tool-index">COUNTER OVERLAY</span><h3>Manual Counter</h3><p>Zalecany rozmiar: 800 × 180 px.</p></div><div class="url-field"><code id="counterUrl">Ładowanie…</code><button type="button" data-copy="counterUrl">Kopiuj</button></div><a id="counterOpen" class="button button-quiet" target="_blank" rel="noreferrer">Otwórz test</a></article>
+        </div>
+        <div class="obs-help"><span>OBS</span><div><h3>Browser Source</h3><p>W OBS wybierz Sources → Add → Browser, wklej adres i ustaw zalecany rozmiar. Nie udostępniaj linku publicznie — zawiera klucz dostępu do overlayu.</p></div></div>
+      </section>
+
+      <section class="view" data-view-panel="account" aria-labelledby="account-title" hidden>
+        <div class="view-heading"><div><h2 id="account-title">Account</h2><p>Konto Kick, bezpieczeństwo i funkcje zaawansowane.</p></div></div>
+        <div class="account-layout">
+          <article class="account-card"><span class="tool-index">KICK ACCOUNT</span><div class="account-person"><span class="avatar avatar-large" id="accountAvatar">S</span><div><h3 id="accountName">Streamer</h3><p id="accountUsername">Kick account</p></div></div><dl><div><dt>Połączenie</dt><dd class="positive">Aktywne</dd></div><div><dt>Podstawowy zakres</dt><dd><code>user:read</code></dd></div></dl></article>
+          <article class="account-card"><span class="tool-index">ADVANCED</span><h3>Dodatkowe integracje</h3><p>Slots, bot commands, moderatorzy i starsze mechaniki pozostają dostępne poza głównym flow.</p><a class="button button-secondary" href="/advanced">Otwórz Advanced Settings</a></article>
+          <article class="account-card danger-zone"><span class="tool-index">SESSIONS</span><h3>Aktywne urządzenia</h3><p id="sessionSummary">Bieżąca sesja jest chroniona losowym tokenem przechowywanym w bazie jako hash.</p><div class="session-actions"><button class="button button-secondary" id="logoutButton" type="button">Wyloguj tę sesję</button><button class="button button-danger" id="logoutAllButton" type="button">Wyloguj wszystkie urządzenia</button></div></article>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

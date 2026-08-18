@@ -1,4 +1,6 @@
 import { getDb } from "../db.js";
+import crypto from "crypto";
+import { issueOverlayTicket } from "./overlayTickets.js";
 
 const SPIN_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -12,6 +14,7 @@ const inProgress = new Map();
 // In-memory tier queue per streamer: Map<broadcasterId, string[]>
 // Stores the tier name for each pending spin so we deliver the right tier
 const tierQueues = new Map();
+const lastPickedByStreamer = new Map();
 
 // ── Internal helpers ────────────────────────────────────────────────
 
@@ -46,6 +49,43 @@ function getTimeUntilNextSpin(broadcasterId) {
 function broadcast(broadcasterId, msg) {
   if (!broadcastFn) return 0;
   return broadcastFn(broadcasterId, msg) || 0;
+}
+
+export function selectPrize(items, previousId = null, randomInt = crypto.randomInt) {
+  const eligible = (Array.isArray(items) ? items : []).filter((item) => item?.id && Number(item.weight) > 0);
+  if (!eligible.length) return null;
+  const pool = eligible.length > 1 && previousId
+    ? eligible.filter((item) => String(item.id) !== String(previousId))
+    : eligible;
+  const total = pool.reduce((sum, item) => sum + Math.max(1, Math.round(Number(item.weight))), 0);
+  let cursor = randomInt(total);
+  for (const item of pool) {
+    cursor -= Math.max(1, Math.round(Number(item.weight)));
+    if (cursor < 0) return item;
+  }
+  return pool[pool.length - 1];
+}
+
+function buildSpinMessage(broadcasterId, tierName) {
+  const config = getDb().getConfig(broadcasterId);
+  const tier = tierName && Array.isArray(config?.tiers)
+    ? config.tiers.find((candidate) => candidate.name === tierName)
+    : null;
+  const items = tier?.items?.length ? tier.items : config?.items;
+  const picked = selectPrize(items, lastPickedByStreamer.get(broadcasterId));
+  if (picked) lastPickedByStreamer.set(broadcasterId, String(picked.id));
+  const msg = { action: "spin", times: 1 };
+  if (tierName) msg.tier = tierName;
+  if (picked) {
+    msg.pickedId = String(picked.id);
+    msg.ticket = issueOverlayTicket({
+      broadcasterId,
+      kind: "wheel",
+      announceLabel: `${picked.label}${picked.bonus ? " (+bonus)" : ""}${tierName ? ` [${tierName}]` : ""}`,
+      metadata: { bonus: !!picked.bonus, tier: tierName || null },
+    });
+  }
+  return msg;
 }
 
 // ── Public API ──────────────────────────────────────────────────────
@@ -124,8 +164,7 @@ export const spins = {
     const tierName = (tierQueues.get(broadcasterId) || []).shift() || null;
     setState(broadcasterId, { pending_count: newPending - 1 });
     setInProgress(broadcasterId, true);
-    const msg = { action: "spin", times: 1 };
-    if (tierName) msg.tier = tierName;
+    const msg = buildSpinMessage(broadcasterId, tierName);
     const delivered = broadcast(broadcasterId, msg);
     if (delivered > 0) {
       console.log(`[SPIN] bid=${broadcasterId} delivered 1 spin (${newPending - 1} remaining)${tierName ? ` tier="${tierName}"` : ""}`);
@@ -157,8 +196,7 @@ export const spins = {
       const tierName = (tierQueues.get(broadcasterId) || []).shift() || null;
       setState(broadcasterId, { pending_count: state.pending_count - 1 });
       setInProgress(broadcasterId, true);
-      const msg = { action: "spin", times: 1 };
-      if (tierName) msg.tier = tierName;
+      const msg = buildSpinMessage(broadcasterId, tierName);
       const delivered = broadcast(broadcasterId, msg);
       if (delivered > 0) {
         console.log(`[SPIN] bid=${broadcasterId} delivered 1 after reset (${state.pending_count - 1} remaining)${tierName ? ` tier="${tierName}"` : ""}`);
@@ -230,8 +268,7 @@ export function startSpinChecker() {
       const tierName = (tierQueues.get(bid) || []).shift() || null;
       setState(bid, { pending_count: state.pending_count - 1 });
       setInProgress(bid, true);
-      const msg = { action: "spin", times: 1 };
-      if (tierName) msg.tier = tierName;
+      const msg = buildSpinMessage(bid, tierName);
       const delivered = broadcast(bid, msg);
       if (delivered > 0) {
         console.log(`[SPIN][timer] bid=${bid} delivered 1 (${state.pending_count - 1} remaining)${tierName ? ` tier="${tierName}"` : ""}`);

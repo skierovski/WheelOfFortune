@@ -54,7 +54,7 @@ export const env = {
   PENDING_PATH: process.env.PENDING_PATH || "/data/pending.json",
 
   /** Require invite code for new registrations (beta gate) */
-  REQUIRE_INVITE: (process.env.REQUIRE_INVITE ?? "true") !== "false",
+  REQUIRE_INVITE: (process.env.REQUIRE_INVITE ?? "false") === "true",
 
   DEV_BYPASS_AUTH: process.env.DEV_BYPASS_AUTH === "1",
   DEV_FAKE_BID: Number(process.env.DEV_FAKE_BID || 999999),
@@ -67,3 +67,16 @@ export const env = {
     return v.slice(0, 4) + "..." + v.slice(-4);
   }
 };
+
+export function assertSafeProductionEnv(config = env) {
+  if (config.NODE_ENV !== "production") return;
+  if (config.DEV_BYPASS_AUTH) {
+    throw new Error("Refusing to start: DEV_BYPASS_AUTH must be disabled in production");
+  }
+  if (!config.KICK_CLIENT_ID || !config.KICK_CLIENT_SECRET) {
+    throw new Error("Refusing to start: Kick OAuth credentials are required in production");
+  }
+  if (!config.PUBLIC_BASE_URL || !/^https:\/\//i.test(config.PUBLIC_BASE_URL)) {
+    throw new Error("Refusing to start: PUBLIC_BASE_URL must be an HTTPS URL in production");
+  }
+}

@@ -1,6 +1,7 @@
 import { getSessionBroadcasterId, setSessionCookie } from "../utils/cookies.js";
 import { env } from "../utils/env.js";
 import { getDb } from "../db.js";
+import { createSession, resolveSession } from "../services/sessions.js";
 
 function isDevBypassAllowed(req) {
   if (env.NODE_ENV === "production") return false;
@@ -17,11 +18,12 @@ function isDevBypassAllowed(req) {
  * Sets req.session = { broadcaster_user_id, streamer } on success.
  */
 export async function requireSession(req, res, next) {
-  const bid = getSessionBroadcasterId(req);
+  const activeSession = resolveSession(req);
+  const bid = activeSession?.broadcaster_id;
   if (bid) {
     const streamer = getDb().getStreamerById(bid);
     if (streamer) {
-      req.session = { broadcaster_user_id: bid, streamer };
+      req.session = { ...activeSession, broadcaster_user_id: bid, streamer };
       return next();
     }
     // Cookie is valid but streamer not in DB -- clear it
@@ -41,8 +43,8 @@ export async function requireSession(req, res, next) {
       });
     }
     console.warn(`[AUTH][DEV] Bypass -> fake session bid=${fake}`);
-    setSessionCookie(res, fake);
-    req.session = { broadcaster_user_id: fake, streamer };
+    const session = createSession(req, res, fake);
+    req.session = { ...session, broadcaster_user_id: fake, streamer };
     return next();
   }
 
@@ -74,7 +76,8 @@ export function resolveOverlayKey(req, res, next) {
  * Does NOT require the user to be a registered streamer.
  */
 export function requireModSession(req, res, next) {
-  const kickUserId = getSessionBroadcasterId(req);
+  const activeSession = resolveSession(req);
+  const kickUserId = activeSession?.broadcaster_id;
   if (!kickUserId) {
     const base = `${(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim()}://${(req.headers["x-forwarded-host"] || req.get("host")).split(",")[0].trim()}`;
     const ret = encodeURIComponent(req.originalUrl || "/mod");
@@ -99,7 +102,8 @@ export function requireModSession(req, res, next) {
  * Sets req.modStreamer.
  */
 export function requireModOfStreamer(req, res, next) {
-  const kickUserId = getSessionBroadcasterId(req);
+  const activeSession = resolveSession(req);
+  const kickUserId = activeSession?.broadcaster_id;
   if (!kickUserId) {
     return res.status(401).json({ ok: false, error: "Not logged in" });
   }

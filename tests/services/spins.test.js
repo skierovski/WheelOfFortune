@@ -1,5 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { openDatabase, setDb } from "../../src/db.js";
+import { selectPrize } from "../../src/services/spins.js";
+
+describe("server-authoritative prize selection", () => {
+  it("uses configured weights and can avoid a back-to-back repeat", () => {
+    const items = [
+      { id: "a", weight: 90 },
+      { id: "b", weight: 10 },
+    ];
+    expect(selectPrize(items, null, () => 95)?.id).toBe("b");
+    expect(selectPrize(items, "a", () => 0)?.id).toBe("b");
+  });
+
+  it("returns null for an empty or invalid wheel", () => {
+    expect(selectPrize([], null, () => 0)).toBeNull();
+    expect(selectPrize([{ id: "a", weight: 0 }], null, () => 0)).toBeNull();
+  });
+});
 
 describe("spins service (multi-tenant)", () => {
   let db;
@@ -65,6 +82,20 @@ describe("spins service (multi-tenant)", () => {
       expect(spinMsgs[0].msg.times).toBe(1);
 
       expect(spins.getPending(BID)).toBe(2);
+    });
+
+    it("includes the server-selected prize id", async () => {
+      const spins = await getSpins();
+      const selectionBid = 410;
+      db.upsertStreamer({ broadcaster_id: selectionBid, kick_username: "selection_test", access_token: null, refresh_token: null });
+      db.saveConfig(selectionBid, {
+        items: [{ id: "only-prize", label: "Only", weight: 100 }],
+        tiers: null,
+      });
+      const broadcasts = [];
+      spins.setBroadcaster((bid, msg) => { broadcasts.push({ bid, msg }); return 1; });
+      spins.deliverSpinOrQueue(selectionBid, 1);
+      expect(broadcasts.find((entry) => entry.msg.action === "spin")?.msg.pickedId).toBe("only-prize");
     });
 
     it("returns 0 when called with 0 or negative", async () => {

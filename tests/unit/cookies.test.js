@@ -89,35 +89,34 @@ describe("setSessionCookie", () => {
     expect(cookieHeader).not.toContain("Secure");
   });
 
-  it("cookie value contains broadcaster id and signature", () => {
+  it("stores an opaque token without embedding a broadcaster id", () => {
     let cookieHeader = null;
     const res = {
       setHeader: (name, value) => {
         if (name === "Set-Cookie") cookieHeader = value;
       },
     };
-    setSessionCookie(res, 99999);
+    setSessionCookie(res, "opaque-random-token");
 
     // Extract the cookie value
     const match = cookieHeader.match(/wheel_sess=([^;]+)/);
     expect(match).toBeTruthy();
     const decoded = decodeURIComponent(match[1]);
-    const [val, sig] = decoded.split(".");
-    expect(val).toBe("99999");
-    expect(sig).toBe(hmacHex("99999"));
+    expect(decoded).toBe("opaque-random-token");
+    expect(decoded).not.toContain("99999");
   });
 });
 
 describe("getSessionBroadcasterId", () => {
-  function makeReq(broadcasterId) {
-    const val = String(broadcasterId);
-    const sig = hmacHex(val);
-    const cookieVal = `${val}.${sig}`;
-    return { headers: { cookie: `wheel_sess=${encodeURIComponent(cookieVal)}` } };
+  function makeReq(token, broadcasterId = 12345) {
+    return {
+      headers: { cookie: `wheel_sess=${encodeURIComponent(token)}` },
+      app: { locals: { db: { getSession: () => ({ broadcaster_id: broadcasterId }) } } },
+    };
   }
 
-  it("extracts broadcaster id from a valid signed cookie", () => {
-    expect(getSessionBroadcasterId(makeReq(12345))).toBe(12345);
+  it("resolves broadcaster id from the server-side session", () => {
+    expect(getSessionBroadcasterId(makeReq("opaque-token", 12345))).toBe(12345);
   });
 
   it("returns null when no cookie", () => {
@@ -130,18 +129,17 @@ describe("getSessionBroadcasterId", () => {
     ).toBeNull();
   });
 
-  it("returns null when signature is tampered", () => {
+  it("returns null when session token is unknown", () => {
     const req = {
-      headers: { cookie: "wheel_sess=12345.invalidsignature" },
+      headers: { cookie: "wheel_sess=unknown" },
+      app: { locals: { db: { getSession: () => null } } },
     };
     expect(getSessionBroadcasterId(req)).toBeNull();
   });
 
-  it("returns null when value is not a number", () => {
-    const val = "notanumber";
-    const sig = hmacHex(val);
+  it("returns null when the session database is unavailable", () => {
     const req = {
-      headers: { cookie: `wheel_sess=${val}.${sig}` },
+      headers: { cookie: "wheel_sess=opaque" },
     };
     expect(getSessionBroadcasterId(req)).toBeNull();
   });
@@ -151,18 +149,21 @@ describe("getSessionBroadcasterId", () => {
     expect(getSessionBroadcasterId(req)).toBeNull();
   });
 
-  it("round-trips with setSessionCookie", () => {
+  it("round-trips an opaque cookie through a server-side lookup", () => {
     let cookieHeader = null;
     const res = {
       setHeader: (name, value) => {
         if (name === "Set-Cookie") cookieHeader = value;
       },
     };
-    setSessionCookie(res, 42);
+    setSessionCookie(res, "random-session-token");
 
     // Extract Set-Cookie value and use it as a request cookie
     const match = cookieHeader.match(/wheel_sess=([^;]+)/);
-    const req = { headers: { cookie: `wheel_sess=${match[1]}` } };
+    const req = {
+      headers: { cookie: `wheel_sess=${match[1]}` },
+      app: { locals: { db: { getSession: () => ({ broadcaster_id: 42 }) } } },
+    };
     expect(getSessionBroadcasterId(req)).toBe(42);
   });
 });

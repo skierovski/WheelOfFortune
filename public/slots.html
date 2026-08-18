@@ -541,25 +541,22 @@
               }
 
               const prizes = result.prizes_hit || [];
+              const executionTicket = result.executionTicket || "";
               const announceWin = () => {
                 if (prizes.length) {
                   sfxPrize();
                   const labels = prizes.map((p) => p.label).join(" · ");
                   showToast(`🏆 ${labels}<span class="sub">BANK THRESHOLD</span>`, 3500);
-                  for (const p of prizes) {
-                    fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ label: `Slots prize: ${p.label} (bank ${money(result.bank)})` }),
-                    }).catch(() => {});
-                  }
+                  fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Overlay-Ticket": executionTicket },
+                    body: JSON.stringify({}),
+                  }).catch(() => {});
                 } else if (result.win > 0) {
                   fetch(`/overlay/${OVERLAY_KEY}/slots/announce`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      label: `Slots win ${money(result.win)}${result.bonus ? " (+bonus)" : ""} (bank ${money(result.bank)})`,
-                    }),
+                    headers: { "Content-Type": "application/json", "X-Overlay-Ticket": executionTicket },
+                    body: JSON.stringify({}),
                   }).catch(() => {});
                 }
               };
@@ -567,8 +564,8 @@
               const finish = () => {
                 fetch(`/overlay/${OVERLAY_KEY}/slots/complete`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ bonus: !!result.bonus }),
+                  headers: { "Content-Type": "application/json", "X-Overlay-Ticket": executionTicket },
+                  body: JSON.stringify({}),
                 }).catch(() => {});
                 spinning = false;
                 resolve();
@@ -624,6 +621,7 @@
       }
       if (msg.action === "slots" && msg.result) {
         if (msg.result.slots_token) setSlotsToken(msg.result.slots_token);
+        msg.result.executionTicket = msg.ticket || "";
         queue.push(msg);
         drain();
       }
