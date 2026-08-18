@@ -32,7 +32,6 @@ server.listen(env.PORT_HTTP, () => {
     PUBLIC_BASE_URL: env.PUBLIC_BASE_URL || "<not set>",
     DB_PATH: env.DB_PATH,
     ADMIN_KEY: env.ADMIN_KEY ? "(set)" : "(missing)",
-    REQUIRE_INVITE: env.REQUIRE_INVITE,
     DEV_BYPASS_AUTH: env.DEV_BYPASS_AUTH,
   });
   

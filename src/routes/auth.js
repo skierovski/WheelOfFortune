@@ -65,19 +65,7 @@ router.get("/auth/login", async (req, res) => {
       return res.redirect(ret);
     }
 
-    // Validate invite code if required (moderators logging into /mod skip this gate)
-    const inviteCode = req.query.invite || null;
     const retTarget = safeReturnPath(req.query.ret);
-    const modLogin = retTarget === "/mod" || retTarget.startsWith("/mod?") || retTarget.startsWith("/mod/");
-    if (env.REQUIRE_INVITE && !modLogin) {
-      if (!inviteCode) {
-        return res.status(400).send("Invite code required. Use /auth/login?invite=YOUR_CODE");
-      }
-      const validation = getDb().validateInviteCode(inviteCode);
-      if (!validation.valid) {
-        return res.status(400).send(`Invalid invite code: ${validation.reason}`);
-      }
-    }
 
     const desiredScopes = ["user:read"];
     const redirectUri = env.KICK_REDIRECT_URI || `${getBaseUrl(req)}/auth/callback`;
@@ -93,7 +81,7 @@ router.get("/auth/login", async (req, res) => {
     else url += (url.includes("?") ? "&" : "?") + `scope=${scopeParam}`;
     if (!/([?&])prompt=/.test(url)) url += "&prompt=consent";
     const ret = safeReturnPath(req.query.ret);
-    const tx = storeOAuthTransaction({ state, codeVerifier, redirectUri, returnPath: ret, inviteCode });
+    const tx = storeOAuthTransaction({ state, codeVerifier, redirectUri, returnPath: ret });
     setOAuthBindingCookie(res, tx.browserBinding);
 
     res.redirect(url);
@@ -131,7 +119,7 @@ router.get("/auth/callback", async (req, res) => {
     const moderatorships = getDb().getModeratorships(bid);
     const isModOnly = !existing && moderatorships.length > 0;
 
-    // Moderator-only login: no streamer row, no invite required
+    // Moderator-only login: no streamer row is created.
     if (isModOnly) {
       console.log(`[AUTH] Moderator login bid=${bid} username=${userInfo.username} channels=${moderatorships.length}`);
       createSession(req, res, bid);
@@ -139,18 +127,6 @@ router.get("/auth/callback", async (req, res) => {
       // Prefer /mod unless they explicitly asked for something else that isn't dashboard
       if (!ret || ret === "/dashboard") return res.redirect("/mod");
       return res.redirect(ret.startsWith("/") ? ret : "/mod");
-    }
-
-    // For new streamers, validate and consume invite code
-    if (!existing && env.REQUIRE_INVITE) {
-      const inviteCode = stored.inviteCode;
-      if (!inviteCode) {
-        return res.status(400).send("Invite code required for new registration");
-      }
-      const validation = getDb().validateInviteCode(inviteCode);
-      if (!validation.valid) {
-        return res.status(400).send(`Invalid invite code: ${validation.reason}`);
-      }
     }
 
     // Upsert streamer in DB (creates with overlay_key if new, preserves key if existing)
@@ -163,12 +139,6 @@ router.get("/auth/callback", async (req, res) => {
       token_expires_at: withExpiry.expires_at,
       token_scope: withExpiry.scope || null,
     });
-
-    // Mark invite code as used (for new streamers)
-    if (!existing && stored.inviteCode) {
-      getDb().useInviteCode(stored.inviteCode, bid);
-      console.log(`[AUTH] Invite code used by bid=${bid}`);
-    }
 
     console.log(`[AUTH] ${existing ? "Returning" : "New"} streamer bid=${bid} username=${userInfo.username}`);
 

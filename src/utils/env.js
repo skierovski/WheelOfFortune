@@ -53,9 +53,6 @@ export const env = {
   GOALS_PATH: process.env.GOALS_PATH || "/data/goals.json",
   PENDING_PATH: process.env.PENDING_PATH || "/data/pending.json",
 
-  /** Require invite code for new registrations (beta gate) */
-  REQUIRE_INVITE: (process.env.REQUIRE_INVITE ?? "false") === "true",
-
   DEV_BYPASS_AUTH: process.env.DEV_BYPASS_AUTH === "1",
   DEV_FAKE_BID: Number(process.env.DEV_FAKE_BID || 999999),
   DEV_BYPASS_KEY: process.env.DEV_BYPASS_KEY || "",

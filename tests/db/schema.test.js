@@ -27,7 +27,6 @@ describe("database schema and queries", () => {
       expect(tables).toContain("spin_state");
       expect(tables).toContain("slots_state");
       expect(tables).toContain("subscriptions");
-      expect(tables).toContain("invite_codes");
       expect(tables).toContain("streamer_moderators");
     });
 
@@ -349,73 +348,6 @@ describe("database schema and queries", () => {
 
       db.deactivateSubscriptions(1);
       expect(db.getActiveSubscriptions(1)).toHaveLength(0);
-    });
-  });
-
-  // ── Invite Codes ────────────────────────────────────────────────
-
-  describe("invite codes", () => {
-    it("creates an invite code", () => {
-      const code = db.createInviteCode();
-      expect(code).toBeTruthy();
-      expect(code.length).toBe(16); // 8 bytes hex
-    });
-
-    it("validates an unused code", () => {
-      const code = db.createInviteCode();
-      const result = db.validateInviteCode(code);
-      expect(result.valid).toBe(true);
-    });
-
-    it("rejects nonexistent code", () => {
-      const result = db.validateInviteCode("DOESNOTEXIST");
-      expect(result.valid).toBe(false);
-      expect(result.reason).toBe("not_found");
-    });
-
-    it("marks code as used", () => {
-      const code = db.createInviteCode();
-      db.upsertStreamer({ broadcaster_id: 1, kick_username: "u", access_token: "t", refresh_token: "r" });
-
-      const used = db.useInviteCode(code, 1);
-      expect(used).toBe(true);
-
-      // Now it should be invalid
-      const result = db.validateInviteCode(code);
-      expect(result.valid).toBe(false);
-      expect(result.reason).toBe("already_used");
-    });
-
-    it("cannot use a code twice", () => {
-      const code = db.createInviteCode();
-      db.upsertStreamer({ broadcaster_id: 1, kick_username: "u", access_token: "t", refresh_token: "r" });
-      db.upsertStreamer({ broadcaster_id: 2, kick_username: "u2", access_token: "t", refresh_token: "r" });
-
-      db.useInviteCode(code, 1);
-      const secondUse = db.useInviteCode(code, 2);
-      expect(secondUse).toBe(false);
-    });
-
-    it("lists unused codes", () => {
-      const code1 = db.createInviteCode();
-      const code2 = db.createInviteCode();
-      const code3 = db.createInviteCode();
-
-      // Use one
-      db.upsertStreamer({ broadcaster_id: 1, kick_username: "u", access_token: "t", refresh_token: "r" });
-      db.useInviteCode(code2, 1);
-
-      const unused = db.getUnusedInviteCodes();
-      expect(unused).toHaveLength(2);
-      expect(unused.map((c) => c.code).sort()).toEqual([code1, code3].sort());
-    });
-
-    it("tracks who created a code", () => {
-      db.upsertStreamer({ broadcaster_id: 1, kick_username: "admin", access_token: "t", refresh_token: "r" });
-      const code = db.createInviteCode(1);
-
-      const result = db.validateInviteCode(code);
-      expect(result.code.created_by).toBe(1);
     });
   });
 

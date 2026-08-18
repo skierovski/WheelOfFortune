@@ -38,7 +38,6 @@ router.get("/admin", requireAdmin, (req, res) => {
 router.get("/admin/overview", requireAdmin, (req, res) => {
   const db = getDb();
   const streamers = db.getAllStreamers();
-  const unusedInvites = db.getUnusedInviteCodes();
 
   const streamerDetails = streamers.map((s) => {
     const config = db.getConfig(s.broadcaster_id);
@@ -79,31 +78,13 @@ router.get("/admin/overview", requireAdmin, (req, res) => {
     env: {
       NODE_ENV: env.NODE_ENV,
       PORT_HTTP: env.PORT_HTTP,
-      REQUIRE_INVITE: env.REQUIRE_INVITE,
       DEV_BYPASS_AUTH: env.DEV_BYPASS_AUTH,
       KICK_CLIENT_ID: env.KICK_CLIENT_ID ? "(set)" : "(missing)",
       PUBLIC_BASE_URL: env.PUBLIC_BASE_URL || "(not set)",
       DB_PATH: env.DB_PATH,
     },
     streamers: streamerDetails,
-    unused_invites: unusedInvites.length,
   });
-});
-
-// ── Invite Codes ────────────────────────────────────────────────────
-
-router.post("/admin/invites", requireAdmin, (req, res) => {
-  const count = Math.max(1, Math.min(50, Number(req.body?.count || 1)));
-  const codes = [];
-  for (let i = 0; i < count; i++) {
-    codes.push(getDb().createInviteCode(null));
-  }
-  res.json({ ok: true, codes });
-});
-
-router.get("/admin/invites", requireAdmin, (req, res) => {
-  const codes = getDb().getUnusedInviteCodes();
-  res.json({ ok: true, codes });
 });
 
 // ── Streamers ───────────────────────────────────────────────────────
@@ -199,9 +180,6 @@ router.delete("/admin/streamers/:bid", requireAdmin, (req, res) => {
 
   try {
     const db = getDb();
-    // Clean up all related data (invite_codes must be cleared before streamers due to FK)
-    db.raw.prepare("UPDATE invite_codes SET created_by = NULL WHERE created_by = ?").run(bid);
-    db.raw.prepare("UPDATE invite_codes SET used_by = NULL WHERE used_by = ?").run(bid);
     db.raw.prepare("DELETE FROM streamer_moderators WHERE broadcaster_id = ?").run(bid);
     db.raw.prepare("DELETE FROM wheel_configs WHERE broadcaster_id = ?").run(bid);
     db.raw.prepare("DELETE FROM goals WHERE broadcaster_id = ?").run(bid);
@@ -471,12 +449,9 @@ router.post("/admin/quick-setup", requireAdmin, (req, res) => {
     ]);
   }
 
-  // Create an invite code (for testing the flow)
-  const inviteCode = getDb().createInviteCode(bid);
-
   const base = `${(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim()}://${(req.headers["x-forwarded-host"] || req.get("host")).split(",")[0].trim()}`;
 
-  console.log(`[ADMIN] Quick setup: bid=${bid} overlay_key=${streamer.overlay_key} invite=${inviteCode}`);
+  console.log(`[ADMIN] Quick setup: bid=${bid} overlay_key=${streamer.overlay_key}`);
 
   res.json({
     ok: true,
@@ -485,7 +460,6 @@ router.post("/admin/quick-setup", requireAdmin, (req, res) => {
       kick_username: streamer.kick_username,
       overlay_key: streamer.overlay_key,
     },
-    invite_code: inviteCode,
     urls: {
       overlay: `${base}/overlay/${streamer.overlay_key}`,
       delay: `${base}/delay/${streamer.overlay_key}`,
@@ -509,7 +483,6 @@ router.post("/admin/reset-db", requireAdmin, (req, res) => {
   db.raw.exec("DELETE FROM goals");
   db.raw.exec("DELETE FROM subscriptions");
   db.raw.exec("DELETE FROM streamer_moderators");
-  db.raw.exec("DELETE FROM invite_codes");
   db.raw.exec("DELETE FROM streamers");
 
   console.log("[ADMIN] Database reset");

@@ -167,20 +167,10 @@
         <button class="btn btn-accent" onclick="quickSetup()">Quick Setup (create dev streamer)</button>
         <button class="btn" onclick="refreshAll()">Refresh All</button>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-blue" onclick="generateInvites()">Generate Invite Codes</button>
-        <input type="number" id="inviteCount" value="3" min="1" max="50" style="width:60px;" />
-      </div>
       <div class="btn-row" style="margin-top:8px;">
         <button class="btn btn-danger" onclick="resetDb()">Reset Database</button>
       </div>
     </div>
-  </div>
-
-  <!-- INVITE CODES -->
-  <div class="card" style="margin-bottom:16px;">
-    <h2><span class="icon">&#127903;</span> Invite Codes</h2>
-    <div id="invitesBox"></div>
   </div>
 
   <!-- CREATE STREAMER -->
@@ -276,8 +266,6 @@
       // Streamers
       renderStreamers(data.streamers);
 
-      // Invites
-      loadInvites();
     } catch (e) {
       log("Error loading overview: " + e.message);
       document.getElementById("envInfo").innerHTML = `<div class="val" style="grid-column:span 2;color:#f87171;">Error: ${e.message}</div>`;
@@ -358,46 +346,6 @@
         </div>
       </div>`;
     }).join("");
-  }
-
-  // ── Invite Codes ───────────────────────────────────────────────
-
-  async function loadInvites() {
-    try {
-      const data = await api("GET", "/admin/invites");
-      const box = document.getElementById("invitesBox");
-      if (!data.codes.length) {
-        box.innerHTML = '<div class="empty">No unused invite codes. Generate some above.</div>';
-        return;
-      }
-      box.innerHTML = `<table>
-        <thead><tr><th>Code</th><th>Created</th><th></th></tr></thead>
-        <tbody>${data.codes.map(c => `
-          <tr>
-            <td class="mono">${c.code}</td>
-            <td>${timeAgo(c.created_at)}</td>
-            <td>
-              <button class="btn btn-sm" onclick="copyText('${c.code}')">Copy</button>
-              <button class="btn btn-sm" onclick="copyText('${location.origin}/auth/login?invite=${c.code}')">Copy Login URL</button>
-            </td>
-          </tr>`).join("")}
-        </tbody></table>`;
-    } catch (e) {
-      log("Error loading invites: " + e.message);
-    }
-  }
-
-  async function generateInvites() {
-    try {
-      const count = Number(document.getElementById("inviteCount").value) || 3;
-      const data = await api("POST", "/admin/invites", { count });
-      log(`Generated ${data.codes.length} invite code(s): ${data.codes.join(", ")}`);
-      toast(`${data.codes.length} invite code(s) generated`);
-      loadInvites();
-    } catch (e) {
-      log("Error: " + e.message);
-      toast("Error: " + e.message);
-    }
   }
 
   // ── Streamer Actions ───────────────────────────────────────────
@@ -554,7 +502,7 @@
   async function quickSetup() {
     try {
       const data = await api("POST", "/admin/quick-setup", {});
-      log(`Quick setup: bid=${data.streamer.broadcaster_id} key=${data.streamer.overlay_key} invite=${data.invite_code}`);
+      log(`Quick setup: bid=${data.streamer.broadcaster_id} key=${data.streamer.overlay_key}`);
       log(`  Overlay: ${data.urls.overlay}`);
       log(`  Delay:   ${data.urls.delay}`);
       log(`  Login:   ${data.urls.dev_login}`);

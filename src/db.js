@@ -69,14 +69,6 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   created_at       INTEGER DEFAULT (unixepoch())
 );
 
-CREATE TABLE IF NOT EXISTS invite_codes (
-  code             TEXT PRIMARY KEY,
-  created_by       INTEGER REFERENCES streamers(broadcaster_id),
-  used_by          INTEGER REFERENCES streamers(broadcaster_id),
-  created_at       INTEGER DEFAULT (unixepoch()),
-  used_at          INTEGER
-);
-
 CREATE TABLE IF NOT EXISTS bot_config (
   broadcaster_id        INTEGER PRIMARY KEY REFERENCES streamers(broadcaster_id),
   bot_enabled           INTEGER DEFAULT 0,
@@ -153,7 +145,6 @@ CREATE TABLE IF NOT EXISTS oauth_transactions (
   code_verifier    TEXT NOT NULL,
   redirect_uri     TEXT NOT NULL,
   return_path      TEXT NOT NULL,
-  invite_code      TEXT,
   binding_hash     TEXT NOT NULL,
   created_at       INTEGER NOT NULL,
   expires_at       INTEGER NOT NULL
@@ -170,10 +161,6 @@ CREATE INDEX IF NOT EXISTS idx_streamer_moderators_mod
 
 function generateOverlayKey() {
   return crypto.randomBytes(18).toString("base64url"); // 24 chars, ~107 bits
-}
-
-function generateInviteCode() {
-  return crypto.randomBytes(8).toString("hex").toUpperCase(); // 16 chars
 }
 
 // ── Database initialization ─────────────────────────────────────────
@@ -491,17 +478,6 @@ export function openDatabase(dbPath = ":memory:") {
       UPDATE subscriptions SET status = 'inactive' WHERE broadcaster_id = ? AND status = 'active'
     `),
 
-    // Invite codes
-    insertInviteCode: sqlite.prepare(`
-      INSERT INTO invite_codes (code, created_by) VALUES (@code, @created_by)
-    `),
-    getInviteCode: sqlite.prepare(`SELECT * FROM invite_codes WHERE code = ?`),
-    useInviteCode: sqlite.prepare(`
-      UPDATE invite_codes SET used_by = @used_by, used_at = unixepoch()
-      WHERE code = @code AND used_by IS NULL
-    `),
-    getUnusedInviteCodes: sqlite.prepare(`SELECT * FROM invite_codes WHERE used_by IS NULL ORDER BY created_at`),
-
     // Bot config
     upsertBotConfig: sqlite.prepare(`
       INSERT INTO bot_config (broadcaster_id, bot_enabled, announce_prizes, prize_announce_template, wheel_description, language, updated_at)
@@ -589,13 +565,12 @@ export function openDatabase(dbPath = ":memory:") {
     deleteExpiredWebhookReceipts: sqlite.prepare(`DELETE FROM webhook_receipts WHERE expires_at <= ?`),
     insertOAuthTransaction: sqlite.prepare(`
       INSERT INTO oauth_transactions
-        (state_hash, code_verifier, redirect_uri, return_path, invite_code, binding_hash, created_at, expires_at)
-      VALUES (@state_hash, @code_verifier, @redirect_uri, @return_path, @invite_code, @binding_hash, @created_at, @expires_at)
+        (state_hash, code_verifier, redirect_uri, return_path, binding_hash, created_at, expires_at)
+      VALUES (@state_hash, @code_verifier, @redirect_uri, @return_path, @binding_hash, @created_at, @expires_at)
       ON CONFLICT(state_hash) DO UPDATE SET
         code_verifier = excluded.code_verifier,
         redirect_uri = excluded.redirect_uri,
         return_path = excluded.return_path,
-        invite_code = excluded.invite_code,
         binding_hash = excluded.binding_hash,
         created_at = excluded.created_at,
         expires_at = excluded.expires_at
@@ -903,30 +878,6 @@ export function openDatabase(dbPath = ":memory:") {
       stmts.deactivateSubscriptions.run(broadcasterId);
     },
 
-    // ── Invite Codes ────────────────────────────────────────────
-
-    createInviteCode(createdBy = null) {
-      const code = generateInviteCode();
-      stmts.insertInviteCode.run({ code, created_by: createdBy });
-      return code;
-    },
-
-    validateInviteCode(code) {
-      const row = stmts.getInviteCode.get(code);
-      if (!row) return { valid: false, reason: "not_found" };
-      if (row.used_by != null) return { valid: false, reason: "already_used" };
-      return { valid: true, code: row };
-    },
-
-    useInviteCode(code, usedByBroadcasterId) {
-      const result = stmts.useInviteCode.run({ code, used_by: usedByBroadcasterId });
-      return result.changes > 0;
-    },
-
-    getUnusedInviteCodes() {
-      return stmts.getUnusedInviteCodes.all();
-    },
-
     // ── Bot Config ──────────────────────────────────────────────
 
     getBotConfig(broadcasterId) {
@@ -1137,4 +1088,4 @@ export function setDb(db) {
   _instance = db;
 }
 
-export { generateOverlayKey, generateInviteCode };
+export { generateOverlayKey };
