@@ -7,11 +7,15 @@
   <title>Wheel of Fortune</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; width:100vw; height:100vh; }
-    .overlay { position: fixed; left:50%; top:50%; transform: translate(-50%, -40%) scale(0.94);
-      opacity: 0; transition: opacity .95s ease, transform .95s ease; pointer-events:none;
+    :root { --overlay-accent:#7c3aed; --overlay-bg:#121228; }
+    .overlay { position: fixed; left:50%; top:50%; transform: translate(-50%, -46%) scale(0.88);
+      opacity: 0; transition: opacity .6s ease, transform .75s cubic-bezier(.16,1,.3,1); pointer-events:none;
       width: calc(100vmin - 80px); height: calc(100vmin - 80px);
       display:flex; align-items:center; justify-content:center; z-index:10; }
     .overlay.show { opacity:1; transform: translate(-50%, -50%) scale(1); pointer-events:auto; }
+    .overlay::before,.overlay::after{content:"";position:absolute;inset:11%;border-radius:50%;pointer-events:none;z-index:-1}
+    .overlay::before{background:radial-gradient(circle,color-mix(in srgb,var(--overlay-accent) 22%,transparent),transparent 68%);filter:blur(34px);animation:halo 2.8s ease-in-out infinite}
+    .overlay::after{inset:4%;border:1px solid color-mix(in srgb,var(--overlay-accent) 32%,transparent);opacity:.42;animation:orbit 12s linear infinite}
     canvas { width: calc(100vmin - 80px); height: calc(100vmin - 80px); display:block; }
 
     .editor { position:fixed; right:16px; top:16px; width:460px; max-height:92vh; overflow:auto; background:rgba(20,20,20,.95); color:#fff;
@@ -30,12 +34,16 @@
     .muted{ color:#9aa0a6; font-size:12px; }
     .pill{ display:inline-block; padding:4px 8px; border-radius:999px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:12px; }
 
-    .result-banner { position: absolute; left: 50%; top: 8%; transform: translate(-50%, -20%) scale(0.95); opacity: 0; padding: 14px 22px;
-      border-radius: 14px; background: rgba(17, 17, 17, 0.80); color: #fff; font-family: system-ui, sans-serif; font-weight: 800; letter-spacing: .3px;
-      line-height: 1; font-size: 48px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08); backdrop-filter: blur(6px);
+    .result-banner { position: absolute; left: 50%; top: 7%; transform: translate(-50%, -28px) rotate(-1deg) scale(.9); opacity: 0; padding: 16px 28px 18px;
+      border-radius: 999px; border:1px solid color-mix(in srgb,var(--overlay-accent) 55%,white 15%); background: color-mix(in srgb,var(--overlay-bg) 82%,transparent); color: #fff; font-family: system-ui, sans-serif; font-weight: 900; letter-spacing: -.03em;
+      line-height: 1; font-size: clamp(28px,5vmin,54px); box-shadow: 0 18px 60px rgba(0,0,0,.38),0 0 35px color-mix(in srgb,var(--overlay-accent) 30%,transparent); backdrop-filter: blur(12px);
       pointer-events: none; z-index: 20; transition: opacity .35s ease, transform .35s ease; }
-    .result-banner.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    .bonus-badge{ font-size:14px; margin-left:8px; padding:4px 8px; background:#14532d; border:1px solid #166534; color:#bbf7d0; border-radius:999px; vertical-align:middle; }
+    .result-banner::before{content:"WYGRANA";display:block;margin-bottom:7px;color:var(--overlay-accent);font-size:11px;letter-spacing:.22em;text-align:center}
+    .result-banner.show { opacity: 1; transform: translate(-50%, 0) rotate(0) scale(1); }
+    .bonus-badge{ display:inline-block;font-size:12px;margin-left:8px;padding:6px 9px;background:var(--overlay-accent);color:#09090b;border-radius:999px;vertical-align:middle;letter-spacing:.04em; }
+    @keyframes halo{50%{transform:scale(1.08);opacity:.72}}
+    @keyframes orbit{to{transform:rotate(360deg)}}
+    @media(prefers-reduced-motion:reduce){.overlay,.result-banner{transition-duration:.01ms}.overlay::before,.overlay::after{animation:none}}
     .auth-warning {
       position: fixed;
       left: 50%;
@@ -98,6 +106,7 @@
       return m ? m[1] : new URLSearchParams(location.search).get("key") || "";
     })();
     const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
+    const PREVIEW_MODE = new URLSearchParams(location.search).get("preview") === "1";
     const authWarningEl = document.getElementById("authWarning");
     let authOk = true;
 
@@ -164,7 +173,7 @@
     const canvas = document.getElementById("wheel");
     const ctx = canvas.getContext("2d");
     const dpr = Math.max(1, Math.floor(window.devicePixelRatio||1));
-    (function setupCanvas(){ const cssW=1000, cssH=1000; canvas.width=cssW*dpr; canvas.height=cssH*dpr; canvas.style.width=cssW+"px"; canvas.style.height=cssH+"px"; ctx.setTransform(dpr,0,0,dpr,0,0); })();
+    (function setupCanvas(){ const cssW=1000, cssH=1000; canvas.width=cssW*dpr; canvas.height=cssH*dpr; canvas.style.width="100%"; canvas.style.height="100%"; ctx.setTransform(dpr,0,0,dpr,0,0); })();
     const W=1000,H=1000,CX=W/2,CY=H/2,R=Math.min(W,H)*0.36;
     let rotation = 0;
     let ACTIVE_SNAPSHOT = null;
@@ -228,6 +237,19 @@
       return { r: Math.min(255, ac.r + amt), g: Math.min(255, ac.g + amt), b: Math.min(255, ac.b + amt) };
     }
 
+    function mixRgb(a, b, amount) {
+      return {
+        r: Math.round(a.r + (b.r - a.r) * amount),
+        g: Math.round(a.g + (b.g - a.g) * amount),
+        b: Math.round(a.b + (b.b - a.b) * amount),
+      };
+    }
+
+    function applyOverlayTheme() {
+      document.documentElement.style.setProperty("--overlay-accent", ACCENT_COLOR);
+      document.documentElement.style.setProperty("--overlay-bg", SECONDARY_COLOR);
+    }
+
     function drawWheel(angle = 0) {
       const items = ACTIVE_SNAPSHOT || ITEMS;
       const ac = hexToRgb(ACCENT_COLOR);
@@ -236,7 +258,8 @@
       const acL = rgbLighten(ac, 80);
       ctx.clearRect(0, 0, W, H);
       const TAU = 2 * Math.PI;
-      const rimW = 28;
+      applyOverlayTheme();
+      const rimW = 32;
       const rimOuter = R + rimW;
       const rimMid = R + rimW / 2;
 
@@ -244,7 +267,7 @@
       // Base dark fill with accent glow
       ctx.save();
       ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.3)`;
-      ctx.shadowBlur = 24;
+      ctx.shadowBlur = 42;
       ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
       ctx.arc(CX, CY, R, 0, TAU, true);
       ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`;
@@ -305,12 +328,10 @@
         ctx.arc(CX, CY, R, start, end);
         ctx.closePath();
 
-        // Base fill: alternating secondary / accent
-        if (i % 2 === 0) {
-          ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${op.toFixed(2)})`;
-        } else {
-          ctx.fillStyle = `rgba(${ac.r},${ac.g},${ac.b},${op.toFixed(2)})`;
-        }
+        // Alternating broadcast palette derived only from the configured
+        // accent and background. This stays generic while remaining lively.
+        const tone = i % 2 === 0 ? mixRgb(sc, ac, .18) : mixRgb(sc, ac, .62);
+        ctx.fillStyle = `rgba(${tone.r},${tone.g},${tone.b},${op.toFixed(2)})`;
         ctx.fill();
 
         // Glass highlight: bright edge along the outer arc of each segment
@@ -344,7 +365,7 @@
         const rText = R * 0.66;
         const rawLabel = String(s.label || "");
         const fontPx = fitFontForArc(ctx, rawLabel, rText, arcAngle, 36, 10);
-        ctx.font = `600 ${fontPx}px system-ui, sans-serif`;
+        ctx.font = `800 ${fontPx}px system-ui, sans-serif`;
         const maxLen = rText * arcAngle * 0.85;
         const label = ellipsize(ctx, rawLabel, maxLen);
 
@@ -355,8 +376,8 @@
         ctx.rotate(mid + Math.PI / 2);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.1));
-        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.lineWidth = Math.max(3, Math.round(fontPx * 0.12));
+        ctx.strokeStyle = "rgba(0,0,0,0.72)";
         ctx.fillStyle = "#ffffff";
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 4;
@@ -400,7 +421,7 @@
       }
 
       // ── Center hub: small frosted circle ──
-      const hubR = 16;
+      const hubR = 32;
       ctx.save();
       ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.35)`;
       ctx.shadowBlur = 10;
@@ -416,7 +437,7 @@
       ctx.stroke();
 
       // Accent dot
-      ctx.beginPath(); ctx.arc(CX, CY, 5, 0, TAU);
+      ctx.beginPath(); ctx.arc(CX, CY, 9, 0, TAU);
       ctx.fillStyle = ACCENT_COLOR; ctx.fill();
 
       // ── Pointer ──
@@ -638,6 +659,7 @@
     const queue = []; let spinning=false; let hideTimer=null;
     function showOverlay(){ clearTimeout(hideTimer); overlay.classList.add("show"); }
     function hideOverlay(afterMs = 1600) {
+      if (PREVIEW_MODE) return;
       clearTimeout(hideTimer);
       hideTimer = setTimeout(()=>{ overlay.classList.remove("show"); hideResult(); }, afterMs);
     }
@@ -937,6 +959,7 @@
       }
 
       CONFIG_VERSION++; renderList(); buildSpinBag(); drawWheel(0);
+      if (PREVIEW_MODE) showOverlay();
     })();
   </script>
 </body>
