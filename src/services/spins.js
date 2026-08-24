@@ -64,22 +64,24 @@ export function selectPrize(items, randomInt = crypto.randomInt) {
   return eligible[eligible.length - 1];
 }
 
-function buildSpinMessage(broadcasterId, tierName) {
+function buildSpinMessage(broadcasterId, tierName, { test = false } = {}) {
   const config = getDb().getConfig(broadcasterId);
   const tier = tierName && Array.isArray(config?.tiers)
     ? config.tiers.find((candidate) => candidate.name === tierName)
     : null;
   const items = tier?.items?.length ? tier.items : config?.items;
-  const picked = selectPrize(items);
+  const testItems = test && Array.isArray(items) ? items.filter((item) => !item?.bonus) : items;
+  const picked = selectPrize(testItems?.length ? testItems : items);
   const msg = { action: "spin", times: 1 };
+  if (test) msg.test = true;
   if (tierName) msg.tier = tierName;
   if (picked) {
     msg.pickedId = String(picked.id);
     msg.ticket = issueOverlayTicket({
       broadcasterId,
       kind: "wheel",
-      announceLabel: `${picked.label}${picked.bonus ? " (+bonus)" : ""}${tierName ? ` [${tierName}]` : ""}`,
-      metadata: { bonus: !!picked.bonus, tier: tierName || null },
+      announceLabel: test ? "" : `${picked.label}${picked.bonus ? " (+bonus)" : ""}${tierName ? ` [${tierName}]` : ""}`,
+      metadata: { bonus: test ? false : !!picked.bonus, tier: tierName || null, test },
     });
   }
   return msg;
@@ -110,6 +112,16 @@ export const spins = {
    */
   getTimeUntilNextSpin(broadcasterId) {
     return getTimeUntilNextSpin(broadcasterId);
+  },
+
+  /** Deliver isolated preview spins without touching the production queue. */
+  testSpin(broadcasterId, times = 1) {
+    const safe = Math.max(1, Math.min(20, Math.round(Number(times) || 1)));
+    let delivered = 0;
+    for (let index = 0; index < safe; index++) {
+      delivered = Math.max(delivered, broadcast(broadcasterId, buildSpinMessage(broadcasterId, null, { test: true })));
+    }
+    return delivered;
   },
 
   /**

@@ -65,6 +65,26 @@ describe("spins service (multi-tenant)", () => {
 
   // ── deliverSpinOrQueue ──────────────────────────────────────────
 
+  describe("testSpin", () => {
+    it("delivers one isolated non-bonus spin without changing the pending queue", async () => {
+      db.saveConfig(BID, {
+        items: [
+          { id: "bonus", label: "Reroll", weight: 99, bonus: true },
+          { id: "regular", label: "Prize", weight: 1, bonus: false },
+        ],
+        tiers: null,
+      });
+      const spins = await getSpins();
+      const broadcasts = [];
+      spins.setBroadcaster((bid, msg) => { broadcasts.push({ bid, msg }); return 1; });
+
+      expect(spins.testSpin(BID, 1)).toBe(1);
+      expect(spins.getPending(BID)).toBe(0);
+      expect(broadcasts).toHaveLength(1);
+      expect(broadcasts[0].msg).toMatchObject({ action: "spin", test: true, pickedId: "regular" });
+    });
+  });
+
   describe("deliverSpinOrQueue", () => {
     it("queues spins and delivers one immediately when no delay", async () => {
       const spins = await getSpins();

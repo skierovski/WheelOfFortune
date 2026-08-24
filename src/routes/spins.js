@@ -36,6 +36,7 @@ router.post("/overlay/:key/spins/complete", resolveOverlayKey, (req, res) => {
   const bid = req.streamer.broadcaster_id;
   const ticket = consumeOverlayTicket(req.get("x-overlay-ticket"), { broadcasterId: bid, kind: "wheel", action: "complete" });
   if (!ticket) return res.status(401).json({ ok: false, error: "Invalid or expired execution ticket" });
+  if (ticket.metadata?.test) return res.json({ ok: true, test: true });
   spins.markSpinComplete(bid);
   if (ticket.metadata?.bonus) {
     spins.deliverSpinOrQueue(bid, 1, ticket.metadata.tier ? { tier: ticket.metadata.tier } : {});
@@ -50,7 +51,7 @@ router.post("/overlay/:key/spins/complete", resolveOverlayKey, (req, res) => {
 router.get("/dashboard/test/:n", requireSession, (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const n = Math.max(1, Math.min(20, parseInt(req.params.n, 10) || 1));
-  const delivered = spins.deliverSpinOrQueue(bid, n);
+  const delivered = spins.testSpin(bid, n);
   res.json({
     ok: true,
     message: `Sent ${n} spin(s) to ${delivered} connected client(s)`,

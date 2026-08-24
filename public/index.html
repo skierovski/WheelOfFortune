@@ -764,6 +764,7 @@
         const tierName = (typeof entry === "object" && entry !== null) ? entry.tier : null;
         const serverPickedId = (typeof entry === "object" && entry !== null) ? entry.pickedId : null;
         const executionTicket = (typeof entry === "object" && entry !== null) ? entry.ticket : null;
+        const isTestSpin = Boolean(typeof entry === "object" && entry !== null && entry.test);
 
         // If a tier is specified, temporarily swap items for this spin
         let savedItems = null;
@@ -786,14 +787,16 @@
         const pickedId = serverPickedId || nextFromBag();
         const result = await spinToId(pickedId);
         if (result.label) {
-          showResult(result.label, 1800, result.bonus);
+          showResult(result.label, 1800, result.bonus && !isTestSpin);
           playSound();
           speak(result.label);
 
-          fetch(`${API_BASE}/chat/announce`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Overlay-Ticket': executionTicket || '' },
-            body: JSON.stringify({})
-          }).catch(()=>{});
+          if (!isTestSpin) {
+            fetch(`${API_BASE}/chat/announce`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Overlay-Ticket': executionTicket || '' },
+              body: JSON.stringify({})
+            }).catch(()=>{});
+          }
         }
 
         // Restore original items after tier spin
@@ -852,7 +855,7 @@
       }
       if (data.action === "spin" && Number.isFinite(data.times)) {
         const tierName = data.tier || null;
-        queue.push({ times: 1, tier: tierName, pickedId: data.pickedId || null, ticket: data.ticket || null });
+        queue.push({ times: 1, tier: tierName, pickedId: data.pickedId || null, ticket: data.ticket || null, test: data.test === true });
         showOverlay(); runQueue(); return;
       }
     }
