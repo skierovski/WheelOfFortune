@@ -180,12 +180,16 @@ router.delete("/admin/streamers/:bid", requireAdmin, (req, res) => {
 
   try {
     const db = getDb();
-    db.raw.prepare("DELETE FROM streamer_moderators WHERE broadcaster_id = ?").run(bid);
-    db.raw.prepare("DELETE FROM wheel_configs WHERE broadcaster_id = ?").run(bid);
-    db.raw.prepare("DELETE FROM goals WHERE broadcaster_id = ?").run(bid);
-    db.raw.prepare("DELETE FROM spin_state WHERE broadcaster_id = ?").run(bid);
-    db.raw.prepare("DELETE FROM subscriptions WHERE broadcaster_id = ?").run(bid);
-    db.raw.prepare("DELETE FROM streamers WHERE broadcaster_id = ?").run(bid);
+    const remove = db.raw.transaction(() => {
+      for (const table of [
+        "chat_commands", "tracked_gifts", "streamer_moderators", "sessions",
+        "subscriptions", "bot_config", "slots_state", "spin_state", "goals", "wheel_configs",
+      ]) {
+        db.raw.prepare(`DELETE FROM ${table} WHERE broadcaster_id = ?`).run(bid);
+      }
+      db.raw.prepare("DELETE FROM streamers WHERE broadcaster_id = ?").run(bid);
+    });
+    remove();
 
     console.log(`[ADMIN] Deleted streamer bid=${bid}`);
     res.json({ ok: true, deleted: bid });
@@ -478,12 +482,15 @@ router.post("/admin/reset-db", requireAdmin, (req, res) => {
   }
 
   const db = getDb();
-  db.raw.exec("DELETE FROM spin_state");
-  db.raw.exec("DELETE FROM wheel_configs");
-  db.raw.exec("DELETE FROM goals");
-  db.raw.exec("DELETE FROM subscriptions");
-  db.raw.exec("DELETE FROM streamer_moderators");
-  db.raw.exec("DELETE FROM streamers");
+  const reset = db.raw.transaction(() => {
+    for (const table of [
+      "chat_commands", "tracked_gifts", "streamer_moderators", "sessions",
+      "subscriptions", "bot_config", "slots_state", "spin_state", "goals", "wheel_configs", "streamers",
+    ]) {
+      db.raw.exec(`DELETE FROM ${table}`);
+    }
+  });
+  reset();
 
   console.log("[ADMIN] Database reset");
   res.json({ ok: true, message: "All data cleared" });
