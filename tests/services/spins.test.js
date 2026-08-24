@@ -3,18 +3,19 @@ import { openDatabase, setDb } from "../../src/db.js";
 import { selectPrize } from "../../src/services/spins.js";
 
 describe("server-authoritative prize selection", () => {
-  it("uses configured weights and can avoid a back-to-back repeat", () => {
+  it("uses exact configured chances independently on every spin", () => {
     const items = [
       { id: "a", weight: 90 },
       { id: "b", weight: 10 },
     ];
-    expect(selectPrize(items, null, () => 95)?.id).toBe("b");
-    expect(selectPrize(items, "a", () => 0)?.id).toBe("b");
+    expect(selectPrize(items, () => 950)?.id).toBe("b");
+    expect(selectPrize(items, () => 0)?.id).toBe("a");
+    expect(selectPrize([{ id: "rare", weight: 0.1 }, { id: "common", weight: 99.9 }], () => 0)?.id).toBe("rare");
   });
 
   it("returns null for an empty or invalid wheel", () => {
-    expect(selectPrize([], null, () => 0)).toBeNull();
-    expect(selectPrize([{ id: "a", weight: 0 }], null, () => 0)).toBeNull();
+    expect(selectPrize([], () => 0)).toBeNull();
+    expect(selectPrize([{ id: "a", weight: 0 }], () => 0)).toBeNull();
   });
 });
 

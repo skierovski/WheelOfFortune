@@ -61,33 +61,43 @@
       </section>
 
       <section class="view" data-view-panel="wheel" aria-labelledby="wheel-title" hidden>
-        <div class="view-heading"><div><h2 id="wheel-title">Wheel</h2><p>Nagrody, wagi i wygląd koła w jednym miejscu.</p></div><button class="button button-secondary" id="testWheel" type="button">Testuj losowanie</button></div>
+        <div class="view-heading"><div><h2 id="wheel-title">Wheel</h2><p>Nagrody, szanse i wygląd koła w jednym miejscu.</p></div><button class="button button-secondary" id="testWheel" type="button">Testuj losowanie</button></div>
         <div class="config-layout">
           <form class="config-panel" id="wheelForm">
             <div class="panel-heading"><span>Pozycje koła</span><button class="text-action" id="addWheelItem" type="button">+ Dodaj pozycję</button></div>
-            <p class="field-hint">Wagi są automatycznie przeliczane do 100%. Zalecane: 6–30 pozycji.</p>
+            <p class="field-hint">Ustaw szanse ręcznie albo oznacz gwiazdką nagrody, które mają wypadać częściej.</p>
             <div class="wheel-items" id="wheelItems"></div>
+            <div class="chance-tools">
+              <div class="chance-summary" id="chanceSummary"><span>Suma szans</span><strong id="chanceTotal">0%</strong><button class="text-action" id="equalizeChances" type="button">Wyrównaj szanse</button></div>
+              <div class="boost-controls">
+                <div class="boost-heading"><span>Automatyczny podział</span><small><b id="boostCount">0</b> wybrane</small></div>
+                <label class="boost-field" for="boostStrength"><span>Przewaga wyróżnionych nagród</span><select id="boostStrength"><option value="2" selected>2× większa szansa</option><option value="3">3× większa szansa</option><option value="4">4× większa szansa</option></select></label>
+                <button class="button button-secondary" id="distributeChances" type="button">Przelicz szanse do 100%</button>
+              </div>
+            </div>
             <div class="appearance-grid">
               <label>Kolor główny<input id="accentColor" name="accent_color" type="color" value="#7c3aed"></label>
               <label>Kolor tła koła<input id="secondaryColor" name="secondary_color" type="color" value="#121228"></label>
               <label>Przezroczystość tła <output id="wheelOpacityValue">90%</output><input id="wheelOpacity" name="wheel_opacity" type="range" min="0.1" max="1" step="0.05" value="0.9"></label>
             </div>
-            <div class="form-actions"><span id="wheelSaveState" class="save-state">Zmiany niezapisane</span><button class="button button-primary" type="submit">Zapisz Wheel</button></div>
+            <div class="form-actions"><span id="wheelSaveState" class="save-state">Zmiany niezapisane</span><button class="button button-primary" id="saveWheel" type="submit">Zapisz Wheel</button></div>
           </form>
           <div class="preview-panel"><div class="preview-label"><span>OBS PREVIEW</span><span><i></i> Ten sam renderer</span></div><div class="overlay-preview-stage"><iframe id="wheelPreview" title="Podgląd koła w OBS" loading="eager"></iframe></div><p class="result-output" id="wheelResult" aria-live="polite">Podgląd pokazuje dokładnie ten sam overlay co OBS.</p></div>
         </div>
       </section>
 
       <section class="view" data-view-panel="counter" aria-labelledby="counter-title" hidden>
-        <div class="view-heading"><div><h2 id="counter-title">Counter</h2><p>Aktualna wartość, cel i etykieta aktualizowane na żywo.</p></div></div>
+        <div class="view-heading"><div><h2 id="counter-title">Counter</h2><p>Cel transmisji aktualizowany ręcznie i automatycznie przez suby.</p></div></div>
         <div class="config-layout">
           <form class="config-panel counter-form" id="counterForm">
-            <label for="counterLabel">Etykieta<span class="field-hint">Maksymalnie 60 znaków</span></label><input id="counterLabel" name="label" maxlength="60" placeholder="np. Wspólny cel">
-            <div class="field-row"><label for="counterValue">Aktualna wartość</label><label for="counterGoal">Cel</label><input id="counterValue" name="count" type="number" min="0" max="1000000"><input id="counterGoal" name="goal" type="number" min="0" max="1000000"></div>
-            <div class="counter-controls"><button class="button button-secondary" type="button" data-counter-delta="-1">−1</button><button class="button button-secondary" type="button" data-counter-delta="1">+1</button></div>
+            <div class="panel-heading"><span>Treść i wynik</span><span class="counter-live"><i></i> OBS LIVE</span></div>
+            <label for="counterLabel">Etykieta<span class="field-hint">Np. Suby do maratonu, wspólny cel, wygrane</span></label><input id="counterLabel" name="label" maxlength="60" placeholder="np. Suby do maratonu">
+            <div class="field-row"><label for="counterValue">Aktualny wynik</label><label for="counterGoal">Cel</label><input id="counterValue" name="count" type="number" min="0" max="1000000"><input id="counterGoal" name="goal" type="number" min="0" max="1000000"></div>
+            <div class="counter-adjust"><span>Szybka zmiana</span><div class="counter-controls"><button type="button" data-counter-delta="-10">−10</button><button type="button" data-counter-delta="-5">−5</button><button type="button" data-counter-delta="-1">−1</button><button type="button" data-counter-delta="1">+1</button><button type="button" data-counter-delta="5">+5</button><button type="button" data-counter-delta="10">+10</button></div></div>
+            <div class="counter-theme"><div><span>Kolor główny</span><input id="counterAccent" type="color" value="#7c3aed"></div><div><span>Kolor tła</span><input id="counterBackground" type="color" value="#121228"></div><label><span>Widoczność tła <output id="counterOpacityValue">90%</output></span><input id="counterOpacity" type="range" min="0.1" max="1" step="0.05" value="0.9"></label></div>
             <div class="form-actions"><span class="save-state">Aktualizacje są wysyłane do OBS</span><button class="button button-primary" type="submit">Zapisz Counter</button></div>
           </form>
-          <div class="preview-panel counter-preview"><div class="preview-label"><span>OBS PREVIEW</span><span><i></i> Live</span></div><div class="counter-display"><span id="counterPreviewLabel">WSPÓLNY CEL</span><strong><b id="counterPreviewValue">0</b><small id="counterPreviewGoal"></small></strong><span class="counter-progress"><i id="counterProgress"></i></span></div></div>
+          <div class="preview-panel counter-preview"><div class="preview-label"><span>OBS PREVIEW</span><span><i></i> Ten sam renderer</span></div><div class="counter-preview-stage"><iframe id="counterPreview" title="Podgląd countera w OBS" loading="eager"></iframe></div><p class="result-output">Każda zmiana wartości trafia do OBS na żywo.</p></div>
         </div>
       </section>
 

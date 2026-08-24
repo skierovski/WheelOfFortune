@@ -7,15 +7,13 @@
   <title>Wheel of Fortune</title>
   <style>
     html, body { margin:0; padding:0; background:transparent; overflow:hidden; width:100vw; height:100vh; }
+    html.preview-mode,html.preview-mode body{background:#090b0f}
     :root { --overlay-accent:#7c3aed; --overlay-bg:#121228; }
     .overlay { position: fixed; left:50%; top:50%; transform: translate(-50%, -46%) scale(0.88);
       opacity: 0; transition: opacity .6s ease, transform .75s cubic-bezier(.16,1,.3,1); pointer-events:none;
       width: calc(100vmin - 80px); height: calc(100vmin - 80px);
       display:flex; align-items:center; justify-content:center; z-index:10; }
     .overlay.show { opacity:1; transform: translate(-50%, -50%) scale(1); pointer-events:auto; }
-    .overlay::before,.overlay::after{content:"";position:absolute;inset:11%;border-radius:50%;pointer-events:none;z-index:-1}
-    .overlay::before{background:radial-gradient(circle,color-mix(in srgb,var(--overlay-accent) 22%,transparent),transparent 68%);filter:blur(34px);animation:halo 2.8s ease-in-out infinite}
-    .overlay::after{inset:4%;border:1px solid color-mix(in srgb,var(--overlay-accent) 32%,transparent);opacity:.42;animation:orbit 12s linear infinite}
     canvas { width: calc(100vmin - 80px); height: calc(100vmin - 80px); display:block; }
 
     .editor { position:fixed; right:16px; top:16px; width:460px; max-height:92vh; overflow:auto; background:rgba(20,20,20,.95); color:#fff;
@@ -41,9 +39,7 @@
     .result-banner::before{content:"WYGRANA";display:block;margin-bottom:7px;color:var(--overlay-accent);font-size:11px;letter-spacing:.22em;text-align:center}
     .result-banner.show { opacity: 1; transform: translate(-50%, 0) rotate(0) scale(1); }
     .bonus-badge{ display:inline-block;font-size:12px;margin-left:8px;padding:6px 9px;background:var(--overlay-accent);color:#09090b;border-radius:999px;vertical-align:middle;letter-spacing:.04em; }
-    @keyframes halo{50%{transform:scale(1.08);opacity:.72}}
-    @keyframes orbit{to{transform:rotate(360deg)}}
-    @media(prefers-reduced-motion:reduce){.overlay,.result-banner{transition-duration:.01ms}.overlay::before,.overlay::after{animation:none}}
+    @media(prefers-reduced-motion:reduce){.overlay,.result-banner{transition-duration:.01ms}}
     .auth-warning {
       position: fixed;
       left: 50%;
@@ -107,6 +103,7 @@
     })();
     const API_BASE = OVERLAY_KEY ? `/overlay/${OVERLAY_KEY}` : "";
     const PREVIEW_MODE = new URLSearchParams(location.search).get("preview") === "1";
+    if (PREVIEW_MODE) document.documentElement.classList.add("preview-mode");
     const authWarningEl = document.getElementById("authWarning");
     let authOk = true;
 
@@ -165,9 +162,9 @@
 
     // ====== Drawing etc. ======
     const FULL_ROUNDS_MIN = 8, FULL_ROUNDS_MAX = 12;
-    const BAG_SIZE = 50;
-    const NO_REPEAT_BACK_TO_BACK = true;
-    const AT_LEAST_ONE_THRESHOLD = 1;
+    const BAG_SIZE = 1000;
+    const NO_REPEAT_BACK_TO_BACK = false;
+    const AT_LEAST_ONE_THRESHOLD = 0.1;
 
     let spinBag = [], bagPos = 0, spinBagVersion = 0, lastPickedId = null, lastIndex = -1;
     const canvas = document.getElementById("wheel");
@@ -177,6 +174,9 @@
     const W=1000,H=1000,CX=W/2,CY=H/2,R=Math.min(W,H)*0.36;
     let rotation = 0;
     let ACTIVE_SNAPSHOT = null;
+    let WIN_CELEBRATION = 0;
+    let WINNING_SECTOR_ID = null;
+    let winCelebrationRun = 0;
 
     function modTau(x){ const TAU = 2*Math.PI; return ((x % TAU) + TAU) % TAU; }
     function getNormalizedWeightsFrom(items){
@@ -209,23 +209,36 @@
     }
 
     // ===== Helpers: text/arc =====
-    function fitFontForArc(ctx, text, radius, arcAngle, maxPx = 42, minPx = 10) {
-      const maxLen = radius * arcAngle * 0.9;
-      let lo = minPx, hi = maxPx, best = minPx;
-      while (lo <= hi) {
-        const mid = (lo + hi) >> 1;
-        ctx.font = `700 ${mid}px system-ui, sans-serif`;
-        const w = ctx.measureText(text).width;
-        if (w <= maxLen) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+    function wrapWheelLabel(ctx, text, maxWidth) {
+      const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+      if (!words.length) return [""];
+      const lines = [];
+      let line = "";
+      for (const word of words) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(candidate).width > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
       }
-      ctx.font = `700 ${best}px system-ui, sans-serif`;
-      return best;
+      if (line) lines.push(line);
+      return lines;
     }
-    function ellipsize(ctx, text, maxWidth) {
-      if (ctx.measureText(text).width <= maxWidth) return text;
-      const ell = "…"; let s = text;
-      while (s.length > 1 && ctx.measureText(s + ell).width > maxWidth) s = s.slice(0, -1);
-      return s + ell;
+
+    function fitWrappedWheelLabel(ctx, text, maxWidth, maxHeight) {
+      for (let size = 34; size >= 9; size--) {
+        ctx.font = `800 ${size}px system-ui, sans-serif`;
+        const lines = wrapWheelLabel(ctx, text, maxWidth);
+        const lineHeight = size * 1.04;
+        const widest = Math.max(...lines.map(line => ctx.measureText(line).width), 0);
+        if (widest <= maxWidth && lines.length * lineHeight <= maxHeight) {
+          return { size, lines, lineHeight };
+        }
+      }
+      ctx.font = "800 9px system-ui, sans-serif";
+      return { size: 9, lines: wrapWheelLabel(ctx, text, maxWidth), lineHeight: 9.4 };
     }
 
     // ===== Modern wheel (dark + accent color) =====
@@ -259,50 +272,28 @@
       ctx.clearRect(0, 0, W, H);
       const TAU = 2 * Math.PI;
       applyOverlayTheme();
-      const rimW = 32;
+      const rimW = 22;
       const rimOuter = R + rimW;
       const rimMid = R + rimW / 2;
 
-      // ── Outer rim: dark glassmorphism band ──
-      // Base dark fill with accent glow
+      // Compact broadcast rim: solid and graphic, without a glass halo.
       ctx.save();
-      ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.3)`;
-      ctx.shadowBlur = 42;
+      ctx.shadowColor = "rgba(0,0,0,.48)";
+      ctx.shadowBlur = 26;
+      ctx.shadowOffsetY = 14;
       ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
       ctx.arc(CX, CY, R, 0, TAU, true);
-      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`;
+      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + .08).toFixed(2)})`;
       ctx.fill();
       ctx.restore();
 
-      // Glass refraction: subtle radial light on the rim band
-      const rimGrad = ctx.createRadialGradient(CX, CY - rimOuter * 0.4, rimW, CX, CY, rimOuter);
-      rimGrad.addColorStop(0, "rgba(255,255,255,0.08)");
-      rimGrad.addColorStop(0.5, "rgba(255,255,255,0.02)");
-      rimGrad.addColorStop(1, "rgba(255,255,255,0)");
       ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
-      ctx.arc(CX, CY, R, 0, TAU, true);
-      ctx.fillStyle = rimGrad;
-      ctx.fill();
-
-      // Inner glow along the rim inner edge (frosted light leak)
-      const innerGlow = ctx.createRadialGradient(CX, CY, R, CX, CY, R + rimW * 0.45);
-      innerGlow.addColorStop(0, `rgba(${ac.r},${ac.g},${ac.b},0.08)`);
-      innerGlow.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
-      ctx.arc(CX, CY, R, 0, TAU, true);
-      ctx.fillStyle = innerGlow;
-      ctx.fill();
-
-      // Rim outer edge (accent stroke)
-      ctx.beginPath(); ctx.arc(CX, CY, rimOuter, 0, TAU);
-      ctx.strokeStyle = `rgba(${ac.r},${ac.g},${ac.b},0.5)`;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = ACCENT_COLOR;
+      ctx.lineWidth = 8;
       ctx.stroke();
-
-      // Rim inner edge (subtle light)
       ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU);
-      ctx.strokeStyle = `rgba(255,255,255,0.08)`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${sc.r},${sc.g},${sc.b},.95)`;
+      ctx.lineWidth = 6;
       ctx.stroke();
 
       if (!items || items.length === 0) {
@@ -328,11 +319,32 @@
         ctx.arc(CX, CY, R, start, end);
         ctx.closePath();
 
-        // Alternating broadcast palette derived only from the configured
-        // accent and background. This stays generic while remaining lively.
-        const tone = i % 2 === 0 ? mixRgb(sc, ac, .18) : mixRgb(sc, ac, .62);
-        ctx.fillStyle = `rgba(${tone.r},${tone.g},${tone.b},${op.toFixed(2)})`;
+        // Three-tone rhythm feels more like a broadcast graphic than the old
+        // two-colour alternating wheel, while staying fully theme-driven.
+        const amount = [.16, .46, .76][i % 3];
+        const innerTone = mixRgb(sc, ac, amount * .55);
+        const outerTone = mixRgb(sc, ac, amount);
+        const sectorGradient = ctx.createRadialGradient(CX, CY, R * .12, CX, CY, R);
+        sectorGradient.addColorStop(0, `rgba(${innerTone.r},${innerTone.g},${innerTone.b},${op.toFixed(2)})`);
+        sectorGradient.addColorStop(1, `rgba(${outerTone.r},${outerTone.g},${outerTone.b},${op.toFixed(2)})`);
+        ctx.fillStyle = sectorGradient;
         ctx.fill();
+
+        if (s.id === WINNING_SECTOR_ID && WIN_CELEBRATION > 0) {
+          ctx.save();
+          ctx.shadowColor = `rgba(${acL.r},${acL.g},${acL.b},${(.55 + WIN_CELEBRATION * .4).toFixed(2)})`;
+          ctx.shadowBlur = 30 + WIN_CELEBRATION * 62;
+          ctx.beginPath();
+          ctx.moveTo(CX, CY);
+          ctx.arc(CX, CY, R - 3, start, end);
+          ctx.closePath();
+          ctx.fillStyle = `rgba(${acL.r},${acL.g},${acL.b},${(.22 + WIN_CELEBRATION * .46).toFixed(2)})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(${acL.r},${acL.g},${acL.b},${(.65 + WIN_CELEBRATION * .35).toFixed(2)})`;
+          ctx.lineWidth = 12;
+          ctx.stroke();
+          ctx.restore();
+        }
 
         // Glass highlight: bright edge along the outer arc of each segment
         const highlightR = R * 0.92;
@@ -362,28 +374,33 @@
 
         // ── Text ──
         const mid = start + arcAngle / 2;
-        const rText = R * 0.66;
+        const rText = R * 0.61;
         const rawLabel = String(s.label || "");
-        const fontPx = fitFontForArc(ctx, rawLabel, rText, arcAngle, 36, 10);
-        ctx.font = `800 ${fontPx}px system-ui, sans-serif`;
-        const maxLen = rText * arcAngle * 0.85;
-        const label = ellipsize(ctx, rawLabel, maxLen);
+        const maxTextWidth = R * .48;
+        const maxTextHeight = Math.max(20, rText * arcAngle * .72);
+        const fitted = fitWrappedWheelLabel(ctx, rawLabel, maxTextWidth, maxTextHeight);
+        ctx.font = `800 ${fitted.size}px system-ui, sans-serif`;
 
         const tx = CX + Math.cos(mid) * rText;
         const ty = CY + Math.sin(mid) * rText;
         ctx.save();
         ctx.translate(tx, ty);
-        ctx.rotate(mid + Math.PI / 2);
+        let textRotation = mid;
+        if (Math.cos(textRotation) < 0) textRotation += Math.PI;
+        ctx.rotate(textRotation);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.lineWidth = Math.max(3, Math.round(fontPx * 0.12));
+        ctx.lineWidth = Math.max(2, Math.round(fitted.size * 0.11));
         ctx.strokeStyle = "rgba(0,0,0,0.72)";
         ctx.fillStyle = "#ffffff";
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 4;
-        ctx.strokeText(label, 0, 0);
-        ctx.shadowBlur = 0;
-        ctx.fillText(label, 0, 0);
+        const firstY = -((fitted.lines.length - 1) * fitted.lineHeight) / 2;
+        fitted.lines.forEach((line, lineIndex) => {
+          const y = firstY + lineIndex * fitted.lineHeight;
+          ctx.strokeText(line, 0, y);
+          ctx.fillText(line, 0, y);
+        });
         ctx.restore();
       }
 
@@ -393,76 +410,86 @@
         ctx.beginPath();
         ctx.moveTo(CX, CY);
         ctx.lineTo(CX + Math.cos(a) * R, CY + Math.sin(a) * R);
-        ctx.strokeStyle = "rgba(255,255,255,0.15)";
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(${sc.r},${sc.g},${sc.b},.78)`;
+        ctx.lineWidth = 5;
         ctx.stroke();
       }
 
-      // ── Bright accent pegs on the dark rim ──
+      // Short boundary marks replace the old glowing dots.
       for (let i = 0; i < sectors.length; i++) {
         const a = angle + sectors[i].start;
-        const px = CX + Math.cos(a) * rimMid;
-        const py = CY + Math.sin(a) * rimMid;
-
-        ctx.save();
-        ctx.shadowColor = `rgba(${acL.r},${acL.g},${acL.b},0.7)`;
-        ctx.shadowBlur = 8;
+        const x1 = CX + Math.cos(a) * (R + 5);
+        const y1 = CY + Math.sin(a) * (R + 5);
+        const x2 = CX + Math.cos(a) * (rimOuter - 5);
+        const y2 = CY + Math.sin(a) * (rimOuter - 5);
         ctx.beginPath();
-        ctx.arc(px, py, 5, 0, TAU);
-        ctx.fillStyle = ACCENT_COLOR;
-        ctx.fill();
-        ctx.restore();
-
-        // Bright highlight center
-        ctx.beginPath();
-        ctx.arc(px, py, 2.5, 0, TAU);
-        ctx.fillStyle = `rgba(${acL.r},${acL.g},${acL.b},0.9)`;
-        ctx.fill();
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        ctx.strokeStyle = `rgba(${acL.r},${acL.g},${acL.b},.92)`;
+        ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.stroke();
       }
 
-      // ── Center hub: small frosted circle ──
-      const hubR = 32;
+      // Oversized branded hub gives the new wheel a distinct silhouette.
+      const hubR = 54;
       ctx.save();
-      ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.35)`;
-      ctx.shadowBlur = 10;
+      ctx.shadowColor = "rgba(0,0,0,.55)";
+      ctx.shadowBlur = 18;
       ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, TAU);
-      ctx.fillStyle = `rgba(${sc.r},${sc.g},${sc.b},${Math.min(1, op + 0.05).toFixed(2)})`;
+      ctx.fillStyle = `rgb(${sc.r},${sc.g},${sc.b})`;
       ctx.fill();
       ctx.restore();
-
-      // Hub glass highlight
       ctx.beginPath(); ctx.arc(CX, CY, hubR, 0, TAU);
-      ctx.strokeStyle = `rgba(255,255,255,0.12)`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = ACCENT_COLOR;
+      ctx.lineWidth = 9;
       ctx.stroke();
-
-      // Accent dot
-      ctx.beginPath(); ctx.arc(CX, CY, 9, 0, TAU);
-      ctx.fillStyle = ACCENT_COLOR; ctx.fill();
+      ctx.beginPath(); ctx.arc(CX, CY, 12, 0, TAU);
+      ctx.fillStyle = `rgb(${acL.r},${acL.g},${acL.b})`; ctx.fill();
 
       // ── Pointer ──
       drawPointer(ac, rimOuter);
     }
 
     function drawPointer(ac, rimOuter) {
-      // The narrow tip must point into the wheel. Keeping the wide base outside
-      // makes the selected sector unambiguous even on narrow slices.
-      const ptrTip = CY - R + 14;
-      const ptrBase = CY - rimOuter - 8;
+      const ptrTip = CY - R + 24;
+      const ptrTop = CY - rimOuter - 24;
       ctx.save();
-      ctx.shadowColor = `rgba(${ac.r},${ac.g},${ac.b},0.5)`;
-      ctx.shadowBlur = 12;
+      ctx.shadowColor = "rgba(0,0,0,.52)";
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 7;
       ctx.fillStyle = ACCENT_COLOR;
       ctx.beginPath();
       ctx.moveTo(CX, ptrTip);
-      ctx.lineTo(CX - 16, ptrBase);
-      ctx.lineTo(CX + 16, ptrBase);
+      ctx.lineTo(CX - 27, ptrTop);
+      ctx.lineTo(CX, ptrTop + 10);
+      ctx.lineTo(CX + 27, ptrTop);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${ac.r},${ac.g},${ac.b},.95)`;
+      ctx.lineWidth = 4;
       ctx.stroke();
       ctx.restore();
+    }
+
+    function celebrateWinningSector(sectorId) {
+      const run = ++winCelebrationRun;
+      WINNING_SECTOR_ID = sectorId;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const duration = reducedMotion ? 500 : 2200;
+      const startedAt = performance.now();
+      function celebrationFrame(now) {
+        if (run !== winCelebrationRun) return;
+        const progress = Math.min(1, (now - startedAt) / duration);
+        WIN_CELEBRATION = reducedMotion
+          ? 1 - progress
+          : Math.pow(1 - progress, .65) * (.58 + .42 * Math.abs(Math.sin(progress * Math.PI * 4)));
+        drawWheel(rotation);
+        if (progress < 1) requestAnimationFrame(celebrationFrame);
+        else {
+          WIN_CELEBRATION = 0;
+          WINNING_SECTOR_ID = null;
+          drawWheel(rotation);
+        }
+      }
+      requestAnimationFrame(celebrationFrame);
     }
 
     function getNormalizedWeights(){ return getNormalizedWeightsFrom(ITEMS); }
@@ -592,6 +619,31 @@
         src.stop(t + 0.015);
       } catch {}
     }
+
+    function playWinChime() {
+      try {
+        if (SND_URL) return;
+        const ctx = ensureAudioCtx();
+        if (!ctx || ctx.state !== "running") return;
+        const startedAt = ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99];
+        notes.forEach((frequency, index) => {
+          const start = startedAt + index * .115;
+          const oscillator = ctx.createOscillator();
+          const gain = ctx.createGain();
+          oscillator.type = index === 2 ? "triangle" : "sine";
+          oscillator.frequency.setValueAtTime(frequency, start);
+          oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.012, start + .34);
+          gain.gain.setValueAtTime(.001, start);
+          gain.gain.exponentialRampToValueAtTime(index === 2 ? .2 : .14, start + .018);
+          gain.gain.exponentialRampToValueAtTime(.001, start + .46);
+          oscillator.connect(gain);
+          gain.connect(ctx.destination);
+          oscillator.start(start);
+          oscillator.stop(start + .48);
+        });
+      } catch {}
+    }
     let lastTickSegment = -1;
 
     async function spinToId(pickedId){
@@ -645,6 +697,8 @@
             drawWheel(rotation);
             const winIdx = sectorUnderPointer(rotation, sectors);
             const winSec = sectors[winIdx];
+            playWinChime();
+            celebrateWinningSector(winSec.id);
             const bonus = !!winSec.bonus;
             lastIndex = pickedIdx;
             setTimeout(()=>{ ACTIVE_SNAPSHOT = null; }, 0);

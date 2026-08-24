@@ -62,6 +62,8 @@ router.get("/overlay/:key/counter", resolveOverlayKey, (req, res) => {
     goal: cfg?.manual_goal ?? 0,
     label: cfg?.manual_label ?? "",
     accent_color: cfg?.accent_color ?? "#7c3aed",
+    secondary_color: cfg?.secondary_color ?? "#121228",
+    opacity: cfg?.wheel_opacity ?? 0.9,
   });
 });
 
@@ -432,6 +434,8 @@ router.get("/dashboard/counter", requireSession, (req, res) => {
     goal: cfg?.manual_goal ?? 0,
     label: cfg?.manual_label ?? "",
     accent_color: cfg?.accent_color ?? "#7c3aed",
+    secondary_color: cfg?.secondary_color ?? "#121228",
+    opacity: cfg?.wheel_opacity ?? 0.9,
   });
 });
 

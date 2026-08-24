@@ -29,7 +29,7 @@ describe("normalizeItemsInt100", () => {
     for (const items of cases) {
       const result = normalizeItemsInt100(items);
       const sum = result.reduce((s, it) => s + it.weight, 0);
-      expect(sum).toBe(100);
+      expect(sum).toBeCloseTo(100, 10);
     }
   });
 
@@ -53,7 +53,7 @@ describe("normalizeItemsInt100", () => {
     ]);
     expect(result).toHaveLength(4);
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
+    expect(sum).toBeCloseTo(100, 10);
     // Each should be 25
     result.forEach((it) => expect(it.weight).toBe(25));
   });
@@ -66,11 +66,10 @@ describe("normalizeItemsInt100", () => {
     ]);
     expect(result).toHaveLength(3);
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
-    // 100 / 3 = 33 remainder 1, so first item gets 34
-    expect(result[0].weight).toBe(34);
-    expect(result[1].weight).toBe(33);
-    expect(result[2].weight).toBe(33);
+    expect(sum).toBeCloseTo(100, 10);
+    expect(result[0].weight).toBe(33.4);
+    expect(result[1].weight).toBe(33.3);
+    expect(result[2].weight).toBe(33.3);
   });
 
   // ── Negative weights treated as zero ──────────────────────────────
@@ -82,7 +81,7 @@ describe("normalizeItemsInt100", () => {
     ]);
     // Both are effectively zero → equal distribution
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
+    expect(sum).toBeCloseTo(100, 10);
     expect(result[0].weight).toBe(50);
     expect(result[1].weight).toBe(50);
   });
@@ -96,24 +95,21 @@ describe("normalizeItemsInt100", () => {
       { label: "C", weight: undefined },
     ]);
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
+    expect(sum).toBeCloseTo(100, 10);
   });
 
-  // ── Every item gets at least weight 1 ─────────────────────────────
+  // ── Explicit 0% entries remain disabled ───────────────────────────
 
-  it("ensures minimum weight of 1 for every item", () => {
+  it("preserves disabled entries at 0%", () => {
     const items = [
       { label: "Big", weight: 9999 },
-      { label: "Tiny1", weight: 1 },
-      { label: "Tiny2", weight: 1 },
-      { label: "Tiny3", weight: 1 },
+      { label: "Disabled", weight: 0 },
     ];
     const result = normalizeItemsInt100(items);
-    result.forEach((it) => {
-      expect(it.weight).toBeGreaterThanOrEqual(1);
-    });
+    expect(result[0].weight).toBe(100);
+    expect(result[1].weight).toBe(0);
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
+    expect(sum).toBeCloseTo(100, 10);
   });
 
   // ── Proportions roughly preserved ─────────────────────────────────
@@ -196,8 +192,8 @@ describe("normalizeItemsInt100", () => {
     const result = normalizeItemsInt100(items);
     expect(result).toHaveLength(50);
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
-    result.forEach((it) => expect(it.weight).toBeGreaterThanOrEqual(1));
+    expect(sum).toBeCloseTo(100, 10);
+    result.forEach((it) => expect(it.weight).toBeGreaterThanOrEqual(0));
   });
 
   it("handles 100 items (each gets at least 1)", () => {
@@ -208,7 +204,7 @@ describe("normalizeItemsInt100", () => {
     const result = normalizeItemsInt100(items);
     expect(result).toHaveLength(100);
     const sum = result.reduce((s, it) => s + it.weight, 0);
-    expect(sum).toBe(100);
+    expect(sum).toBeCloseTo(100, 10);
     result.forEach((it) => expect(it.weight).toBe(1));
   });
 

@@ -1,4 +1,4 @@
-const state = { status: null, items: [], counter: { count: 0, goal: 0, label: "" } };
+const state = { status: null, items: [], counter: { count: 0, goal: 0, label: "" }, theme: { accent: "#7c3aed", background: "#121228", opacity: 0.9 } };
 const q = (s) => document.querySelector(s);
 const qa = (s) => [...document.querySelectorAll(s)];
 const errorBox = q("#globalError");
@@ -55,9 +55,26 @@ function renderItems() {
     weight.type = "number";
     weight.min = "0";
     weight.max = "100";
+    weight.step = "0.1";
     weight.value = String(item.weight ?? 1);
-    weight.setAttribute("aria-label", `Waga pozycji ${index + 1}`);
-    weight.addEventListener("input", () => item.weight = Number(weight.value) || 0);
+    weight.setAttribute("aria-label", `Szansa pozycji ${index + 1} w procentach`);
+    weight.addEventListener("input", () => {
+      item.weight = Math.max(0, Math.min(100, Number(weight.value) || 0));
+      renderChanceSummary();
+      q("#wheelSaveState").textContent = "Zmiany niezapisane";
+    });
+    const boost = document.createElement("button");
+    boost.type = "button";
+    boost.className = `boost-toggle${item.boosted ? " is-active" : ""}`;
+    boost.textContent = "★";
+    boost.setAttribute("aria-label", `${item.boosted ? "Usuń wyróżnienie pozycji" : "Wyróżnij pozycję"} ${index + 1}`);
+    boost.setAttribute("aria-pressed", String(Boolean(item.boosted)));
+    boost.title = item.boosted ? "Ta nagroda ma większą szansę" : "Nadaj tej nagrodzie większą szansę";
+    boost.addEventListener("click", () => {
+      item.boosted = !item.boosted;
+      renderItems();
+      q("#wheelSaveState").textContent = "Wybierz przewagę i rozdziel szanse";
+    });
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "\xD7";
@@ -67,24 +84,70 @@ function renderItems() {
       renderItems();
       renderWheelPreview();
     });
-    row.append(label, weight, remove);
+    row.append(boost, label, weight, remove);
     box.append(row);
   });
   renderWheelPreview();
 }
 function renderWheelPreview() {
   q("#wheelOpacityValue").value = `${Math.round(Number(q("#wheelOpacity").value) * 100)}%`;
+  renderChanceSummary();
+}
+function chanceTotal() {
+  return Math.round(state.items.reduce((sum, item) => sum + Math.max(0, Number(item.weight) || 0), 0) * 10) / 10;
+}
+function renderChanceSummary() {
+  const total = chanceTotal();
+  const valid = Math.abs(total - 100) < 0.05 && state.items.some((item) => Number(item.weight) > 0);
+  const output = q("#chanceTotal");
+  output.textContent = `${total.toFixed(1).replace(".0", "")}% / 100%`;
+  output.classList.toggle("is-valid", valid);
+  output.classList.toggle("is-invalid", !valid);
+  q("#saveWheel").disabled = !valid;
+  q("#boostCount").textContent = String(state.items.filter((item) => item.boosted).length);
 }
 q("#addWheelItem").addEventListener("click", () => {
   if (state.items.length >= 100) return notify("Maksymalnie 100 pozycji.", true);
-  state.items.push({ label: `Nagroda ${state.items.length + 1}`, weight: 1, bonus: false });
+  state.items.push({ label: `Nagroda ${state.items.length + 1}`, weight: 0, bonus: false });
   renderItems();
+});
+q("#equalizeChances").addEventListener("click", () => {
+  if (!state.items.length) return;
+  const baseUnits = Math.floor(1000 / state.items.length);
+  let remaining = 1000 - baseUnits * state.items.length;
+  state.items.forEach((item) => {
+    item.weight = (baseUnits + (remaining-- > 0 ? 1 : 0)) / 10;
+    item.boosted = false;
+  });
+  renderItems();
+  q("#wheelSaveState").textContent = "Zmiany niezapisane";
+});
+q("#distributeChances").addEventListener("click", () => {
+  if (!state.items.length) return;
+  const boosted = state.items.filter((item) => item.boosted).length;
+  if (!boosted) return notify("Najpierw oznacz gwiazdką co najmniej jedną nagrodę.", true);
+  if (boosted === state.items.length) return notify("Zostaw co najmniej jedną nagrodę bez wyróżnienia.", true);
+  const multiplier = Number(q("#boostStrength").value) || 2;
+  const factors = state.items.map((item) => item.boosted ? multiplier : 1);
+  const factorTotal = factors.reduce((sum, factor) => sum + factor, 0);
+  const exactUnits = factors.map((factor) => factor / factorTotal * 1000);
+  const units = exactUnits.map(Math.floor);
+  let remaining = 1000 - units.reduce((sum, value) => sum + value, 0);
+  exactUnits
+    .map((value, index) => ({ index, remainder: value - units[index] }))
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index)
+    .forEach(({ index }) => { if (remaining-- > 0) units[index] += 1; });
+  state.items.forEach((item, index) => { item.weight = units[index] / 10; });
+  renderItems();
+  q("#wheelSaveState").textContent = "Zmiany niezapisane";
 });
 q("#wheelForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (state.items.length < 2) return notify("Dodaj co najmniej dwie pozycje.", true);
+  if (Math.abs(chanceTotal() - 100) >= 0.05) return notify("Suma szans musi wynosić dokładnie 100%.", true);
   try {
-    const data = await api("/dashboard/config", { method: "POST", body: JSON.stringify({ items: state.items, accent_color: q("#accentColor").value, secondary_color: q("#secondaryColor").value, wheel_opacity: Number(q("#wheelOpacity").value), gifts_per_spin: 5 }) });
+    const items = state.items.map(({ label, weight, bonus }) => ({ label, weight, bonus }));
+    const data = await api("/dashboard/config", { method: "POST", body: JSON.stringify({ items, accent_color: q("#accentColor").value, secondary_color: q("#secondaryColor").value, wheel_opacity: Number(q("#wheelOpacity").value), gifts_per_spin: 5 }) });
     state.items = data.items;
     q("#wheelSaveState").textContent = "Zapisano";
     updateReadiness();
@@ -108,15 +171,20 @@ q("#testWheel").addEventListener("click", async () => {
     renderWheelPreview();
   });
 });
+function postCounterPreview() {
+  const { count, goal, label } = state.counter;
+  q("#counterPreview")?.contentWindow?.postMessage({ type: "counter-preview", count, goal, label, accent_color: state.theme.accent, secondary_color: state.theme.background, opacity: state.theme.opacity }, location.origin);
+}
 function renderCounter() {
   const { count, goal, label } = state.counter;
   q("#counterLabel").value = label;
   q("#counterValue").value = String(count);
   q("#counterGoal").value = String(goal);
-  q("#counterPreviewLabel").textContent = (label || "COUNTER").toUpperCase();
-  q("#counterPreviewValue").textContent = String(count);
-  q("#counterPreviewGoal").textContent = goal > 0 ? `/ ${goal}` : "";
-  q("#counterProgress").style.width = goal > 0 ? `${Math.min(100, count / goal * 100)}%` : "0%";
+  q("#counterAccent").value = state.theme.accent;
+  q("#counterBackground").value = state.theme.background;
+  q("#counterOpacity").value = String(state.theme.opacity);
+  q("#counterOpacityValue").value = `${Math.round(state.theme.opacity * 100)}%`;
+  postCounterPreview();
   q("#overviewCount").textContent = String(count);
   q("#overviewGoal").textContent = goal > 0 ? `z ${goal}` : "bez celu";
 }
@@ -134,9 +202,24 @@ async function saveCounter(delta = null) {
 }
 q("#counterForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  saveCounter().catch((error) => notify(error.message, true));
+  const items = state.items.map(({ label, weight, bonus }) => ({ label, weight, bonus }));
+  api("/dashboard/config", { method: "POST", body: JSON.stringify({ items, accent_color: state.theme.accent, secondary_color: state.theme.background, wheel_opacity: state.theme.opacity, gifts_per_spin: 5 }) })
+    .then(() => saveCounter())
+    .catch((error) => notify(error.message, true));
 });
 qa("[data-counter-delta]").forEach((button) => button.addEventListener("click", () => saveCounter(Number(button.dataset.counterDelta)).catch((error) => notify(error.message, true))));
+["#counterLabel", "#counterValue", "#counterGoal"].forEach((selector) => q(selector).addEventListener("input", () => {
+  state.counter = { label: q("#counterLabel").value, count: Number(q("#counterValue").value) || 0, goal: Number(q("#counterGoal").value) || 0 };
+  postCounterPreview();
+}));
+["#counterAccent", "#counterBackground", "#counterOpacity"].forEach((selector) => q(selector).addEventListener("input", () => {
+  state.theme = { accent: q("#counterAccent").value, background: q("#counterBackground").value, opacity: Number(q("#counterOpacity").value) };
+  q("#accentColor").value = state.theme.accent;
+  q("#secondaryColor").value = state.theme.background;
+  q("#wheelOpacity").value = String(state.theme.opacity);
+  q("#counterOpacityValue").value = `${Math.round(state.theme.opacity * 100)}%`;
+  postCounterPreview();
+}));
 qa("[data-copy]").forEach((button) => button.addEventListener("click", async () => {
   const value = q(`#${button.dataset.copy}`).textContent;
   try {
@@ -171,6 +254,7 @@ async function load() {
     state.status = status;
     state.items = Array.isArray(config.items) ? config.items : [];
     state.counter = { count: counter.count || 0, goal: counter.goal || 0, label: counter.label || "" };
+    state.theme = { accent: config.accent_color || "#7c3aed", background: config.secondary_color || "#121228", opacity: Number(config.wheel_opacity ?? 0.9) };
     const name = status.display_name || status.kick_username || "Streamer";
     const username = status.kick_username ? `@${status.kick_username}` : "Kick account";
     ["#displayName", "#accountName"].forEach((id) => q(id).textContent = name);
@@ -187,6 +271,7 @@ async function load() {
     q("#wheelOpen").href = wheelUrl;
     q("#counterOpen").href = counterUrl;
     q("#wheelPreview").src = `${wheelUrl}?preview=1`;
+    q("#counterPreview").src = `${counterUrl}?preview=1`;
     renderItems();
     renderCounter();
     updateReadiness();

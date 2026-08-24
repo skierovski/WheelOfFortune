@@ -14,7 +14,6 @@ const inProgress = new Map();
 // In-memory tier queue per streamer: Map<broadcasterId, string[]>
 // Stores the tier name for each pending spin so we deliver the right tier
 const tierQueues = new Map();
-const lastPickedByStreamer = new Map();
 
 // ── Internal helpers ────────────────────────────────────────────────
 
@@ -51,19 +50,18 @@ function broadcast(broadcasterId, msg) {
   return broadcastFn(broadcasterId, msg) || 0;
 }
 
-export function selectPrize(items, previousId = null, randomInt = crypto.randomInt) {
+export function selectPrize(items, randomInt = crypto.randomInt) {
   const eligible = (Array.isArray(items) ? items : []).filter((item) => item?.id && Number(item.weight) > 0);
   if (!eligible.length) return null;
-  const pool = eligible.length > 1 && previousId
-    ? eligible.filter((item) => String(item.id) !== String(previousId))
-    : eligible;
-  const total = pool.reduce((sum, item) => sum + Math.max(1, Math.round(Number(item.weight))), 0);
+  const units = eligible.map((item) => Math.max(0, Math.round(Number(item.weight) * 10)));
+  const total = units.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return null;
   let cursor = randomInt(total);
-  for (const item of pool) {
-    cursor -= Math.max(1, Math.round(Number(item.weight)));
-    if (cursor < 0) return item;
+  for (let index = 0; index < eligible.length; index++) {
+    cursor -= units[index];
+    if (cursor < 0) return eligible[index];
   }
-  return pool[pool.length - 1];
+  return eligible[eligible.length - 1];
 }
 
 function buildSpinMessage(broadcasterId, tierName) {
@@ -72,8 +70,7 @@ function buildSpinMessage(broadcasterId, tierName) {
     ? config.tiers.find((candidate) => candidate.name === tierName)
     : null;
   const items = tier?.items?.length ? tier.items : config?.items;
-  const picked = selectPrize(items, lastPickedByStreamer.get(broadcasterId));
-  if (picked) lastPickedByStreamer.set(broadcasterId, String(picked.id));
+  const picked = selectPrize(items);
   const msg = { action: "spin", times: 1 };
   if (tierName) msg.tier = tierName;
   if (picked) {
