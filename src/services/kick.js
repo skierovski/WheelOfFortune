@@ -134,8 +134,12 @@ export async function fetchChannelInfo(broadcasterId) {
   const j = await r.json();
   const ch = Array.isArray(j?.data) ? j.data[0] : j?.data;
   if (!ch) throw new Error("No channel data returned");
+  if (!Number.isSafeInteger(ch.active_subscribers_count) || ch.active_subscribers_count < 0) {
+    throw new Error("Kick returned no valid active subscriber total");
+  }
   return {
-    active_subscribers_count: Number(ch.active_subscribers_count ?? 0),
+    active_subscribers_count: ch.active_subscribers_count,
+    active_gifted_subscribers_count: Number.isSafeInteger(ch.active_gifted_subscribers_count) && ch.active_gifted_subscribers_count >= 0 ? ch.active_gifted_subscribers_count : null,
     canceled_subscribers_count: Number(ch.canceled_subscribers_count ?? 0),
     slug: ch.slug ?? null,
     stream_title: ch.stream_title ?? null,

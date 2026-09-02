@@ -737,7 +737,7 @@
         sc_save: "Save settings", sc_saved: "Sub counter saved.", sc_save_err: "Save error: ",
         sc_url_info: "Sub counter overlay URL (copy to OBS):", sc_url_note: "OBS size: ~340×70px. Background: transparent.",
         urls_subs: "Sub counter overlay:",
-        sc_est_label: "Estimated active subscribers",
+        sc_est_label: "Active subscribers (including gifts) · Kick",
         sc_image_label: "Counter image", sc_upload: "Upload", sc_image_hint: "PNG/JPG/WEBP/GIF, max 1.5MB.",
         sc_calibrated: "Seed calibrated.",
         mc_title: "Counter", mc_desc: "Overlay: current / goal. Manual +1 raises current. Subs/gifts raise the goal (5 gifts = +5).",
@@ -817,7 +817,7 @@
         sc_save: "Zapisz ustawienia", sc_saved: "Licznik zapisany.", sc_save_err: "Blad zapisu: ",
         sc_url_info: "URL overlaya licznika subow (skopiuj do OBS):", sc_url_note: "Wymiary OBS: ~340x70px. Tlo: przezroczyste.",
         urls_subs: "Overlay licznika subow:",
-        sc_est_label: "Szacowana liczba aktywnych subow",
+        sc_est_label: "Aktywne suby (w tym gifty) · Kick",
         sc_image_label: "Obrazek przy liczniku", sc_upload: "Upload", sc_image_hint: "PNG/JPG/WEBP/GIF, max 1.5MB.",
         sc_calibrated: "Seed ustawiony.",
         urls_counter: "Overlay licznika:",
@@ -1652,7 +1652,8 @@
       if (Object.prototype.hasOwnProperty.call(j, "sub_counter_image_url")) {
         applyScImage(j.sub_counter_image_url);
       }
-      el("scLiveCount").textContent = j.estimated_subscribers_count == null ? "–" : j.estimated_subscribers_count;
+      if (Number.isFinite(j.active_subscribers_count)) el("scLiveCount").textContent = j.active_subscribers_count;
+      el("scLiveCount").title = j.stale ? "Dane nieaktualne — oczekiwanie na Kick" : "Liczba aktywnych subów z Kicka, razem z giftami";
       updateSubsUrl();
     }
 

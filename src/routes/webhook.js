@@ -167,6 +167,7 @@ router.post("/webhook", bodyParser.raw({ type: "*/*", limit: "2mb" }), (req, res
       console.log(`[WEBHOOK] Sub ${type} bid=${broadcasterId} from=${subName} -> 1 slots spin`);
       slots.deliverOrQueue(broadcasterId, 1);
       bumpManualCounter(broadcasterId, 1, req.app?.locals?.wss);
+      req.app?.locals?.wss?.broadcastTo?.(broadcasterId, { type: "subs" });
     } else if (type === "chat.message.sent") {
       const broadcasterId = Number(payload?.broadcaster?.user_id || 0);
       const content = payload?.content || "";

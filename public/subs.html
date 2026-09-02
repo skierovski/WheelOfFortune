@@ -19,7 +19,7 @@
       padding: 8px 12px;
       border-radius: 10px;
       color: var(--text);
-      font-family: "Segoe UI", system-ui, sans-serif;
+      font-family: Arial, Helvetica, sans-serif;
     }
     .row {
       display:flex;
@@ -35,8 +35,8 @@
     .icon.show { display:block; }
     .count {
       font-size:38px;
-      font-weight:800;
-      letter-spacing: .2px;
+      font-weight:700;
+      letter-spacing: 0;
       font-variant-numeric: tabular-nums;
       color:#e8edf7;
       text-shadow: 0 1px 2px rgba(0,0,0,.35);
@@ -62,7 +62,7 @@
   <div id="subsOverlay" class="subs-overlay">
     <div class="row">
       <img id="counterIcon" class="icon" alt="">
-      <div id="countText" class="count">0</div>
+      <div id="countText" class="count">–</div>
     </div>
     <div id="subLabel" class="label">Na co</div>
   </div>
@@ -91,7 +91,7 @@
       }
       if (typeof cfg.sub_counter_image_url === "string" && cfg.sub_counter_image_url.trim()) {
         iconUrl = cfg.sub_counter_image_url.trim();
-      } else {
+      } else if (Object.prototype.hasOwnProperty.call(cfg, "sub_counter_image_url")) {
         iconUrl = null;
       }
       if (iconUrl) {
@@ -119,18 +119,22 @@
     function applySubsPayload(payload) {
       if (!payload) return;
       applyConfig(payload);
-      if (Number.isFinite(payload.estimated_subscribers_count)) {
-        renderCount(payload.estimated_subscribers_count);
+      if (Number.isFinite(payload.active_subscribers_count)) {
+        renderCount(payload.active_subscribers_count);
       }
     }
 
+    let refreshing = false;
+    let eventRefreshTimer = null;
     async function refresh() {
       if (!API_BASE) return;
+      if (refreshing) return;
+      refreshing = true;
       try {
         const r = await fetch(`${API_BASE}/subs`, { cache: "no-store" });
         const j = await r.json().catch(() => null);
         if (j) applySubsPayload(j);
-      } catch {}
+      } catch {} finally { refreshing = false; }
     }
 
     (async () => {
@@ -158,6 +162,14 @@
             const data = JSON.parse(evt.data);
             if (data.type === "config" || data.type === "subs") {
               applySubsPayload(data);
+              if (lastValue !== null) renderCount(lastValue);
+              if (data.type === "subs") {
+                // Debounce bursts; allow Kick time to update its authoritative total.
+                if (!eventRefreshTimer) eventRefreshTimer = setTimeout(() => {
+                  eventRefreshTimer = null;
+                  refresh();
+                }, 12000);
+              }
             }
           } catch {}
         };

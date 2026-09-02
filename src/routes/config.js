@@ -3,12 +3,10 @@ import { requireSession, resolveOverlayKey } from "../middleware/requireSession.
 import { loadConfig, saveConfig, loadGoals, saveGoals } from "../services/configStore.js";
 import { validateWheelItems, validateTiers, validateGiftsPerSpin, validateAccentColor, validateSecondaryColor, validateWheelOpacity } from "../utils/validate.js";
 import { getOverlayAuthStatus } from "../services/authStatus.js";
-import { fetchChannelInfo } from "../services/kick.js";
+import { readSubscriberCount, subscriberPayload } from "../services/subscriberCount.js";
 import {
   getActiveTrackedGiftCount,
   getGiftTrackerStats,
-  computeEstimatedSubCount,
-  computeSeedOffset,
 } from "../services/giftTracker.js";
 import { getDb } from "../db.js";
 
@@ -71,37 +69,15 @@ router.get("/overlay/:key/counter", resolveOverlayKey, (req, res) => {
 router.get("/overlay/:key/subs", resolveOverlayKey, async (req, res) => {
   const bid = req.streamer.broadcaster_id;
   const cfg = loadConfig(bid);
-  const activeTracked = getActiveTrackedGiftCount(bid);
-  const seed = cfg?.sub_seed_offset ?? 0;
-  const imageUrl = resolveSubCounterImageUrl(req.streamer, cfg);
-  try {
-    const info = await fetchChannelInfo(bid);
-    const apiCount = info.active_subscribers_count;
-    const estimated = computeEstimatedSubCount(apiCount, seed, activeTracked);
-    res.json({
-      ok: true,
-      active_subscribers_count: apiCount,
-      active_tracked_gifts: activeTracked,
-      sub_seed_offset: seed,
-      estimated_subscribers_count: estimated,
-      sub_goal: cfg?.sub_goal ?? 0,
-      sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
-      sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
-      sub_counter_image_url: imageUrl,
-    });
-  } catch (e) {
-    console.warn(`[/overlay/subs] bid=${bid} error:`, e?.message || e);
-    // Fallback: still return tracked+seed if Kick API fails
-    const estimated = computeEstimatedSubCount(0, seed, activeTracked);
-    res.status(502).json({
-      ok: false,
-      error: "Failed to fetch subscriber count from Kick",
-      active_tracked_gifts: activeTracked,
-      sub_seed_offset: seed,
-      estimated_subscribers_count: estimated,
-      sub_counter_image_url: imageUrl,
-    });
-  }
+  const snapshot = await readSubscriberCount(bid);
+  res.json({
+    ok: true,
+    ...subscriberPayload(snapshot),
+    sub_goal: cfg?.sub_goal ?? 0,
+    sub_counter_title: cfg?.sub_counter_title ?? "Subskrybenci",
+    sub_counter_label: cfg?.sub_counter_label ?? "aktywne subskrypcje",
+    sub_counter_image_url: resolveSubCounterImageUrl(req.streamer, cfg),
+  });
 });
 
 // Serve persisted sub-counter image from SQLite (survives Render restarts)
@@ -224,17 +200,10 @@ router.get("/dashboard/sub-counter", requireSession, async (req, res) => {
   const bid = req.session.broadcaster_user_id;
   const cfg = loadConfig(bid);
   const stats = getGiftTrackerStats(bid);
-  let apiCount = null;
-  try {
-    const info = await fetchChannelInfo(bid);
-    apiCount = info.active_subscribers_count;
-  } catch (e) {
-    console.warn(`[/dashboard/sub-counter] Kick API error bid=${bid}:`, e?.message || e);
-  }
-  const seed = cfg?.sub_seed_offset ?? 0;
-  const estimated = apiCount == null
-    ? null
-    : computeEstimatedSubCount(apiCount, seed, stats.active_tracked);
+  const snapshot = await readSubscriberCount(bid);
+  const apiCount = snapshot.active_subscribers_count;
+  const seed = 0;
+  const estimated = apiCount;
 
   res.json({
     ok: true,
@@ -251,6 +220,7 @@ router.get("/dashboard/sub-counter", requireSession, async (req, res) => {
     total_tracked_ever: stats.total_tracked_ever,
     estimated_subscribers_count: estimated,
     recent_gifts: stats.recent,
+    ...subscriberPayload(snapshot),
   });
 });
 
@@ -264,23 +234,8 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
   const sub_counter_image_url = typeof req.body?.sub_counter_image_url === "string"
     ? req.body.sub_counter_image_url.slice(0, 300)
     : (prev?.sub_counter_image_url ?? null);
-  let sub_seed_offset = prev?.sub_seed_offset ?? 0;
-
-  // Calibrate: user enters the real total shown on Kick banner → compute offset
-  if (req.body?.real_total != null && req.body.real_total !== "") {
-    const realTotal = Math.max(0, Math.min(1_000_000, Math.round(Number(req.body.real_total) || 0)));
-    let apiCount = 0;
-    try {
-      const info = await fetchChannelInfo(bid);
-      apiCount = info.active_subscribers_count;
-    } catch (e) {
-      return res.status(502).json({ ok: false, error: "Cannot calibrate without Kick API: " + (e?.message || e) });
-    }
-    const activeTracked = getActiveTrackedGiftCount(bid);
-    sub_seed_offset = computeSeedOffset(realTotal, apiCount, activeTracked);
-  } else if (req.body?.sub_seed_offset != null && req.body.sub_seed_offset !== "") {
-    sub_seed_offset = Math.max(-1_000_000, Math.min(1_000_000, Math.round(Number(req.body.sub_seed_offset) || 0)));
-  }
+  // Legacy calibration is intentionally ignored: Kick already includes gifts.
+  const sub_seed_offset = 0;
 
   const items = prev?.items ?? [];
   const saved = saveConfig(bid, items, {
@@ -297,14 +252,9 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
   });
 
   const activeTracked = getActiveTrackedGiftCount(bid);
-  let apiCount = null;
-  try {
-    const info = await fetchChannelInfo(bid);
-    apiCount = info.active_subscribers_count;
-  } catch {}
-  const estimated = apiCount == null
-    ? null
-    : computeEstimatedSubCount(apiCount, sub_seed_offset, activeTracked);
+  const snapshot = await readSubscriberCount(bid);
+  const apiCount = snapshot.active_subscribers_count;
+  const estimated = apiCount;
 
   try {
     const { app } = req;
@@ -345,6 +295,7 @@ router.post("/dashboard/sub-counter", requireSession, async (req, res) => {
     api_count: apiCount,
     active_tracked_gifts: activeTracked,
     estimated_subscribers_count: estimated,
+    ...subscriberPayload(snapshot),
   });
 });
 
