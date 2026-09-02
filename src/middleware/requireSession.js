@@ -76,9 +76,11 @@ export function resolveOverlayKey(req, res, next) {
  * Does NOT require the user to be a registered streamer.
  */
 export function requireModSession(req, res, next) {
+  const isApi = req.path === "/mod/channels";
   const activeSession = resolveSession(req);
   const kickUserId = activeSession?.broadcaster_id;
   if (!kickUserId) {
+    if (isApi) return res.status(401).json({ ok: false, error: "Zaloguj się przez Kick." });
     const base = `${(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim()}://${(req.headers["x-forwarded-host"] || req.get("host")).split(",")[0].trim()}`;
     const ret = encodeURIComponent(req.originalUrl || "/mod");
     return res.redirect(`${base}/auth/login?ret=${ret}`);
@@ -86,11 +88,9 @@ export function requireModSession(req, res, next) {
 
   const moderatorships = getDb().getModeratorships(kickUserId);
   if (!moderatorships.length) {
-    // Streamers who aren't mods of anyone get sent to their dashboard
-    if (getDb().getStreamerById(kickUserId)) {
-      return res.redirect("/dashboard");
-    }
-    return res.status(403).send("You are not a moderator for any streamer on this app.");
+    if (isApi) return res.status(403).json({ ok: false, error: "Nie masz dostępu do żadnego kanału." });
+    const channel = /^\d+$/.test(String(req.query.channel || "")) ? `&channel=${req.query.channel}` : "";
+    return res.redirect(`/moderator?denied=1${channel}`);
   }
 
   req.mod = { kick_user_id: kickUserId, moderatorships };

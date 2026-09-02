@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/assets/account.css">
   <script src="/assets/dashboard.js" defer></script>
   <script src="/assets/account.js" defer></script>
+  <script src="/assets/team.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#workspace">Przejdź do obszaru roboczego</a>
@@ -21,11 +22,12 @@
         <button type="button" class="nav-item is-active" data-view="overview"><span>01</span>Overview</button>
         <button type="button" class="nav-item" data-view="wheel"><span>02</span>Wheel</button>
         <button type="button" class="nav-item" data-view="counter"><span>03</span>Counter</button>
-        <button type="button" class="nav-item" data-view="obs"><span>04</span>OBS Setup</button>
-        <button type="button" class="nav-item" data-view="account"><span>05</span>Account</button>
+        <button type="button" class="nav-item" data-view="subs"><span>04</span>Aktywne suby</button>
+        <button type="button" class="nav-item" data-view="moderators"><span>05</span>Moderatorzy</button>
+        <button type="button" class="nav-item" data-view="obs"><span>06</span>OBS Setup</button>
+        <button type="button" class="nav-item" data-view="account"><span>07</span>Account</button>
       </nav>
       <div class="sidebar-footer">
-        <a href="/advanced">Advanced settings</a>
         <span class="connection-state"><i aria-hidden="true"></i> Studio online</span>
       </div>
     </aside>
@@ -35,7 +37,7 @@
       <button class="icon-button" id="menuToggle" type="button" aria-expanded="false" aria-controls="mobileNav">Menu</button>
     </header>
     <nav class="mobile-nav" id="mobileNav" aria-label="Nawigacja mobilna" hidden>
-      <button type="button" data-view="overview">Overview</button><button type="button" data-view="wheel">Wheel</button><button type="button" data-view="counter">Counter</button><button type="button" data-view="obs">OBS Setup</button><button type="button" data-view="account">Account</button><a href="/advanced">Advanced</a>
+      <button type="button" data-view="overview">Overview</button><button type="button" data-view="wheel">Wheel</button><button type="button" data-view="counter">Counter</button><button type="button" data-view="subs">Aktywne suby</button><button type="button" data-view="moderators">Moderatorzy</button><button type="button" data-view="obs">OBS Setup</button><button type="button" data-view="account">Account</button>
     </nav>
 
     <main id="workspace" class="workspace" tabindex="-1">
@@ -101,6 +103,33 @@
         </div>
       </section>
 
+      <section class="view" data-view-panel="moderators" aria-labelledby="teamTitle" hidden>
+        <div class="view-heading"><div><h2 id="teamTitle">Twoja ekipa.</h2><p>Ty nadajesz dostęp. Moderator loguje się własnym kontem Kick.</p></div></div>
+        <div class="team-layout">
+          <article class="config-panel">
+            <h3>1. Dodaj moderatora</h3>
+            <p class="field-hint">Nadajesz dostęp do koła, licznika, kolejki i symulacji giftów w tej aplikacji. To nie zmienia roli na samym Kicku.</p>
+            <form id="addModeratorForm" class="team-form"><label for="moderatorName">Nazwa użytkownika Kick lub ID</label><input id="moderatorName" required maxlength="100" autocomplete="off" placeholder="np. twoj_moderator"><button class="button button-primary" type="submit">Dodaj moderatora</button></form>
+            <ul id="moderatorList" class="team-list" aria-label="Moderatorzy kanału"></ul>
+          </article>
+          <article class="config-panel">
+            <h3>2. Wyślij link ekipie</h3>
+            <p>Moderator otwiera link, loguje się przez Kick i wybiera Twój kanał. Link nie daje dostępu osobom spoza listy.</p>
+            <label for="moderatorInvite">Link do logowania moderatorów</label>
+            <input id="moderatorInvite" readonly>
+            <button class="button button-secondary" type="button" id="copyModeratorInvite">Kopiuj link dla moderatora</button>
+            <p class="field-hint">Nie wysyłaj moderatorom prywatnych adresów źródeł OBS. Ten link nie zawiera klucza overlayu.</p>
+          </article>
+        </div>
+        <p id="teamNotice" role="status" aria-live="polite"></p>
+      </section>
+      <section class="view" data-view-panel="subs" aria-labelledby="activeSubsTitle" hidden>
+        <div class="view-heading"><div><h2 id="activeSubsTitle">Aktywne suby.</h2><p>Wszystkie aktywne subskrypcje z Kicka, razem z giftami.</p></div></div>
+        <div class="team-layout">
+          <article class="config-panel"><h3>Stan z Kicka</h3><strong id="activeSubsValue" class="subscriber-total">–</strong><p id="activeSubsStatus" role="status">Ładowanie…</p><button id="refreshActiveSubs" class="button button-secondary" type="button">Odśwież liczbę</button><p class="field-hint">Ten licznik synchronizuje się z Kickiem. Nie zmienia zwykłego countera.</p></article>
+          <article class="config-panel"><h3>Źródło OBS</h3><label for="activeSubsUrl">Prywatny adres overlayu</label><input id="activeSubsUrl" readonly><button id="copyActiveSubsUrl" class="button button-secondary" type="button">Kopiuj adres do OBS</button><p class="field-hint">Dodaj adres jako źródło przeglądarkowe. Nie udostępniaj go publicznie.</p></article>
+        </div>
+      </section>
       <section class="view" data-view-panel="obs" aria-labelledby="obs-title" hidden>
         <div class="view-heading"><div><h2 id="obs-title">OBS Setup</h2><p>Skopiuj adres i wklej go jako nowe źródło Browser Source.</p></div></div>
         <div class="obs-list">
@@ -111,10 +140,9 @@
       </section>
 
       <section class="view" data-view-panel="account" aria-labelledby="account-title" hidden>
-        <div class="view-heading"><div><h2 id="account-title">Account</h2><p>Konto Kick, bezpieczeństwo i funkcje zaawansowane.</p></div></div>
+        <div class="view-heading"><div><h2 id="account-title">Account</h2><p>Konto Kick i bezpieczeństwo.</p></div></div>
         <div class="account-layout">
           <article class="account-card"><span class="tool-index">KICK ACCOUNT</span><div class="account-person"><span class="avatar avatar-large" id="accountAvatar">S</span><div><h3 id="accountName">Streamer</h3><p id="accountUsername">Kick account</p></div></div><dl><div><dt>Połączenie</dt><dd class="positive">Aktywne</dd></div><div><dt>Podstawowy zakres</dt><dd><code>user:read</code></dd></div></dl></article>
-          <article class="account-card"><span class="tool-index">ADVANCED</span><h3>Dodatkowe integracje</h3><p>Slots, bot commands, moderatorzy i starsze mechaniki pozostają dostępne poza głównym flow.</p><a class="button button-secondary" href="/advanced">Otwórz Advanced Settings</a></article>
           <article class="account-card danger-zone"><span class="tool-index">SESSIONS</span><h3>Aktywne urządzenia</h3><p id="sessionSummary">Bieżąca sesja jest chroniona losowym tokenem przechowywanym w bazie jako hash.</p><div class="session-actions"><button class="button button-secondary" id="logoutButton" type="button">Wyloguj tę sesję</button><button class="button button-danger" id="logoutAllButton" type="button">Wyloguj wszystkie urządzenia</button></div></article>
         </div>
       </section>

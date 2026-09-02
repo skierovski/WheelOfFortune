@@ -16,6 +16,8 @@ async function api(url, options = {}) {
   return data;
 }
 const viewMeta = { overview: ["STUDIO / OVERVIEW", "Witaj w swoim studio."], wheel: ["STUDIO / WHEEL", "Skonfiguruj swoje ko\u0142o."], counter: ["STUDIO / COUNTER", "Steruj licznikiem na \u017Cywo."], obs: ["STUDIO / OBS SETUP", "Po\u0142\u0105cz studio z OBS."], account: ["STUDIO / ACCOUNT", "Konto i bezpiecze\u0144stwo."] };
+viewMeta.subs = ["STUDIO / SUBSCRIBERS", "Wszystkie aktywne suby."];
+viewMeta.moderators = ["STUDIO / TEAM", "Twoja ekipa na żywo."];
 function openView(name, { focus = true } = {}) {
   qa("[data-view-panel]").forEach((panel) => {
     const active = panel.dataset.viewPanel === name;

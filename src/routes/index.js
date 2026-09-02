@@ -39,13 +39,16 @@ router.get("/dashboard", requireSession, (req, res) => {
   res.sendFile(file);
 });
 
-router.get("/advanced", requireSession, (req, res) => {
-  const file = path.join(viewsDir, "home.html");
-  if (!fs.existsSync(file)) return res.status(404).send("home.html not found");
-  res.sendFile(file);
+// Preserve old bookmarks without keeping the retired panel.
+router.get("/advanced", (_req, res) => {
+  res.redirect("/dashboard");
 });
 
 // Moderator panel (Kick login + moderatorship)
+router.get("/moderator", (_req, res) => {
+  res.sendFile(path.join(viewsDir, "moderator-login.html"));
+});
+
 router.get("/mod", requireModSession, (req, res) => {
   const file = path.join(viewsDir, "mod.html");
   if (!fs.existsSync(file)) return res.status(404).send("mod.html not found");

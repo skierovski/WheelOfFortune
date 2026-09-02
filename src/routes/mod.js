@@ -76,7 +76,7 @@ router.post("/mod/:bid/reset-delay", requireModOfStreamer, (req, res) => {
 router.post("/mod/:bid/test-spin", requireModOfStreamer, (req, res) => {
   const bid = req.mod.broadcaster_id;
   const n = Math.max(1, Math.min(20, Number(req.body?.n) || 1));
-  const delivered = spins.deliverSpinOrQueue(bid, n);
+  const delivered = spins.testSpin(bid, n);
   res.json({
     ok: true,
     delivered,
